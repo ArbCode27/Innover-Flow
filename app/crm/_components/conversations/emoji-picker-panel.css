@@ -1,0 +1,29 @@
+.crm-emoji-picker {
+  width: min(100vw - 2rem, 360px);
+}
+
+.crm-emoji-picker em-emoji-picker {
+  --font-family: inherit;
+  --border-radius: 12px;
+  --category-icon-size: 18px;
+  --font-size: 14px;
+  width: 100% !important;
+  height: min(42vh, 360px) !important;
+  max-width: 100%;
+  border: none;
+  box-shadow: none;
+}
+
+.crm-emoji-picker[data-theme="light"] em-emoji-picker {
+  --rgb-background: 255, 255, 255;
+  --rgb-input: 241, 245, 249;
+  --rgb-color: 15, 23, 42;
+  --rgb-accent: 37, 99, 235;
+}
+
+.crm-emoji-picker[data-theme="dark"] em-emoji-picker {
+  --rgb-background: 22, 25, 34;
+  --rgb-input: 29, 33, 48;
+  --rgb-color: 226, 232, 240;
+  --rgb-accent: 96, 165, 250;
+}

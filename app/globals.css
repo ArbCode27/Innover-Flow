@@ -1,0 +1,353 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Updated color tokens to match telecom design brief */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.35 0 0);
+  --card: oklch(0.98 0 0);
+  --card-foreground: oklch(0.35 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.35 0 0);
+  --primary: oklch(0.55 0.15 200);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.7 0.18 120);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.98 0 0);
+  --muted-foreground: oklch(0.35 0 0);
+  --accent: oklch(0.7 0.18 120);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.6 0.2 30);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.92 0 0);
+  --input: oklch(0.98 0 0);
+  --ring: oklch(0.55 0.15 200 / 0.5);
+  --chart-1: oklch(0.55 0.15 200);
+  --chart-2: oklch(0.5 0.15 140);
+  --chart-3: oklch(0.6 0.2 30);
+  --chart-4: oklch(0.65 0.18 50);
+  --chart-5: oklch(0.7 0.2 70);
+  --radius: 1.15rem;
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.35 0 0);
+  --sidebar-primary: oklch(0.98 0 0);
+  --sidebar-primary-foreground: oklch(0.35 0 0);
+  --sidebar-accent: oklch(0.7 0.18 120);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.92 0 0);
+  --sidebar-ring: oklch(0.55 0.15 200 / 0.5);
+  --crm-scrollbar-track: rgba(226, 232, 240, 0.9);
+  --crm-scrollbar-track-border: rgba(203, 213, 225, 0.8);
+  --crm-scrollbar-thumb: rgba(148, 163, 184, 0.85);
+  --crm-scrollbar-thumb-hover: rgba(100, 116, 139, 0.95);
+  --crm-scrollbar-thumb-border: rgba(248, 250, 252, 1);
+  --crm-accent: oklch(0.88 0.04 255);
+  --crm-accent-hover: oklch(0.83 0.05 255);
+  --crm-accent-fg: oklch(0.36 0.06 255);
+  --crm-accent-muted: oklch(0.96 0.02 255);
+  --crm-accent-muted-fg: oklch(0.42 0.05 255);
+  --crm-ring: oklch(0.78 0.045 255);
+  --crm-canvas: oklch(0.965 0.012 255);
+  --crm-glass: oklch(1 0 0 / 0.64);
+  --crm-glass-strong: oklch(1 0 0 / 0.78);
+  --crm-glass-border: oklch(1 0 0 / 0.58);
+  --crm-glass-shadow: 0 12px 40px oklch(0.4 0.03 255 / 0.08);
+}
+
+.dark {
+  /* Updated dark mode tokens to complement the telecom theme */
+  --background: oklch(0.1 0 0);
+  --foreground: oklch(0.95 0 0);
+  --card: oklch(0.12 0 0);
+  --card-foreground: oklch(0.95 0 0);
+  --popover: oklch(0.1 0 0);
+  --popover-foreground: oklch(0.95 0 0);
+  --primary: oklch(0.6 0.15 200);
+  --primary-foreground: oklch(0.1 0 0);
+  --secondary: oklch(0.25 0 0);
+  --secondary-foreground: oklch(0.95 0 0);
+  --muted: oklch(0.25 0 0);
+  --muted-foreground: oklch(0.7 0 0);
+  --accent: oklch(0.7 0.18 120);
+  --accent-foreground: oklch(0.1 0 0);
+  --destructive: oklch(0.5 0.2 30);
+  --destructive-foreground: oklch(0.95 0 0);
+  --border: oklch(0.25 0 0);
+  --input: oklch(0.25 0 0);
+  --ring: oklch(0.6 0.15 200 / 0.5);
+  --chart-1: oklch(0.6 0.15 200);
+  --chart-2: oklch(0.65 0.15 140);
+  --chart-3: oklch(0.7 0.18 120);
+  --chart-4: oklch(0.6 0.2 300);
+  --chart-5: oklch(0.65 0.2 16);
+  --sidebar: oklch(0.15 0 0);
+  --sidebar-foreground: oklch(0.95 0 0);
+  --sidebar-primary: oklch(0.6 0.15 200);
+  --sidebar-primary-foreground: oklch(0.95 0 0);
+  --sidebar-accent: oklch(0.25 0 0);
+  --sidebar-accent-foreground: oklch(0.95 0 0);
+  --sidebar-border: oklch(0.25 0 0);
+  --sidebar-ring: oklch(0.6 0.15 200 / 0.5);
+  --crm-scrollbar-track: rgba(15, 17, 23, 0.65);
+  --crm-scrollbar-track-border: rgba(255, 255, 255, 0.06);
+  --crm-scrollbar-thumb: color-mix(in oklab, var(--crm-accent) 72%, transparent);
+  --crm-scrollbar-thumb-hover: color-mix(in oklab, var(--crm-accent) 92%, white);
+  --crm-scrollbar-thumb-border: rgba(15, 17, 23, 0.9);
+  --crm-accent: oklch(0.74 0.055 255);
+  --crm-accent-hover: oklch(0.79 0.05 255);
+  --crm-accent-fg: oklch(0.24 0.04 255);
+  --crm-accent-muted: oklch(0.3 0.03 255);
+  --crm-accent-muted-fg: oklch(0.86 0.03 255);
+  --crm-ring: oklch(0.7 0.05 255);
+  --crm-canvas: oklch(0.16 0.02 255);
+  --crm-glass: oklch(0.2 0.02 255 / 0.55);
+  --crm-glass-strong: oklch(0.22 0.02 255 / 0.78);
+  --crm-glass-border: oklch(1 0 0 / 0.1);
+  --crm-glass-shadow: 0 12px 40px oklch(0 0 0 / 0.28);
+}
+
+html[data-crm-accent="rose"] {
+  --crm-accent: oklch(0.88 0.05 355);
+  --crm-accent-hover: oklch(0.83 0.06 355);
+  --crm-accent-fg: oklch(0.38 0.07 355);
+  --crm-accent-muted: oklch(0.96 0.025 355);
+  --crm-accent-muted-fg: oklch(0.44 0.06 355);
+  --crm-ring: oklch(0.78 0.05 355);
+}
+
+html.dark[data-crm-accent="rose"] {
+  --crm-accent: oklch(0.74 0.06 355);
+  --crm-accent-hover: oklch(0.79 0.055 355);
+  --crm-accent-fg: oklch(0.26 0.04 355);
+  --crm-accent-muted: oklch(0.3 0.035 355);
+  --crm-accent-muted-fg: oklch(0.88 0.03 355);
+  --crm-ring: oklch(0.7 0.05 355);
+}
+
+html[data-crm-accent="violet"] {
+  --crm-accent: oklch(0.88 0.05 300);
+  --crm-accent-hover: oklch(0.83 0.06 300);
+  --crm-accent-fg: oklch(0.36 0.08 300);
+  --crm-accent-muted: oklch(0.96 0.025 300);
+  --crm-accent-muted-fg: oklch(0.42 0.06 300);
+  --crm-ring: oklch(0.78 0.05 300);
+}
+
+html.dark[data-crm-accent="violet"] {
+  --crm-accent: oklch(0.74 0.06 300);
+  --crm-accent-hover: oklch(0.79 0.055 300);
+  --crm-accent-fg: oklch(0.24 0.05 300);
+  --crm-accent-muted: oklch(0.3 0.035 300);
+  --crm-accent-muted-fg: oklch(0.88 0.03 300);
+  --crm-ring: oklch(0.7 0.05 300);
+}
+
+html[data-crm-accent="blue"] {
+  --crm-accent: oklch(0.88 0.04 255);
+  --crm-accent-hover: oklch(0.83 0.05 255);
+  --crm-accent-fg: oklch(0.36 0.06 255);
+  --crm-accent-muted: oklch(0.96 0.02 255);
+  --crm-accent-muted-fg: oklch(0.42 0.05 255);
+  --crm-ring: oklch(0.78 0.045 255);
+}
+
+html.dark[data-crm-accent="blue"] {
+  --crm-accent: oklch(0.74 0.055 255);
+  --crm-accent-hover: oklch(0.79 0.05 255);
+  --crm-accent-fg: oklch(0.24 0.04 255);
+  --crm-accent-muted: oklch(0.3 0.03 255);
+  --crm-accent-muted-fg: oklch(0.86 0.03 255);
+  --crm-ring: oklch(0.7 0.05 255);
+}
+
+html[data-crm-accent="amber"] {
+  --crm-accent: oklch(0.9 0.05 85);
+  --crm-accent-hover: oklch(0.85 0.06 85);
+  --crm-accent-fg: oklch(0.38 0.06 70);
+  --crm-accent-muted: oklch(0.97 0.025 90);
+  --crm-accent-muted-fg: oklch(0.44 0.05 75);
+  --crm-ring: oklch(0.82 0.05 85);
+}
+
+html.dark[data-crm-accent="amber"] {
+  --crm-accent: oklch(0.78 0.06 85);
+  --crm-accent-hover: oklch(0.83 0.055 85);
+  --crm-accent-fg: oklch(0.26 0.04 70);
+  --crm-accent-muted: oklch(0.3 0.03 80);
+  --crm-accent-muted-fg: oklch(0.9 0.03 90);
+  --crm-ring: oklch(0.74 0.05 85);
+}
+
+html[data-crm-accent="emerald"] {
+  --crm-accent: oklch(0.89 0.045 160);
+  --crm-accent-hover: oklch(0.84 0.055 160);
+  --crm-accent-fg: oklch(0.34 0.06 160);
+  --crm-accent-muted: oklch(0.96 0.025 160);
+  --crm-accent-muted-fg: oklch(0.4 0.05 160);
+  --crm-ring: oklch(0.8 0.045 160);
+}
+
+html.dark[data-crm-accent="emerald"] {
+  --crm-accent: oklch(0.75 0.055 160);
+  --crm-accent-hover: oklch(0.8 0.05 160);
+  --crm-accent-fg: oklch(0.22 0.04 160);
+  --crm-accent-muted: oklch(0.3 0.03 160);
+  --crm-accent-muted-fg: oklch(0.88 0.03 160);
+  --crm-ring: oklch(0.72 0.05 160);
+}
+
+html[data-crm-accent="teal"] {
+  --crm-accent: oklch(0.89 0.04 190);
+  --crm-accent-hover: oklch(0.84 0.05 190);
+  --crm-accent-fg: oklch(0.34 0.05 190);
+  --crm-accent-muted: oklch(0.96 0.02 190);
+  --crm-accent-muted-fg: oklch(0.4 0.045 190);
+  --crm-ring: oklch(0.8 0.04 190);
+}
+
+html.dark[data-crm-accent="teal"] {
+  --crm-accent: oklch(0.75 0.05 190);
+  --crm-accent-hover: oklch(0.8 0.045 190);
+  --crm-accent-fg: oklch(0.22 0.035 190);
+  --crm-accent-muted: oklch(0.3 0.03 190);
+  --crm-accent-muted-fg: oklch(0.88 0.03 190);
+  --crm-ring: oklch(0.72 0.045 190);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-crm-accent: var(--crm-accent);
+  --color-crm-accent-hover: var(--crm-accent-hover);
+  --color-crm-accent-foreground: var(--crm-accent-fg);
+  --color-crm-accent-muted: var(--crm-accent-muted);
+  --color-crm-accent-muted-foreground: var(--crm-accent-muted-fg);
+  --color-crm-ring: var(--crm-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .crm-canvas {
+    background-color: var(--crm-canvas);
+    background-image:
+      radial-gradient(ellipse 80% 50% at 0% -10%, color-mix(in oklab, var(--crm-accent) 28%, transparent), transparent 55%),
+      radial-gradient(ellipse 60% 40% at 100% 0%, color-mix(in oklab, var(--crm-accent) 18%, transparent), transparent 50%),
+      radial-gradient(ellipse 50% 35% at 80% 100%, color-mix(in oklab, var(--crm-accent) 12%, transparent), transparent 55%);
+  }
+
+  .crm-glass {
+    background: var(--crm-glass);
+    border: 1px solid var(--crm-glass-border);
+    box-shadow: var(--crm-glass-shadow);
+    backdrop-filter: blur(22px) saturate(1.35);
+    -webkit-backdrop-filter: blur(22px) saturate(1.35);
+  }
+
+  .crm-glass-strong {
+    background: var(--crm-glass-strong);
+    border: 1px solid var(--crm-glass-border);
+    box-shadow: var(--crm-glass-shadow);
+    backdrop-filter: blur(28px) saturate(1.4);
+    -webkit-backdrop-filter: blur(28px) saturate(1.4);
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .crm-glass,
+    .crm-glass-strong {
+      background: var(--crm-glass-strong);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+  }
+
+  .crm-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--crm-scrollbar-thumb) var(--crm-scrollbar-track);
+  }
+
+  .crm-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .crm-scrollbar::-webkit-scrollbar-track {
+    background: var(--crm-scrollbar-track);
+    border-left: 1px solid var(--crm-scrollbar-track-border);
+  }
+
+  .crm-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--crm-scrollbar-thumb);
+    border: 2px solid var(--crm-scrollbar-thumb-border);
+    border-radius: 999px;
+  }
+
+  .crm-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--crm-scrollbar-thumb-hover);
+  }
+
+  .dark .crm-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--crm-accent) 78%, white),
+      color-mix(in oklab, var(--crm-accent) 82%, black)
+    );
+  }
+
+  .dark .crm-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--crm-accent) 92%, white),
+      var(--crm-accent)
+    );
+  }
+
+  .crm-scrollbar::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
