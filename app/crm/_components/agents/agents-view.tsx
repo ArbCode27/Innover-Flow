@@ -14,6 +14,7 @@ interface AgentsViewProps {
   conversations: Conversation[];
   onSaveAgent: (input: UpsertAgentInput) => Promise<void>;
   onToggleAgentStatus: (agent: Agent) => Promise<void>;
+  onDeleteAgent?: (agent: Agent) => Promise<void>;
 }
 
 export const AgentsView = ({
@@ -22,6 +23,7 @@ export const AgentsView = ({
   conversations,
   onSaveAgent,
   onToggleAgentStatus,
+  onDeleteAgent,
 }: AgentsViewProps) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
@@ -40,23 +42,30 @@ export const AgentsView = ({
     <div className={`crm-scrollbar min-h-0 flex-1 overflow-y-auto p-4 md:p-6`}>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className={`text-xl font-semibold md:text-2xl ${CRM_SURFACES.textPrimary}`}>Agentes</h2>
-          <p className={`text-sm ${CRM_SURFACES.textMuted}`}>Gestión del equipo</p>
+          <h2 className={`text-xl font-semibold md:text-2xl ${CRM_SURFACES.textPrimary}`}>
+            Asesores y Equipo de Oficina
+          </h2>
+          <p className={`text-sm ${CRM_SURFACES.textMuted}`}>
+            Gestión de usuarios con acceso a esta organización
+          </p>
         </div>
         {currentAgent.role === "admin" ? (
           <CrmButton type="button" onClick={handleNewAgent} className="w-full sm:w-auto">
             <Plus className="mr-2 size-4" aria-hidden="true" />
-            Nuevo agente
+            Nuevo asesor
           </CrmButton>
         ) : null}
       </div>
+
       <AgentsList
         agents={agents}
         currentAgent={currentAgent}
         conversations={conversations}
         onEdit={handleEditAgent}
         onToggleStatus={onToggleAgentStatus}
+        onDelete={onDeleteAgent}
       />
+
       <AgentFormDialog
         open={isDialogOpen}
         editingAgent={editingAgent}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
-import { RefreshCw } from "lucide-react";
+import { Info, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type {
@@ -56,7 +56,7 @@ export type PaymentReviewedPayload = {
 };
 
 interface PaymentsViewProps {
-  currentAgent?: Pick<Agent, "id" | "name"> | null;
+  currentAgent?: Pick<Agent, "id" | "name" | "role" | "department"> | null;
   onOpenClientChat?: (conversationId: number) => void;
   /** After approve/reject: sync inbox assignment locally (no full CRM reload). */
   onPaymentReviewed?: (payload: PaymentReviewedPayload) => void | Promise<void>;
@@ -67,6 +67,8 @@ export const PaymentsView = ({
   onOpenClientChat,
   onPaymentReviewed,
 }: PaymentsViewProps) => {
+  const canReviewPayments =
+    currentAgent?.role === "admin" || currentAgent?.department !== "soporte";
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [dateRange, setDateRange] = useState<PaymentsDateRange>(DEFAULT_DATE_RANGE);
@@ -228,6 +230,11 @@ export const PaymentsView = ({
     if (!currentAgent?.id) {
       setError("Debes iniciar sesión como asesor para gestionar pagos");
       toast.error("Sesión de asesor requerida");
+      return;
+    }
+
+    if (!canReviewPayments) {
+      toast.error("Los asesores de Soporte Técnico no tienen autorización para procesar pagos");
       return;
     }
 
@@ -400,6 +407,18 @@ export const PaymentsView = ({
       </div>
 
       <div className="space-y-5">
+        {!canReviewPayments ? (
+          <div className="flex items-center gap-3 rounded-2xl border border-blue-500/25 bg-blue-500/10 p-4 text-xs text-blue-800 dark:text-blue-200">
+            <Info className="size-5 shrink-0 text-blue-500" aria-hidden="true" />
+            <div>
+              <p className="font-semibold text-sm">Bandeja de Pagos · Modo solo lectura (Soporte Técnico)</p>
+              <p className="mt-0.5 text-muted-foreground text-xs">
+                Tu usuario tiene asignado el departamento de Soporte Técnico. Por política de segregación de funciones, la validación, aprobación y conciliación de pagos está reservada para el departamento de Cobranzas y Administradores.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
         <PaymentsStats total={total} counts={counts} />
         <PaymentsFilters
           searchTerm={searchTerm}
@@ -427,6 +446,7 @@ export const PaymentsView = ({
             <PaymentsTable
               payments={payments}
               updatingId={updatingId}
+              canReviewPayments={canReviewPayments}
               onApprove={handleApprove}
               onReject={handleReject}
               onOpenChat={onOpenClientChat}

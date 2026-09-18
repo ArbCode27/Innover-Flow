@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Check,
   FileText,
+  Hammer,
   RotateCcw,
   Tag,
   UserCheck,
@@ -31,6 +32,7 @@ interface ConversationHeaderProps {
   isResolving?: boolean;
   onOpenNote: () => void;
   onOpenAssign: () => void;
+  onOpenWisproTicket?: () => void;
 }
 
 export const ConversationHeader = ({
@@ -45,6 +47,7 @@ export const ConversationHeader = ({
   onResolve,
   onOpenNote,
   onOpenAssign,
+  onOpenWisproTicket,
   isResolving = false,
 }: ConversationHeaderProps) => {
   const displayName =
@@ -170,6 +173,17 @@ export const ConversationHeader = ({
             <FileText className="size-3" aria-hidden="true" />
             Agregar nota
           </CrmButton>
+          {onOpenWisproTicket ? (
+            <CrmButton
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={onOpenWisproTicket}
+              className="text-amber-600 hover:text-amber-700 dark:text-amber-400">
+              <Hammer className="size-3" aria-hidden="true" />
+              Ticket Wispro
+            </CrmButton>
+          ) : null}
           {canAssignAgent ? (
             <CrmButton type="button" variant="secondary" size="sm" onClick={onOpenAssign}>
               <UserPlus className="size-3" aria-hidden="true" />

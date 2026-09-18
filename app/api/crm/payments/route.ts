@@ -465,7 +465,7 @@ export async function PATCH(req: NextRequest) {
 
     const { data: agent, error: agentError } = await supabase
       .from("agents")
-      .select("id, name, status, role")
+      .select("id, name, status, role, department")
       .eq("id", parsed.data.agent_id)
       .eq("organization_id", context.organizationId)
       .maybeSingle();
@@ -480,6 +480,17 @@ export async function PATCH(req: NextRequest) {
     if (agent.status === "inactive") {
       return NextResponse.json(
         { error: "El agente está inactivo y no puede gestionar pagos" },
+        { status: 403 },
+      );
+    }
+
+    // Segregación de funciones: Asesores de soporte no pueden procesar pagos
+    if (agent.role !== "admin" && agent.department === "soporte") {
+      return NextResponse.json(
+        {
+          error:
+            "Los asesores de Soporte Técnico no están autorizados para procesar pagos. La aprobación o rechazo financiero corresponde al departamento de Cobranzas y Administradores.",
+        },
         { status: 403 },
       );
     }

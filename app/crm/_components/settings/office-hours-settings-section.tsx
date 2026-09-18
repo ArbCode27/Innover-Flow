@@ -27,16 +27,6 @@ interface OfficeHoursSettingsSectionProps {
   }) => Promise<void>;
 }
 
-const DAY_SHORT: Record<WeekdayKey, string> = {
-  mon: "Lun",
-  tue: "Mar",
-  wed: "Mié",
-  thu: "Jue",
-  fri: "Vie",
-  sat: "Sáb",
-  sun: "Dom",
-};
-
 const normalizeHm = (value: string) => {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
   if (!match) return null;
@@ -85,17 +75,22 @@ export const OfficeHoursSettingsSection = ({
   );
 
   const [draftOffice, setDraftOffice] = useState(savedOffice);
+  const [draftAfterHours, setDraftAfterHours] = useState(savedAfterHours);
   const [isSaving, setIsSaving] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraftOffice(savedOffice);
+    setDraftAfterHours(savedAfterHours);
     setValidationError(null);
-  }, [savedOffice]);
+  }, [savedOffice, savedAfterHours]);
 
   const isDirty = useMemo(() => {
-    return JSON.stringify(draftOffice) !== JSON.stringify(savedOffice);
-  }, [draftOffice, savedOffice]);
+    return (
+      JSON.stringify(draftOffice) !== JSON.stringify(savedOffice) ||
+      draftAfterHours.enabled !== savedAfterHours.enabled
+    );
+  }, [draftOffice, savedOffice, draftAfterHours, savedAfterHours]);
 
   const openDaysCount = useMemo(
     () =>
@@ -171,7 +166,7 @@ export const OfficeHoursSettingsSection = ({
     try {
       await onSave({
         office_hours: normalized,
-        after_hours_payments: savedAfterHours,
+        after_hours_payments: draftAfterHours,
       });
     } finally {
       setIsSaving(false);
@@ -181,12 +176,16 @@ export const OfficeHoursSettingsSection = ({
   const handleRestoreDefaults = () => {
     if (!isAdmin || isSaving) return;
     setDraftOffice(cloneOfficeHoursConfig(DEFAULT_OFFICE_HOURS));
+    setDraftAfterHours({
+      enabled: DEFAULT_AFTER_HOURS_PAYMENTS.enabled,
+      allowedTools: [...DEFAULT_AFTER_HOURS_PAYMENTS.allowedTools],
+    });
     setValidationError(null);
   };
 
   return (
-    <section
-      className={`rounded-2xl p-4 md:p-5 ${CRM_SURFACES.elevated}`}>
+    <section className={`rounded-2xl p-4 md:p-5 ${CRM_SURFACES.elevated}`}>
+      {/* Encabezado */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <Clock3
@@ -199,9 +198,9 @@ export const OfficeHoursSettingsSection = ({
               Horario de oficina
             </h3>
             <p className={`mt-1 max-w-xl text-sm ${CRM_SURFACES.textMuted}`}>
-              Define cuándo hay asesores. Nova usa este horario para
-              avisarle al cliente cuándo pueden atenderlo. Si el chat está
-              en modo humano, Nova no responde, ni siquiera fuera de horario.
+              Define cuándo hay asesores. Nova usa este horario para avisarle al
+              cliente cuándo pueden atenderlo. Fuera de jornada también puede
+              registrar pagos aunque el chat esté en modo humano.
             </p>
           </div>
         </div>
@@ -211,189 +210,195 @@ export const OfficeHoursSettingsSection = ({
         </p>
       </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
-        {/* Left: policy controls */}
-        <aside className="flex flex-col gap-3">
-          <div
-            className={`rounded-2xl border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p
-                  className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
-                  Horario programado
-                </p>
-                <p className={`mt-0.5 text-xs ${CRM_SURFACES.textMuted}`}>
-                  Activa la regla de apertura/cierre.
-                </p>
-              </div>
-              <Switch
-                checked={draftOffice.enabled}
-                disabled={!isAdmin || isSaving}
-                onCheckedChange={(checked) =>
-                  setDraftOffice((current) => ({
-                    ...current,
-                    enabled: checked,
-                  }))
-                }
-                aria-label="Activar horario de oficina"
-              />
-            </div>
-          </div>
-
-          <div
-            className={`rounded-2xl border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+      {/* 1. FLEX ARRIBA: Contenedores de Switches y Zona Horaria */}
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-stretch">
+        {/* Switch: Horario programado */}
+        <div
+          className={`flex flex-1 min-w-[200px] items-center justify-between gap-3 rounded-2xl border p-3.5 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+          <div className="min-w-0">
             <p className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
-              Modo humano
+              Horario programado
             </p>
             <p className={`mt-0.5 text-xs ${CRM_SURFACES.textMuted}`}>
-              Si un asesor toma el chat, Nova no escribe. Tampoco fuera de
-              horario ni los domingos.
+              Activa la regla de apertura/cierre.
             </p>
           </div>
+          <Switch
+            checked={draftOffice.enabled}
+            disabled={!isAdmin || isSaving}
+            onCheckedChange={(checked) =>
+              setDraftOffice((current) => ({
+                ...current,
+                enabled: checked,
+              }))
+            }
+            aria-label="Activar horario de oficina"
+          />
+        </div>
 
-          <div
-            className={`rounded-2xl border p-3 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
-            <label
-              htmlFor="crm-office-timezone"
-              className={`text-xs font-medium uppercase tracking-wide ${CRM_SURFACES.textLabel}`}>
-              Zona horaria
-            </label>
-            <Input
-              id="crm-office-timezone"
-              value={draftOffice.timezone}
-              onChange={(event) =>
-                setDraftOffice((current) => ({
-                  ...current,
-                  timezone: event.target.value,
-                }))
-              }
-              disabled={!isAdmin || isSaving || !draftOffice.enabled}
-              placeholder={DEFAULT_OFFICE_TIMEZONE}
-              className={`mt-2 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated} ${CRM_SURFACES.textPrimary}`}
-            />
-          </div>
-
-          {validationError ? (
-            <p className="text-sm text-red-600 dark:text-red-300" role="alert">
-              {validationError}
-            </p>
-          ) : null}
-
-          {!isAdmin ? (
-            <p className={`text-sm ${CRM_SURFACES.textMuted}`}>
-              Solo un administrador puede editar los horarios.
-            </p>
-          ) : (
-            <div className="mt-auto flex flex-col gap-2 pt-1">
-              <CrmButton
-                type="button"
-                variant="primary"
-                disabled={!isDirty || isSaving}
-                onClick={() => void handleSave()}>
-                {isSaving ? "Guardando…" : "Guardar horarios"}
-              </CrmButton>
-              <CrmButton
-                type="button"
-                variant="secondary"
-                disabled={isSaving}
-                onClick={handleRestoreDefaults}>
-                Restaurar predeterminados
-              </CrmButton>
-            </div>
-          )}
-        </aside>
-
-        {/* Right: week grid */}
+        {/* Switch: Pagos fuera de horario */}
         <div
-          className={!draftOffice.enabled ? "pointer-events-none opacity-50" : ""}
-          aria-disabled={!draftOffice.enabled}>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p
-              className={`text-xs font-medium uppercase tracking-wide ${CRM_SURFACES.textLabel}`}>
-              Semana
+          className={`flex flex-1 min-w-[200px] items-center justify-between gap-3 rounded-2xl border p-3.5 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+          <div className="min-w-0">
+            <p className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
+              Pagos fuera de horario
             </p>
-            <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-              Cerrado = sin asesores en línea
+            <p className={`mt-0.5 text-xs ${CRM_SURFACES.textMuted}`}>
+              Comprobantes y registro aunque sea modo humano.
             </p>
           </div>
+          <Switch
+            checked={draftAfterHours.enabled}
+            disabled={!isAdmin || isSaving}
+            onCheckedChange={(checked) =>
+              setDraftAfterHours((current) => ({
+                ...current,
+                enabled: checked,
+              }))
+            }
+            aria-label="Permitir pagos fuera de horario"
+          />
+        </div>
 
-          <ul
-            className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
-            aria-label="Horario por día">
-            {OFFICE_WEEKDAY_OPTIONS.map(({ key, label }) => {
-              const windows = draftOffice.days[key] || [];
-              const isOpen = windows.length > 0;
-              const start = windows[0]?.[0] || "08:00";
-              const end = windows[0]?.[1] || "17:00";
-
-              return (
-                <li
-                  key={key}
-                  className={`rounded-2xl border p-3 transition-colors ${CRM_SURFACES.border} ${
-                    isOpen ? CRM_SURFACES.elevated : CRM_SURFACES.input
-                  }`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p
-                        className={`text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>
-                        <span className="sm:hidden">{DAY_SHORT[key]}</span>
-                        <span className="hidden sm:inline">{label}</span>
-                      </p>
-                      <p
-                        className={`text-[11px] ${
-                          isOpen
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : CRM_SURFACES.textMuted
-                        }`}>
-                        {isOpen ? "Abierto" : "Cerrado"}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={isOpen}
-                      disabled={!isAdmin || isSaving || !draftOffice.enabled}
-                      onCheckedChange={(checked) =>
-                        handleToggleDay(key, checked)
-                      }
-                      aria-label={`${label} abierto`}
-                    />
-                  </div>
-
-                  <div className="mt-3 flex items-center gap-1.5">
-                    <Input
-                      type="time"
-                      value={start}
-                      disabled={
-                        !isAdmin || isSaving || !draftOffice.enabled || !isOpen
-                      }
-                      onChange={(event) =>
-                        handleTimeChange(key, "start", event.target.value)
-                      }
-                      aria-label={`${label} apertura`}
-                      className={`h-8 min-w-0 flex-1 px-1.5 text-xs ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`}
-                    />
-                    <span
-                      className={`shrink-0 text-[11px] ${CRM_SURFACES.textMuted}`}>
-                      –
-                    </span>
-                    <Input
-                      type="time"
-                      value={end}
-                      disabled={
-                        !isAdmin || isSaving || !draftOffice.enabled || !isOpen
-                      }
-                      onChange={(event) =>
-                        handleTimeChange(key, "end", event.target.value)
-                      }
-                      aria-label={`${label} cierre`}
-                      className={`h-8 min-w-0 flex-1 px-1.5 text-xs ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+        {/* Input: Zona horaria */}
+        <div
+          className={`flex flex-1 min-w-[180px] flex-col justify-center rounded-2xl border p-3.5 ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}>
+          <label
+            htmlFor="crm-office-timezone"
+            className={`text-[11px] font-semibold uppercase tracking-wider ${CRM_SURFACES.textLabel}`}>
+            Zona horaria
+          </label>
+          <Input
+            id="crm-office-timezone"
+            value={draftOffice.timezone}
+            onChange={(event) =>
+              setDraftOffice((current) => ({
+                ...current,
+                timezone: event.target.value,
+              }))
+            }
+            disabled={!isAdmin || isSaving || !draftOffice.enabled}
+            placeholder={DEFAULT_OFFICE_TIMEZONE}
+            className={`mt-1.5 h-8 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated} ${CRM_SURFACES.textPrimary}`}
+          />
         </div>
       </div>
+
+      {validationError ? (
+        <p className="mt-3 text-sm text-red-600 dark:text-red-300" role="alert">
+          {validationError}
+        </p>
+      ) : null}
+
+      {/* 2. ABAJO: Inputs para modificar los horarios en 2 filas */}
+      <div
+        className={`mt-6 ${!draftOffice.enabled ? "pointer-events-none opacity-50" : ""}`}
+        aria-disabled={!draftOffice.enabled}>
+        <div className="mb-2.5 flex items-center justify-between gap-2">
+          <p
+            className={`text-xs font-semibold uppercase tracking-wider ${CRM_SURFACES.textLabel}`}>
+            Semana
+          </p>
+          <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+            Cerrado = Nova puede atender pagos
+          </p>
+        </div>
+
+        <ul
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4"
+          aria-label="Horario por día">
+          {OFFICE_WEEKDAY_OPTIONS.map(({ key, label }) => {
+            const windows = draftOffice.days[key] || [];
+            const isOpen = windows.length > 0;
+            const start = windows[0]?.[0] || "08:00";
+            const end = windows[0]?.[1] || "17:00";
+
+            return (
+              <li
+                key={key}
+                className={`rounded-2xl border p-3.5 transition-colors ${CRM_SURFACES.border} ${
+                  isOpen ? CRM_SURFACES.elevated : CRM_SURFACES.input
+                }`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p
+                      className={`text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>
+                      {label}
+                    </p>
+                    <p
+                      className={`text-[11px] font-medium ${
+                        isOpen
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : CRM_SURFACES.textMuted
+                      }`}>
+                      {isOpen ? "Abierto" : "Cerrado"}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={isOpen}
+                    disabled={!isAdmin || isSaving || !draftOffice.enabled}
+                    onCheckedChange={(checked) => handleToggleDay(key, checked)}
+                    aria-label={`${label} abierto`}
+                  />
+                </div>
+
+                <div className="mt-3 flex items-center gap-1.5">
+                  <Input
+                    type="time"
+                    value={start}
+                    disabled={
+                      !isAdmin || isSaving || !draftOffice.enabled || !isOpen
+                    }
+                    onChange={(event) =>
+                      handleTimeChange(key, "start", event.target.value)
+                    }
+                    aria-label={`${label} apertura`}
+                    className={`h-8 min-w-0 flex-1 px-1.5 text-xs ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`}
+                  />
+                  <span
+                    className={`shrink-0 text-[11px] ${CRM_SURFACES.textMuted}`}>
+                    –
+                  </span>
+                  <Input
+                    type="time"
+                    value={end}
+                    disabled={
+                      !isAdmin || isSaving || !draftOffice.enabled || !isOpen
+                    }
+                    onChange={(event) =>
+                      handleTimeChange(key, "end", event.target.value)
+                    }
+                    aria-label={`${label} cierre`}
+                    className={`h-8 min-w-0 flex-1 px-1.5 text-xs ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`}
+                  />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      {/* Botones de acción */}
+      {isAdmin ? (
+        <div className="mt-5 flex items-center justify-end gap-2.5 border-t border-black/5 pt-4 dark:border-white/5">
+          <CrmButton
+            type="button"
+            variant="secondary"
+            disabled={isSaving}
+            onClick={handleRestoreDefaults}
+            className="text-xs">
+            Restaurar predeterminados
+          </CrmButton>
+          <CrmButton
+            type="button"
+            variant="primary"
+            disabled={!isDirty || isSaving}
+            onClick={() => void handleSave()}
+            className="text-xs">
+            {isSaving ? "Guardando…" : "Guardar horarios"}
+          </CrmButton>
+        </div>
+      ) : null}
     </section>
   );
 };

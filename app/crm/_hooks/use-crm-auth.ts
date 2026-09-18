@@ -83,6 +83,54 @@ export const useCrmAuth = () => {
     }
   };
 
+  const register = async (input: {
+    organizationName: string;
+    name: string;
+    email: string;
+    password: string;
+  }) => {
+    setIsSubmitting(true);
+    try {
+      const { agent: loggedAgent, organization: createdOrg } =
+        await crmService.registerOrganization(input);
+      const session = await crmService.getCurrentSession();
+      persistAgent(session.agent || loggedAgent);
+      setOrganization(session.organization || createdOrg);
+      setOrganizationRole(session.organizationRole || "owner");
+      setOrganizations(await crmService.getOrganizations());
+      toast.success("¡Organización registrada con éxito!");
+      return true;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo registrar la organización";
+      toast.error(message);
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const createOrganization = async (name: string, slug?: string) => {
+    setIsSubmitting(true);
+    try {
+      const createdOrg = await crmService.createOrganization(name, slug);
+      toast.success(`Organización "${createdOrg.name}" creada con éxito`);
+      window.location.reload();
+      return createdOrg;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo crear la organización";
+      toast.error(message);
+      throw error;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const logout = async () => {
     if (agent) {
       await crmService
@@ -130,6 +178,8 @@ export const useCrmAuth = () => {
     isLoading,
     isSubmitting,
     login,
+    register,
+    createOrganization,
     logout,
     updateStatus,
     replaceAgent,

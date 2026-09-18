@@ -9,6 +9,7 @@ interface AgentsListProps {
   conversations: Conversation[];
   onEdit: (agent: Agent) => void;
   onToggleStatus: (agent: Agent) => Promise<void>;
+  onDelete?: (agent: Agent) => Promise<void>;
 }
 
 export const AgentsList = ({
@@ -17,6 +18,7 @@ export const AgentsList = ({
   conversations,
   onEdit,
   onToggleStatus,
+  onDelete,
 }: AgentsListProps) => (
   <div className="grid gap-3 xl:grid-cols-2">
     {agents.map((agent) => (
@@ -27,6 +29,7 @@ export const AgentsList = ({
         conversations={conversations}
         onEdit={onEdit}
         onToggleStatus={onToggleStatus}
+        onDelete={onDelete}
       />
     ))}
   </div>

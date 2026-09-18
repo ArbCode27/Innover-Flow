@@ -35,6 +35,7 @@ import { AssignAgentDialog } from "../agents/assign-agent-dialog";
 import { LabelPickerDialog } from "../labels/label-picker-dialog";
 import { UnknownClientBanner } from "../wispro/unknown-client-banner";
 import { WisproSearchDialog } from "../wispro/wispro-search-dialog";
+import { WisproTicketModal } from "./wispro-ticket-modal";
 import { ResolveConversationDialog } from "./resolve-conversation-dialog";
 import { ConversationDetails } from "./conversation-details";
 import { ConversationHeader } from "./conversation-header";
@@ -117,6 +118,7 @@ export const ConversationPanel = ({
   const [isPromiseDialogOpen, setIsPromiseDialogOpen] = useState(false);
   const [isCreatingPaymentPromise, setIsCreatingPaymentPromise] = useState(false);
   const [isResolveDialogOpen, setIsResolveDialogOpen] = useState(false);
+  const [isWisproTicketModalOpen, setIsWisproTicketModalOpen] = useState(false);
   const [isDetailsSheetOpen, setIsDetailsSheetOpen] = useState(false);
   const [note, setNote] = useState("");
 
@@ -241,6 +243,7 @@ export const ConversationPanel = ({
           isResolving={isResolvingConversation}
           onOpenNote={() => setIsNoteDialogOpen(true)}
           onOpenAssign={() => setIsAssignDialogOpen(true)}
+          onOpenWisproTicket={() => setIsWisproTicketModalOpen(true)}
         />
         {showUnknownBanner ? (
           <UnknownClientBanner onOpenWispro={() => setIsWisproDialogOpen(true)} />
@@ -293,6 +296,7 @@ export const ConversationPanel = ({
               isWisproLinked ? () => setIsPromiseDialogOpen(true) : undefined
             }
             isCreatingPaymentPromise={isCreatingPaymentPromise}
+            onOpenWisproTicket={() => setIsWisproTicketModalOpen(true)}
           />
         </SheetContent>
       </Sheet>
@@ -313,6 +317,17 @@ export const ConversationPanel = ({
           isWisproLinked ? () => setIsPromiseDialogOpen(true) : undefined
         }
         isCreatingPaymentPromise={isCreatingPaymentPromise}
+        onOpenWisproTicket={() => setIsWisproTicketModalOpen(true)}
+      />
+
+      <WisproTicketModal
+        open={isWisproTicketModalOpen}
+        onOpenChange={setIsWisproTicketModalOpen}
+        conversation={conversation}
+        client={client}
+        wisproSnapshot={wisproSnapshot}
+        messages={messages}
+        agentName={currentAgent.name}
       />
 
       <WisproSearchDialog

@@ -10,15 +10,20 @@ import {
   createSignedSessionToken,
 } from "../_lib/crm-session";
 import { getSupabaseAdmin } from "../_lib/supabase-admin";
+import {
+  generateUniqueSlug,
+  seedDefaultOrganizationData,
+} from "../_lib/organization-seed";
 
 const createSchema = z.object({
-  name: z.string().trim().min(2).max(120),
+  name: z.string().trim().min(2, "El nombre debe tener al menos 2 caracteres").max(120),
   slug: z
     .string()
     .trim()
     .min(2)
     .max(80)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Formato de slug inválido")
+    .optional(),
 });
 
 const switchSchema = z.object({
@@ -68,12 +73,6 @@ export const GET = async (request: NextRequest) => {
 export const POST = async (request: NextRequest) => {
   try {
     const context = await getCrmAuthContext(request);
-    if (!canManageOrganization(context)) {
-      return NextResponse.json(
-        { error: "No tienes permiso para crear organizaciones" },
-        { status: 403 },
-      );
-    }
     const payload = createSchema.safeParse(await request.json());
     if (!payload.success) {
       return NextResponse.json(
@@ -82,9 +81,17 @@ export const POST = async (request: NextRequest) => {
       );
     }
     const supabase = getSupabaseAdmin();
+    const slug =
+      payload.data.slug ||
+      (await generateUniqueSlug(supabase, payload.data.name));
+
     const { data: organization, error } = await supabase
       .from("organizations")
-      .insert(payload.data)
+      .insert({
+        name: payload.data.name,
+        slug,
+        status: "active",
+      })
       .select("*")
       .single();
     if (error) throw error;
@@ -101,7 +108,35 @@ export const POST = async (request: NextRequest) => {
       await supabase.from("organizations").delete().eq("id", organization.id);
       throw membershipError;
     }
-    return NextResponse.json({ organization }, { status: 201 });
+
+    // Sembrar ajustes, etiquetas y respuestas rápidas por defecto
+    await seedDefaultOrganizationData(
+      supabase,
+      organization.id,
+      context.agentId,
+    );
+
+    // Conmutar automáticamente el agente a su nueva organización
+    await supabase
+      .from("agents")
+      .update({
+        organization_id: organization.id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", context.agentId);
+
+    const token = await createSignedSessionToken(
+      context.agentId,
+      context.agentRole,
+      organization.id,
+    );
+
+    const response = NextResponse.json(
+      { organization, switched: true },
+      { status: 201 },
+    );
+    setSessionCookie(response, token);
+    return response;
   } catch (error) {
     const status = error instanceof CrmAuthError ? error.status : 500;
     return NextResponse.json(

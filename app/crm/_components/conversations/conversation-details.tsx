@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { Hammer } from "lucide-react";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type {
   Agent,
@@ -31,6 +32,7 @@ interface ConversationDetailsProps {
   isUnlinkingWispro?: boolean;
   onCreatePaymentPromise?: () => void;
   isCreatingPaymentPromise?: boolean;
+  onOpenWisproTicket?: () => void;
 }
 
 export const ConversationDetails = ({
@@ -47,6 +49,7 @@ export const ConversationDetails = ({
   isUnlinkingWispro = false,
   onCreatePaymentPromise,
   isCreatingPaymentPromise = false,
+  onOpenWisproTicket,
 }: ConversationDetailsProps) => {
   const activeTicket =
     tickets.find((ticket) => ticket.status !== "Resuelto") ||
@@ -119,9 +122,19 @@ export const ConversationDetails = ({
       </section>
 
       <section className={`space-y-3 border-b p-4 ${CRM_SURFACES.border}`}>
-        <h3 className={`text-[11px] font-semibold uppercase tracking-wide ${CRM_SURFACES.textMuted}`}>
-          Ticket activo
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className={`text-[11px] font-semibold uppercase tracking-wide ${CRM_SURFACES.textMuted}`}>
+            Ticket activo
+          </h3>
+          {onOpenWisproTicket ? (
+            <button
+              type="button"
+              onClick={onOpenWisproTicket}
+              className="text-[11px] font-medium text-crm-accent hover:underline">
+              + Crear Wispro
+            </button>
+          ) : null}
+        </div>
         {activeTicket ? (
           <div className="space-y-2">
             <p className={`font-mono text-sm ${CRM_SURFACES.textPrimary}`}>
@@ -134,7 +147,20 @@ export const ConversationDetails = ({
             </p>
           </div>
         ) : (
-          <p className={`text-xs ${CRM_SURFACES.textLabel}`}>Sin tickets activos</p>
+          <div className="space-y-2">
+            <p className={`text-xs ${CRM_SURFACES.textLabel}`}>Sin tickets activos</p>
+            {onOpenWisproTicket ? (
+              <CrmButton
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="w-full text-xs"
+                onClick={onOpenWisproTicket}>
+                <Hammer className="mr-1.5 size-3 text-amber-500" />
+                Crear ticket y orden
+              </CrmButton>
+            ) : null}
+          </div>
         )}
       </section>
 

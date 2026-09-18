@@ -196,7 +196,7 @@ export const GET = async (request: NextRequest) => {
       supabase.from("conversations").select("*").eq("organization_id", context.organizationId).order("updated_at", { ascending: false }),
       supabase
         .from("agents")
-        .select("id, organization_id, name, email, role, status, initials, avatar_color, avatar_bg, max_conversations, ui_accent, ui_mode, created_at, updated_at")
+        .select("*")
         .in("id", memberIds.length ? memberIds : [-1])
         .order("created_at"),
       supabase.from("quick_replies").select("*").eq("organization_id", context.organizationId).order("title"),
@@ -231,7 +231,10 @@ export const GET = async (request: NextRequest) => {
         clients: clients.data || [],
         tickets: tickets.data || [],
         conversations: visibleConversations,
-        agents: agents.data || [],
+        agents: (agents.data || []).map((row) => ({
+          ...row,
+          department: row.department || "soporte",
+        })),
         quickReplies: quickReplies.data || [],
         settings: mapSettings(
           (settings.data as Record<string, unknown> | null) || null,

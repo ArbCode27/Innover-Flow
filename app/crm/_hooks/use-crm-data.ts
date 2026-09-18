@@ -1449,6 +1449,13 @@ export const useCrmData = (agent: Agent | null) => {
     );
   };
 
+  const deleteAgent = async (targetAgent: Agent) => {
+    if (!agent) return;
+    await crmService.deleteAgent(targetAgent.id);
+    await loadData();
+    toast.success(`Asesor "${targetAgent.name}" desvinculado`);
+  };
+
   const labelsById = useMemo(
     () => new Map<number, Label>(data.labels.map((label) => [label.id, label])),
     [data.labels],
@@ -1528,5 +1535,6 @@ export const useCrmData = (agent: Agent | null) => {
     deleteQuickReply,
     upsertAgent,
     toggleAgentStatus,
+    deleteAgent,
   };
 };

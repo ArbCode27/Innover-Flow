@@ -60,7 +60,7 @@ const verifyWhatsapp = async (
   const response = await fetch(
     `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(
       phoneNumberId,
-    )}?fields=id,display_phone_number,verified_name,quality_rating`,
+    )}?fields=id,display_phone_number,verified_name,quality_rating,code_verification_status,status,platform_type,throughput`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
       signal: AbortSignal.timeout(10_000),
@@ -69,7 +69,10 @@ const verifyWhatsapp = async (
   );
   const body = (await response.json()) as Record<string, unknown>;
   if (!response.ok) {
-    throw new Error("Meta rechazó las credenciales de WhatsApp");
+    const errorDetails = (body.error as { message?: string })?.message;
+    throw new Error(
+      errorDetails ? `Meta: ${errorDetails}` : "Meta rechazó las credenciales de WhatsApp",
+    );
   }
 
   return {
@@ -78,6 +81,12 @@ const verifyWhatsapp = async (
     display_phone_number: body.display_phone_number || null,
     verified_name: body.verified_name || null,
     quality_rating: body.quality_rating || null,
+    status: body.status || null,
+    code_verification_status: body.code_verification_status || null,
+    platform_type: body.platform_type || "CLOUD_API",
+    coexistence_enabled: true,
+    coexistence_auto_human: true,
+    coexistence_sync_echoes: true,
   };
 };
 
@@ -118,7 +127,28 @@ export const GET = async (
       .eq("provider", provider)
       .maybeSingle();
     if (error) throw error;
-    return NextResponse.json({ integration: sanitizeIntegration(data) });
+
+    const host =
+      request.headers.get("x-forwarded-host") ||
+      request.headers.get("host") ||
+      "";
+    const proto = request.headers.get("x-forwarded-proto") || "https";
+    const webhookUrl = host ? `${proto}://${host}/api/whatsapp/webhook` : "/api/whatsapp/webhook";
+    const verifyToken =
+      process.env.WHATSAPP_VERIFY_TOKEN?.trim() || "innover-2403-whatsapp-key";
+
+    return NextResponse.json({
+      integration: sanitizeIntegration(data),
+      metadata:
+        provider === "whatsapp"
+          ? {
+              webhook_url: webhookUrl,
+              verify_token: verifyToken,
+              required_fields: ["messages", "message_echoes"],
+              coexistence_supported: true,
+            }
+          : undefined,
+    });
   } catch (error) {
     return handleError(error);
   }
@@ -243,6 +273,71 @@ export const POST = async (
       .eq("id", data.id)
       .select("*")
       .single();
+    if (updateError) throw updateError;
+    return NextResponse.json({ integration: sanitizeIntegration(updated) });
+  } catch (error) {
+    return handleError(error);
+  }
+};
+
+export const PATCH = async (
+  request: NextRequest,
+  { params }: { params: Promise<{ provider: string }> },
+) => {
+  try {
+    const provider = parseProvider((await params).provider);
+    if (!provider) {
+      return NextResponse.json({ error: "Integración inválida" }, { status: 404 });
+    }
+    const context = await getCrmAuthContext(request);
+    if (!canManageOrganization(context)) {
+      return NextResponse.json(
+        { error: "Solo administradores pueden modificar la configuración" },
+        { status: 403 },
+      );
+    }
+
+    const payload = (await request.json()) as Record<string, unknown>;
+    const supabase = getSupabaseAdmin();
+    const { data: existing, error: fetchError } = await supabase
+      .from("organization_integrations")
+      .select("*")
+      .eq("organization_id", context.organizationId)
+      .eq("provider", provider)
+      .maybeSingle();
+
+    if (fetchError || !existing) {
+      return NextResponse.json(
+        { error: "Integración no encontrada" },
+        { status: 404 },
+      );
+    }
+
+    const currentConfig = (existing.config || {}) as Record<string, unknown>;
+    const updatedConfig = {
+      ...currentConfig,
+      ...(payload.coexistence_enabled !== undefined
+        ? { coexistence_enabled: Boolean(payload.coexistence_enabled) }
+        : {}),
+      ...(payload.coexistence_auto_human !== undefined
+        ? { coexistence_auto_human: Boolean(payload.coexistence_auto_human) }
+        : {}),
+      ...(payload.coexistence_sync_echoes !== undefined
+        ? { coexistence_sync_echoes: Boolean(payload.coexistence_sync_echoes) }
+        : {}),
+    };
+
+    const now = new Date().toISOString();
+    const { data: updated, error: updateError } = await supabase
+      .from("organization_integrations")
+      .update({
+        config: updatedConfig,
+        updated_at: now,
+      })
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+
     if (updateError) throw updateError;
     return NextResponse.json({ integration: sanitizeIntegration(updated) });
   } catch (error) {

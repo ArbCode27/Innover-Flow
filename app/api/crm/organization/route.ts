@@ -11,9 +11,18 @@ const updateOrganizationSchema = z.object({
   name: z.string().trim().min(2).max(120),
   legal_name: z.string().trim().max(160).nullable().optional(),
   tax_id: z.string().trim().max(40).nullable().optional(),
-  email: z.string().trim().email().max(160).nullable().optional(),
+  email: z
+    .string()
+    .trim()
+    .max(160)
+    .refine((val) => !val || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val), {
+      message: "Formato de correo inválido",
+    })
+    .nullable()
+    .optional(),
   phone: z.string().trim().max(40).nullable().optional(),
   address: z.string().trim().max(240).nullable().optional(),
+  logo_url: z.string().trim().nullable().optional(),
   timezone: z.string().trim().min(1).max(80),
   currency: z.string().trim().length(3).transform((value) => value.toUpperCase()),
 });

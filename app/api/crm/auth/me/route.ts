@@ -12,7 +12,7 @@ export const GET = async (request: NextRequest) => {
         supabase
           .from("agents")
           .select(
-            "id, organization_id, name, email, role, status, initials, avatar_color, avatar_bg, max_conversations, ui_accent, ui_mode, created_at, updated_at",
+            "id, organization_id, name, email, role, department, status, initials, avatar_color, avatar_bg, max_conversations, ui_accent, ui_mode, created_at, updated_at",
           )
           .eq("id", context.agentId)
           .maybeSingle(),
@@ -30,8 +30,13 @@ export const GET = async (request: NextRequest) => {
       );
     }
 
+    const safeAgent = {
+      ...agent,
+      department: agent.department || "soporte",
+    };
+
     return NextResponse.json({
-      agent,
+      agent: safeAgent,
       organization,
       organizationRole: context.organizationRole,
     });

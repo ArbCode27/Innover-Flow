@@ -5,6 +5,8 @@ import type {
 
 export type AgentRole = "admin" | "agent";
 
+export type AgentDepartment = "cobranza" | "soporte" | "general";
+
 export type AgentStatus = "online" | "busy" | "offline" | "inactive";
 
 export type OrganizationRole = "owner" | "admin" | "supervisor" | "advisor";
@@ -95,11 +97,13 @@ export interface CrmSettings {
 
 export interface Agent {
   id: number;
+  user_id?: string | null;
   organization_id: string;
   name: string;
   email: string;
   password?: string;
   role: AgentRole;
+  department?: AgentDepartment;
   status: AgentStatus;
   initials: string | null;
   avatar_color: string | null;
@@ -373,6 +377,85 @@ export interface UpsertAgentInput {
   email: string;
   password?: string;
   role: AgentRole;
+  department?: AgentDepartment;
+  status?: AgentStatus;
   initials: string;
   maxConversations: number;
+}
+
+export interface AdvisorProductivityMetric {
+  agent_id: number;
+  name: string;
+  status: AgentStatus | string;
+  department: AgentDepartment;
+  max_conversations: number;
+
+  // Carga actual
+  active_conversations: number;
+  workload_percentage: number;
+
+  // Soporte
+  resolved_conversations: number;
+  resolution_rate: number;
+  average_first_response_ms: number | null;
+  average_resolution_ms: number | null;
+  assigned_tickets: number;
+  resolved_tickets: number;
+  ticket_resolution_rate: number;
+
+  // Cobranza
+  processed_payments: number;
+  approved_payments: number;
+  rejected_payments: number;
+  approval_rate: number;
+  approved_payment_amount: number;
+
+  // Calificación integral (0-100)
+  productivity_score: number;
+}
+
+export interface DepartmentSupportStats {
+  total_agents: number;
+  online_agents: number;
+  resolved_conversations: number;
+  resolved_tickets: number;
+  average_first_response_ms: number | null;
+  average_resolution_ms: number | null;
+}
+
+export interface DepartmentBillingStats {
+  total_agents: number;
+  online_agents: number;
+  processed_payments: number;
+  approved_payments: number;
+  rejected_payments: number;
+  approved_payment_amount: number;
+  approval_rate: number;
+}
+
+export interface DepartmentStats {
+  support: DepartmentSupportStats;
+  billing: DepartmentBillingStats;
+}
+
+export interface DashboardMetrics {
+  received_conversations: number;
+  active_conversations: number;
+  resolved_conversations: number;
+  average_first_response_ms: number | null;
+  average_resolution_ms: number | null;
+  human_conversations: number;
+  bot_conversations: number;
+  open_tickets: number;
+  approved_payments: number;
+  approved_payment_amount: number;
+  department_stats?: DepartmentStats;
+}
+
+export interface DashboardPayload {
+  scope: "organization" | "advisor";
+  range?: { from: string; to: string };
+  metrics: DashboardMetrics;
+  daily_volume: Array<{ date: string; received: number; resolved: number }>;
+  advisors: AdvisorProductivityMetric[];
 }

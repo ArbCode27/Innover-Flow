@@ -91,6 +91,41 @@ export const crmService = {
     return data.agent as Agent;
   },
 
+  async registerOrganization(payload: {
+    organizationName: string;
+    name: string;
+    email: string;
+    password: string;
+  }): Promise<{ agent: Agent; organization: Organization }> {
+    const res = await fetch("/api/crm/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "No se pudo registrar la organización");
+    }
+
+    return data as { agent: Agent; organization: Organization };
+  },
+
+  async createOrganization(name: string, slug?: string): Promise<Organization> {
+    const res = await fetch("/api/crm/organizations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, slug }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "No se pudo crear la organización");
+    }
+
+    return data.organization as Organization;
+  },
+
   async getCurrentSession(): Promise<{
     agent: Agent;
     organization: Organization;
@@ -492,5 +527,16 @@ export const crmService = {
     if (!response.ok) {
       throw new Error(payload.error || "No se pudo guardar el asesor");
     }
+  },
+
+  async deleteAgent(agentId: number) {
+    const response = await fetch(`/api/crm/agents?id=${agentId}`, {
+      method: "DELETE",
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "No se pudo desvincular el asesor");
+    }
+    return payload;
   },
 };

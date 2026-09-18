@@ -27,6 +27,7 @@ import { CrmButton } from "../shared/crm-button";
 interface PaymentsTableProps {
   payments: CrmPayment[];
   updatingId: string | null;
+  canReviewPayments?: boolean;
   onApprove: (paymentId: string) => void;
   onReject: (paymentId: string) => void;
   onOpenChat?: (conversationId: number) => void;
@@ -52,6 +53,7 @@ const PaymentValue = ({
 export const PaymentsTable = ({
   payments,
   updatingId,
+  canReviewPayments = true,
   onApprove,
   onReject,
   onOpenChat,
@@ -179,7 +181,11 @@ export const PaymentsTable = ({
                         <MessageCircle className="size-4" aria-hidden="true" />
                       </CrmButton>
 
-                      {canReject ? (
+                      {!canReviewPayments ? (
+                        <span className="rounded-md bg-slate-500/10 px-2 py-1 text-[11px] font-medium text-muted-foreground" title="Tu rol es Soporte Técnico (modo solo lectura)">
+                          Solo lectura
+                        </span>
+                      ) : canReject ? (
                         <>
                           <CrmButton
                             type="button"

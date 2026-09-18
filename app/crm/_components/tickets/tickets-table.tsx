@@ -38,7 +38,16 @@ export const TicketsTable = ({ tickets, clientsById }: TicketsTableProps) => (
 
             return (
               <TableRow key={ticket.id} className={`${CRM_SURFACES.border} ${CRM_SURFACES.hover}`}>
-                <TableCell className={`font-mono ${CRM_SURFACES.textMuted}`}>{ticket.id}</TableCell>
+                <TableCell className={`font-mono ${CRM_SURFACES.textMuted}`}>
+                  <div className="flex items-center gap-1.5">
+                    <span>{ticket.id}</span>
+                    {ticket.id.startsWith("TK-") ? (
+                      <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-sky-600 dark:text-sky-400">
+                        Wispro
+                      </span>
+                    ) : null}
+                  </div>
+                </TableCell>
                 <TableCell>
                   {client ? (
                     <div className="flex items-center gap-2">

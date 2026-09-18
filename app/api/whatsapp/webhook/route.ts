@@ -981,6 +981,112 @@ const verifyMetaSignature = (
 const OPT_OUT_PATTERNS =
   /^(stop|baja|cancelar|detener|alto|no mas|no más|desuscribir)$/i;
 
+const handleCoexistenceMessageEcho = async (
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  organizationConnection: {
+    organizationId: string;
+    config: Record<string, unknown>;
+  },
+  echo: Record<string, unknown>,
+) => {
+  const echoId = String(echo.id || "").trim();
+  const rawRecipient = String(echo.to || echo.recipient_id || "").trim();
+  const normalizedTo = normalizePhone(rawRecipient);
+  const echoTimestamp = parseWhatsappTimestamp(String(echo.timestamp || ""));
+
+  if (!echoId || !normalizedTo) {
+    console.warn(`${WEBHOOK_LOG_PREFIX} coexistence_echo_missing_id_or_to`, {
+      echoId,
+      rawRecipient,
+    });
+    return null;
+  }
+
+  let content = "";
+  const echoType = String(echo.type || "text");
+  if (echoType === "text") {
+    const textObj = echo.text as { body?: string } | undefined;
+    content = String(textObj?.body || "").trim();
+  } else if (echoType === "image") {
+    const imgObj = echo.image as { caption?: string } | undefined;
+    content = imgObj?.caption || "[Imagen enviada desde WhatsApp Móvil]";
+  } else if (echoType === "audio") {
+    content = "[Audio enviado desde WhatsApp Móvil]";
+  } else if (echoType === "video") {
+    const vidObj = echo.video as { caption?: string } | undefined;
+    content = vidObj?.caption || "[Video enviado desde WhatsApp Móvil]";
+  } else if (echoType === "document") {
+    const docObj = echo.document as { filename?: string; caption?: string } | undefined;
+    content =
+      docObj?.filename || docObj?.caption || "[Documento enviado desde WhatsApp Móvil]";
+  } else {
+    content = `[Mensaje ${echoType} enviado desde WhatsApp Móvil]`;
+  }
+
+  const client = await findOrCreateClient(
+    supabase,
+    organizationConnection.organizationId,
+    normalizedTo,
+    null,
+  );
+
+  const { conversation } = await findOrCreateActiveConversation(
+    supabase,
+    Number(client.id),
+    organizationConnection.organizationId,
+    echoTimestamp,
+    String(organizationConnection.config.phone_number_id || "") || null,
+    normalizedTo,
+  );
+
+  const syncEchoes =
+    organizationConnection.config.coexistence_sync_echoes !== false;
+  if (syncEchoes) {
+    const { data: existing } = await supabase
+      .from("messages")
+      .select("id")
+      .eq("wa_message_id", echoId)
+      .eq("organization_id", organizationConnection.organizationId)
+      .maybeSingle();
+
+    if (!existing) {
+      await supabase.from("messages").insert({
+        organization_id: organizationConnection.organizationId,
+        conversation_id: conversation.id,
+        wa_message_id: echoId,
+        type: "out",
+        sender_type: "agent",
+        sent_by: "WhatsApp Business App (Móvil)",
+        content,
+        status: "delivered",
+        created_at: echoTimestamp,
+      });
+    }
+  }
+
+  const autoHuman =
+    organizationConnection.config.coexistence_auto_human !== false;
+  await supabase
+    .from("conversations")
+    .update({
+      ...(autoHuman ? { human_mode: true } : {}),
+      preview: content,
+      last_message_at: echoTimestamp,
+      updated_at: echoTimestamp,
+    })
+    .eq("id", conversation.id)
+    .eq("organization_id", organizationConnection.organizationId);
+
+  console.log(`${WEBHOOK_LOG_PREFIX} coexistence_echo_processed`, {
+    echoId,
+    conversationId: conversation.id,
+    customerPhone: maskPhone(normalizedTo),
+    autoHuman,
+  });
+
+  return { conversationId: Number(conversation.id), echoId };
+};
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const mode = searchParams.get("hub.mode");
@@ -996,7 +1102,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const requestSummary: {
-    eventType: "message" | "status_update" | "unrecognized" | "invalid";
+    eventType:
+      | "message"
+      | "status_update"
+      | "message_echo"
+      | "unrecognized"
+      | "invalid";
     messageType: string | null;
     messageId: string | null;
     saved: boolean;
@@ -1106,6 +1217,30 @@ export async function POST(req: NextRequest) {
         timestamp,
         phoneNumberId: metadata?.phone_number_id || null,
       });
+
+      // Detección de mensajes salientes enviados desde la app móvil (Coexistencia en messages)
+      const isOutboundEcho = Boolean(
+        (message as { recipient_id?: string }).recipient_id ||
+          (value.metadata?.display_phone_number &&
+            normalizedFrom ===
+              normalizePhone(value.metadata.display_phone_number)),
+      );
+
+      if (isOutboundEcho) {
+        requestSummary.eventType = "message_echo";
+        const echoResult = await handleCoexistenceMessageEcho(
+          supabase,
+          organizationConnection,
+          message as Record<string, unknown>,
+        );
+        if (echoResult) {
+          requestSummary.saved = true;
+          requestSummary.conversationId = echoResult.conversationId;
+          requestSummary.reason = "coexistence_echo_saved";
+        }
+        console.log(`${WEBHOOK_LOG_PREFIX} request_completed`, requestSummary);
+        return new NextResponse("OK", { status: 200 });
+      }
 
       if (!normalizedFrom || !messageId) {
         requestSummary.ignored = true;
@@ -1382,6 +1517,33 @@ export async function POST(req: NextRequest) {
           requestSummary.saved = true;
           requestSummary.reason = "status_update_saved";
         }
+      }
+
+    // ── CASO 3: Message Echoes (Coexistencia con WhatsApp Business App) ───
+    } else if (value.message_echoes && value.message_echoes.length > 0) {
+      requestSummary.eventType = "message_echo";
+      const echo = value.message_echoes[0];
+      const echoId = String(echo.id || "").trim();
+      requestSummary.messageId = echoId || null;
+      requestSummary.messageType = String(echo.type || "text");
+
+      console.log(`${WEBHOOK_LOG_PREFIX} coexistence_message_echo_received`, {
+        echoId,
+        type: echo.type,
+        to: echo.to || echo.recipient_id,
+        from: echo.from,
+      });
+
+      const echoResult = await handleCoexistenceMessageEcho(
+        supabase,
+        organizationConnection,
+        echo as Record<string, unknown>,
+      );
+
+      if (echoResult) {
+        requestSummary.saved = true;
+        requestSummary.conversationId = echoResult.conversationId;
+        requestSummary.reason = "coexistence_echo_saved";
       }
 
     } else {

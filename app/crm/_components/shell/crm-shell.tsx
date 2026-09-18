@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { LoadingState } from "../shared/loading-state";
 import { CrmLogin } from "../auth/crm-login";
 import { useCrmAuth } from "../../_hooks/use-crm-auth";
 import { useCrmData } from "../../_hooks/use-crm-data";
 import type { Agent, CrmView } from "../../_lib/types";
+import {
+  getDefaultViewForAgent,
+  isViewAllowed,
+} from "../../_lib/crm-permissions";
 import { AgentsView } from "../agents/agents-view";
 import { ClientsView } from "../clients/clients-view";
 import { MyConversationsView } from "../conversations/my-conversations-view";
@@ -27,6 +31,13 @@ export const CrmShell = () => {
   const auth = useCrmAuth();
   const crm = useCrmData(auth.agent);
 
+  useEffect(() => {
+    if (!auth.agent) return;
+    if (!isViewAllowed(activeView, auth.agent, auth.organizationRole)) {
+      setActiveView(getDefaultViewForAgent(auth.agent, auth.organizationRole));
+    }
+  }, [activeView, auth.agent, auth.organizationRole]);
+
   if (auth.isLoading) {
     return (
       <main className={`flex h-full items-center justify-center ${CRM_SURFACES.page}`}>
@@ -36,10 +47,19 @@ export const CrmShell = () => {
   }
 
   if (!auth.agent) {
-    return <CrmLogin isSubmitting={auth.isSubmitting} onLogin={auth.login} />;
+    return (
+      <CrmLogin
+        isSubmitting={auth.isSubmitting}
+        onLogin={auth.login}
+        onRegister={auth.register}
+      />
+    );
   }
 
-  const handleSelectView = (view: CrmView) => setActiveView(view);
+  const handleSelectView = (view: CrmView) => {
+    if (!isViewAllowed(view, auth.agent, auth.organizationRole)) return;
+    setActiveView(view);
+  };
   const handleUpdateAppearance = async (patch: {
     ui_accent?: CrmAccentId;
     ui_mode?: CrmColorMode;
@@ -72,12 +92,14 @@ export const CrmShell = () => {
         agent={auth.agent}
         organization={auth.organization}
         organizations={auth.organizations}
+        organizationRole={auth.organizationRole}
         activeView={activeView}
         myAssignedCount={crm.myActiveAssignedCount}
         onSelectView={handleSelectView}
         onToggleStatus={auth.updateStatus}
         onLogout={auth.logout}
         onSwitchOrganization={auth.switchOrganization}
+        onCreateOrganization={auth.createOrganization}
       />
       <div
         className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
@@ -89,10 +111,10 @@ export const CrmShell = () => {
           </div>
         ) : (
           <>
-            {activeView === "dashboard" ? (
+            {activeView === "dashboard" && isViewAllowed("dashboard", auth.agent, auth.organizationRole) ? (
               <DashboardView organization={auth.organization} />
             ) : null}
-            {activeView === "conversations" ? (
+            {activeView === "conversations" && isViewAllowed("conversations", auth.agent, auth.organizationRole) ? (
               <ConversationsView
                 currentAgent={auth.agent}
                 conversations={crm.conversations}
@@ -139,7 +161,7 @@ export const CrmShell = () => {
                 onOpenSettingsView={handleSelectView}
               />
             ) : null}
-            {activeView === "my-conversations" ? (
+            {activeView === "my-conversations" && isViewAllowed("my-conversations", auth.agent, auth.organizationRole) ? (
               <MyConversationsView
                 currentAgent={auth.agent}
                 assignedConversations={crm.myAssignedConversations}
@@ -185,21 +207,22 @@ export const CrmShell = () => {
                 onOpenSettingsView={handleSelectView}
               />
             ) : null}
-            {activeView === "history" ? (
+            {activeView === "history" && isViewAllowed("history", auth.agent, auth.organizationRole) ? (
               <HistoryView
+                currentAgent={auth.agent}
                 agents={crm.agents}
                 labels={crm.labels}
                 onOpenSettingsView={handleSelectView}
               />
             ) : null}
-            {activeView === "clients" ? (
+            {activeView === "clients" && isViewAllowed("clients", auth.agent, auth.organizationRole) ? (
               <ClientsView
                 clients={crm.clients}
                 tickets={crm.tickets}
                 onCreateClient={crm.createClient}
               />
             ) : null}
-            {activeView === "payments" ? (
+            {activeView === "payments" && isViewAllowed("payments", auth.agent, auth.organizationRole) ? (
               <PaymentsView
                 currentAgent={auth.agent}
                 onPaymentReviewed={async ({
@@ -231,7 +254,7 @@ export const CrmShell = () => {
                 }}
               />
             ) : null}
-            {activeView === "quick-replies" ? (
+            {activeView === "quick-replies" && isViewAllowed("quick-replies", auth.agent, auth.organizationRole) ? (
               <QuickRepliesView
                 currentAgent={auth.agent}
                 quickReplies={crm.quickReplies}
@@ -241,7 +264,7 @@ export const CrmShell = () => {
                 onDeleteQuickReply={crm.deleteQuickReply}
               />
             ) : null}
-            {activeView === "tickets" ? (
+            {activeView === "tickets" && isViewAllowed("tickets", auth.agent, auth.organizationRole) ? (
               <TicketsView
                 tickets={crm.tickets}
                 clients={crm.clients}
@@ -250,7 +273,7 @@ export const CrmShell = () => {
                 onCreateTicket={crm.createTicket}
               />
             ) : null}
-            {activeView === "labels" ? (
+            {activeView === "labels" && isViewAllowed("labels", auth.agent, auth.organizationRole) ? (
               <LabelsView
                 labels={crm.labels}
                 conversations={crm.conversations}
@@ -258,16 +281,17 @@ export const CrmShell = () => {
                 onDeleteLabel={crm.deleteLabel}
               />
             ) : null}
-            {activeView === "agents" ? (
+            {activeView === "agents" && isViewAllowed("agents", auth.agent, auth.organizationRole) ? (
               <AgentsView
                 currentAgent={auth.agent}
                 agents={crm.agents}
                 conversations={crm.conversations}
                 onSaveAgent={crm.upsertAgent}
                 onToggleAgentStatus={crm.toggleAgentStatus}
+                onDeleteAgent={crm.deleteAgent}
               />
             ) : null}
-            {activeView === "settings" && auth.organization ? (
+            {activeView === "settings" && auth.organization && isViewAllowed("settings", auth.agent, auth.organizationRole) ? (
               <SettingsView
                 currentAgent={auth.agent}
                 organization={auth.organization}
@@ -286,6 +310,8 @@ export const CrmShell = () => {
       </div>
       {!shouldHideMobileNav ? (
         <CrmMobileNav
+          agent={auth.agent}
+          organizationRole={auth.organizationRole}
           activeView={activeView}
           myAssignedCount={crm.myActiveAssignedCount}
           onSelectView={handleSelectView}

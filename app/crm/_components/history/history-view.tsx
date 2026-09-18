@@ -11,12 +11,14 @@ import { HistoryFilters } from "./history-filters";
 import { HistoryList } from "./history-list";
 
 interface HistoryViewProps {
+  currentAgent?: Agent | null;
   agents: Agent[];
   labels: Label[];
   onOpenSettingsView: (view: CrmView) => void;
 }
 
 export const HistoryView = ({
+  currentAgent,
   agents,
   labels,
   onOpenSettingsView,
@@ -58,7 +60,10 @@ export const HistoryView = ({
             </h2>
             <div className="flex items-center gap-1 md:hidden">
               <CrmThemeToggle className="size-8" />
-              <CrmMobileSettingsMenu onSelectView={onOpenSettingsView} />
+              <CrmMobileSettingsMenu
+                currentAgent={currentAgent}
+                onSelectView={onOpenSettingsView}
+              />
             </div>
           </div>
           <p className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>

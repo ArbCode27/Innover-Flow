@@ -134,7 +134,10 @@ export const MyConversationsView = ({
             </h2>
             <div className="flex items-center gap-1 md:hidden">
               <CrmThemeToggle className="size-8" />
-              <CrmMobileSettingsMenu onSelectView={onOpenSettingsView} />
+              <CrmMobileSettingsMenu
+                currentAgent={currentAgent}
+                onSelectView={onOpenSettingsView}
+              />
             </div>
           </div>
           <p className={`mt-1 text-xs ${CRM_SURFACES.textMuted}`}>
