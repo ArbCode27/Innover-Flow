@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Building2, Camera, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { Building2, Camera, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { CrmButton } from "../shared/crm-button";
+import { Spinner } from "@/components/ui/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -198,10 +199,10 @@ export const OrganizationSettingsSection = ({
         {canEdit ? (
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" variant="outline">
+              <CrmButton size="sm" variant="secondary">
                 <Plus className="size-4" />
                 Nueva sucursal / empresa
-              </Button>
+              </CrmButton>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
@@ -242,7 +243,7 @@ export const OrganizationSettingsSection = ({
                 </div>
               </div>
               <DialogFooter>
-                <Button
+                <CrmButton
                   onClick={() => void handleCreateOrganization()}
                   disabled={
                     isCreating ||
@@ -250,7 +251,7 @@ export const OrganizationSettingsSection = ({
                     newOrganizationSlug.trim().length < 2
                   }>
                   {isCreating ? "Creando…" : "Crear y abrir"}
-                </Button>
+                </CrmButton>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -271,7 +272,7 @@ export const OrganizationSettingsSection = ({
             )}
             {isUploadingLogo ? (
               <div className="absolute inset-0 flex items-center justify-center bg-background/80">
-                <Loader2 className="size-5 animate-spin text-crm-accent" />
+                <Spinner className="size-5 text-crm-accent" />
               </div>
             ) : null}
           </div>
@@ -292,17 +293,17 @@ export const OrganizationSettingsSection = ({
                   id="logo-upload-input"
                   disabled={isUploadingLogo || isSaving}
                 />
-                <Button
+                <CrmButton
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   disabled={isUploadingLogo || isSaving}
                   onClick={() => fileInputRef.current?.click()}>
                   <Camera className="mr-1.5 size-3.5" />
                   {draft.logo_url ? "Cambiar logo" : "Subir logo"}
-                </Button>
+                </CrmButton>
                 {draft.logo_url ? (
-                  <Button
+                  <CrmButton
                     type="button"
                     variant="ghost"
                     size="sm"
@@ -311,7 +312,7 @@ export const OrganizationSettingsSection = ({
                     className="text-destructive hover:bg-destructive/10">
                     <Trash2 className="mr-1.5 size-3.5" />
                     Quitar
-                  </Button>
+                  </CrmButton>
                 ) : null}
               </div>
             ) : null}
@@ -416,10 +417,10 @@ export const OrganizationSettingsSection = ({
             ) : (
               <span />
             )}
-            <Button type="submit" disabled={!canEdit || isSaving}>
+            <CrmButton type="submit" disabled={!canEdit || isSaving}>
               <Save className="size-4" />
               {isSaving ? "Guardando…" : "Guardar organización"}
-            </Button>
+            </CrmButton>
           </div>
         </form>
       </CardContent>

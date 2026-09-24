@@ -34,7 +34,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { CrmButton } from "../shared/crm-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -431,7 +431,7 @@ const WhatsAppCoexistenceCard = ({
                   <span className="truncate" title={webhookUrl}>
                     {webhookUrl}
                   </span>
-                  <Button
+                  <CrmButton
                     type="button"
                     variant="ghost"
                     size="icon"
@@ -443,14 +443,14 @@ const WhatsAppCoexistenceCard = ({
                     ) : (
                       <Copy className="size-3.5" />
                     )}
-                  </Button>
+                  </CrmButton>
                 </div>
 
                 <div className="flex items-center justify-between gap-2 rounded-lg bg-black/5 p-2 font-mono text-[11px] dark:bg-white/5">
                   <span className="truncate">
                     Token: <span className="font-semibold">{verifyToken}</span>
                   </span>
-                  <Button
+                  <CrmButton
                     type="button"
                     variant="ghost"
                     size="icon"
@@ -462,7 +462,7 @@ const WhatsAppCoexistenceCard = ({
                     ) : (
                       <Copy className="size-3.5" />
                     )}
-                  </Button>
+                  </CrmButton>
                 </div>
               </div>
             </div>
@@ -489,10 +489,10 @@ const WhatsAppCoexistenceCard = ({
           <div className="flex flex-wrap items-center gap-2">
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
               <DialogTrigger asChild>
-                <Button disabled={!canEdit} size="sm">
+                <CrmButton disabled={!canEdit} size="sm">
                   <Link2 className="size-4" />
                   {isConnected ? "Reconfigurar Credenciales" : "Conectar WhatsApp"}
-                </Button>
+                </CrmButton>
               </DialogTrigger>
               <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
@@ -551,33 +551,33 @@ const WhatsAppCoexistenceCard = ({
                 </div>
 
                 <DialogFooter className="gap-2 sm:gap-0">
-                  <Button
+                  <CrmButton
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     onClick={() => setIsOpen(false)}>
                     Cancelar
-                  </Button>
-                  <Button
+                  </CrmButton>
+                  <CrmButton
                     onClick={() => void handleSave()}
                     disabled={isSaving || !apiToken || !wabaId || !phoneNumberId}>
                     {isSaving ? "Verificando con Meta..." : "Validar y Conectar"}
-                  </Button>
+                  </CrmButton>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
 
             {isConnected ? (
-              <Button
+              <CrmButton
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 onClick={() => void handleTest()}
                 disabled={isTesting}>
                 <RefreshCw className={`size-3.5 ${isTesting ? "animate-spin" : ""}`} />
                 Probar Conexión
-              </Button>
+              </CrmButton>
             ) : null}
 
-            <Button
+            <CrmButton
               type="button"
               variant="ghost"
               size="sm"
@@ -585,16 +585,16 @@ const WhatsAppCoexistenceCard = ({
               className="text-xs">
               <HelpCircle className="size-3.5" />
               {showGuide ? "Ocultar Guía de Coexistencia" : "¿Cómo activar Coexistencia?"}
-            </Button>
+            </CrmButton>
           </div>
 
           {isConnected ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button size="sm" variant="ghost" disabled={!canEdit} className="text-red-600 hover:text-red-700">
+                <CrmButton size="sm" variant="ghost" disabled={!canEdit} className="text-red-600 hover:text-red-700">
                   <Unplug className="size-3.5" />
                   Desconectar
-                </Button>
+                </CrmButton>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
@@ -795,10 +795,10 @@ const WisproCard = ({
         <div className="flex flex-wrap gap-2 pt-1">
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-              <Button disabled={!canEdit} size="sm">
+              <CrmButton disabled={!canEdit} size="sm">
                 <Link2 className="size-4" />
                 {isConnected ? "Reconfigurar" : "Conectar Wispro"}
-              </Button>
+              </CrmButton>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
@@ -829,31 +829,31 @@ const WisproCard = ({
                 </div>
               </div>
               <DialogFooter>
-                <Button
+                <CrmButton
                   onClick={() => void handleSave()}
                   disabled={isSaving || !apiToken || !baseUrl}>
                   {isSaving ? "Validando…" : "Validar y conectar"}
-                </Button>
+                </CrmButton>
               </DialogFooter>
             </DialogContent>
           </Dialog>
 
           {isConnected ? (
             <>
-              <Button
+              <CrmButton
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 onClick={() => void handleTest()}
                 disabled={isTesting}>
                 <RefreshCw className={`size-4 ${isTesting ? "animate-spin" : ""}`} />
                 Probar
-              </Button>
+              </CrmButton>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button size="sm" variant="ghost" disabled={!canEdit}>
+                  <CrmButton size="sm" variant="ghost" disabled={!canEdit}>
                     <Unplug className="size-4" />
                     Desconectar
-                  </Button>
+                  </CrmButton>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>

@@ -17,6 +17,7 @@ import { useTheme } from "next-themes";
 import { CrmButton } from "../shared/crm-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { requireText } from "../../_lib/validators";
 import { ShinyText } from "@/components/react-bits/shiny-text";
@@ -168,28 +169,23 @@ export const CrmLogin = ({
           </div>
 
           {/* Selector de pestañas Login / Registro */}
-          <div className="mb-5 flex rounded-xl bg-black/10 p-1 dark:bg-white/10">
-            <button
-              type="button"
-              onClick={() => handleToggleMode("login")}
-              className={`flex-1 rounded-lg py-1.5 text-xs font-medium transition-all ${
-                mode === "login"
-                  ? "bg-crm-accent text-crm-accent-foreground shadow-sm"
-                  : `${CRM_SURFACES.textMuted} hover:text-foreground`
-              }`}>
-              Iniciar sesión
-            </button>
-            <button
-              type="button"
-              onClick={() => handleToggleMode("register")}
-              className={`flex-1 rounded-lg py-1.5 text-xs font-medium transition-all ${
-                mode === "register"
-                  ? "bg-crm-accent text-crm-accent-foreground shadow-sm"
-                  : `${CRM_SURFACES.textMuted} hover:text-foreground`
-              }`}>
-              Nueva Empresa
-            </button>
-          </div>
+          <Tabs
+            value={mode}
+            onValueChange={(val) => handleToggleMode(val as "login" | "register")}
+            className="mb-5">
+            <TabsList className="grid w-full grid-cols-2 rounded-xl bg-black/10 p-1 dark:bg-white/10">
+              <TabsTrigger
+                value="login"
+                className="rounded-lg py-1.5 text-xs font-medium transition-all data-[state=active]:bg-crm-accent data-[state=active]:text-crm-accent-foreground data-[state=active]:shadow-sm">
+                Iniciar sesión
+              </TabsTrigger>
+              <TabsTrigger
+                value="register"
+                className="rounded-lg py-1.5 text-xs font-medium transition-all data-[state=active]:bg-crm-accent data-[state=active]:text-crm-accent-foreground data-[state=active]:shadow-sm">
+                Nueva Empresa
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
           <div className="space-y-3.5">
             {mode === "register" ? (
@@ -349,6 +345,14 @@ export const CrmLogin = ({
               </button>
             )}
           </div>
+
+          <p className="mt-4 text-center">
+            <a
+              href="/privacidad"
+              className={`text-[11px] underline-offset-2 hover:underline ${CRM_SURFACES.textMuted}`}>
+              Política de privacidad
+            </a>
+          </p>
         </form>
       </div>
     </main>

@@ -25,7 +25,6 @@ import {
   Zap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -34,6 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -41,6 +41,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   AdvisorProductivityMetric,
   AgentDepartment,
@@ -51,6 +60,7 @@ import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { EmptyState } from "../shared/empty-state";
 import { LoadingState } from "../shared/loading-state";
 import { AvatarInitials } from "../shared/avatar-initials";
+import { CrmButton } from "../shared/crm-button";
 
 const formatDuration = (milliseconds: number | null): string => {
   if (milliseconds === null || milliseconds === undefined) return "Sin datos";
@@ -307,9 +317,9 @@ export const DashboardView = ({
           description={error}
         />
         <div className="-mt-10 pb-10">
-          <Button onClick={() => setReloadKey((value) => value + 1)}>
+          <CrmButton onClick={() => setReloadKey((value) => value + 1)}>
             Reintentar
-          </Button>
+          </CrmButton>
         </div>
       </div>
     );
@@ -342,13 +352,13 @@ export const DashboardView = ({
               <SelectItem value="90">Últimos 90 días</SelectItem>
             </SelectContent>
           </Select>
-          <Button
-            variant="outline"
+          <CrmButton
+            variant="secondary"
             size="icon"
             onClick={() => setReloadKey((value) => value + 1)}
             aria-label="Actualizar métricas">
             <RefreshCw className={`size-4 ${isLoading ? "animate-spin" : ""}`} />
-          </Button>
+          </CrmButton>
         </div>
       </header>
 
@@ -583,41 +593,45 @@ export const DashboardView = ({
           </div>
 
           {/* Filtros de Pestaña de Especialidad */}
-          <div className="inline-flex rounded-xl bg-black/[0.04] p-1 dark:bg-white/[0.05]">
-            <button
-              type="button"
-              onClick={() => setDepartmentTab("all")}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-                departmentTab === "all"
-                  ? "bg-white text-crm-accent shadow-sm dark:bg-white/10 dark:text-white"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}>
-              <Users className="size-3.5" />
-              Todos ({data.advisors.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setDepartmentTab("soporte")}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-                departmentTab === "soporte"
-                  ? "bg-white text-blue-600 shadow-sm dark:bg-white/10 dark:text-blue-400"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}>
-              <Wrench className="size-3.5" />
-              Soporte ({data.advisors.filter((a) => a.department === "soporte" || a.department === "general").length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setDepartmentTab("cobranza")}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-                departmentTab === "cobranza"
-                  ? "bg-white text-emerald-600 shadow-sm dark:bg-white/10 dark:text-emerald-400"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}>
-              <Wallet className="size-3.5" />
-              Cobranza ({data.advisors.filter((a) => a.department === "cobranza" || a.department === "general").length})
-            </button>
-          </div>
+          <Tabs
+            value={departmentTab}
+            onValueChange={(val) =>
+              setDepartmentTab(val as "all" | "soporte" | "cobranza")
+            }
+            className="w-full sm:w-auto">
+            <TabsList className="grid w-full grid-cols-3 rounded-xl bg-black/[0.04] p-1 dark:bg-white/[0.05] sm:inline-flex sm:w-auto">
+              <TabsTrigger
+                value="all"
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all data-[state=active]:bg-white data-[state=active]:text-crm-accent data-[state=active]:shadow-sm dark:data-[state=active]:bg-white/10 dark:data-[state=active]:text-white">
+                <Users className="size-3.5" />
+                Todos ({data.advisors.length})
+              </TabsTrigger>
+              <TabsTrigger
+                value="soporte"
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm dark:data-[state=active]:bg-white/10 dark:data-[state=active]:text-blue-400">
+                <Wrench className="size-3.5" />
+                Soporte (
+                {
+                  data.advisors.filter(
+                    (a) => a.department === "soporte" || a.department === "general",
+                  ).length
+                }
+                )
+              </TabsTrigger>
+              <TabsTrigger
+                value="cobranza"
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all data-[state=active]:bg-white data-[state=active]:text-emerald-600 data-[state=active]:shadow-sm dark:data-[state=active]:bg-white/10 dark:data-[state=active]:text-emerald-400">
+                <Wallet className="size-3.5" />
+                Cobranza (
+                {
+                  data.advisors.filter(
+                    (a) => a.department === "cobranza" || a.department === "general",
+                  ).length
+                }
+                )
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </CardHeader>
 
         <CardContent className="overflow-x-auto p-0 sm:p-4 sm:pt-0">
@@ -632,49 +646,49 @@ export const DashboardView = ({
               </p>
             </div>
           ) : (
-            <table className="w-full min-w-[760px] text-left text-xs sm:text-sm">
-              <thead className={CRM_SURFACES.textMuted}>
-                <tr className="border-b border-black/5 dark:border-white/10">
-                  <th className="pb-3 pl-4 font-medium">Asesor</th>
-                  <th className="pb-3 font-medium">Especialidad</th>
-                  <th className="pb-3 font-medium">Carga / Capacidad</th>
+            <Table className="min-w-[760px] text-xs sm:text-sm">
+              <TableHeader className={CRM_SURFACES.textMuted}>
+                <TableRow className="border-b border-black/5 hover:bg-transparent dark:border-white/10">
+                  <TableHead className="pb-3 pl-4 font-medium">Asesor</TableHead>
+                  <TableHead className="pb-3 font-medium">Especialidad</TableHead>
+                  <TableHead className="pb-3 font-medium">Carga / Capacidad</TableHead>
                   {departmentTab === "cobranza" ? (
                     <>
-                      <th className="pb-3 text-right font-medium">Comprobantes</th>
-                      <th className="pb-3 text-right font-medium">Aprobación</th>
-                      <th className="pb-3 text-right font-medium">Recaudación</th>
+                      <TableHead className="pb-3 text-right font-medium">Comprobantes</TableHead>
+                      <TableHead className="pb-3 text-right font-medium">Aprobación</TableHead>
+                      <TableHead className="pb-3 text-right font-medium">Recaudación</TableHead>
                     </>
                   ) : departmentTab === "soporte" ? (
                     <>
-                      <th className="pb-3 text-right font-medium">Resueltos</th>
-                      <th className="pb-3 text-right font-medium">Tickets</th>
-                      <th className="pb-3 text-right font-medium">1ª Respuesta</th>
-                      <th className="pb-3 text-right font-medium">TMR Solución</th>
+                      <TableHead className="pb-3 text-right font-medium">Resueltos</TableHead>
+                      <TableHead className="pb-3 text-right font-medium">Tickets</TableHead>
+                      <TableHead className="pb-3 text-right font-medium">1ª Respuesta</TableHead>
+                      <TableHead className="pb-3 text-right font-medium">TMR Solución</TableHead>
                     </>
                   ) : (
                     <>
-                      <th className="pb-3 text-right font-medium">Chats Resueltos</th>
-                      <th className="pb-3 text-right font-medium">Tickets</th>
-                      <th className="pb-3 text-right font-medium">Recaudado</th>
-                      <th className="pb-3 text-right font-medium">1ª Respuesta</th>
+                      <TableHead className="pb-3 text-right font-medium">Chats Resueltos</TableHead>
+                      <TableHead className="pb-3 text-right font-medium">Tickets</TableHead>
+                      <TableHead className="pb-3 text-right font-medium">Recaudado</TableHead>
+                      <TableHead className="pb-3 text-right font-medium">1ª Respuesta</TableHead>
                     </>
                   )}
-                  <th className="pb-3 text-center font-medium">Score</th>
-                  <th className="pb-3 pr-4 text-right font-medium">Acción</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-black/5 dark:divide-white/5">
+                  <TableHead className="pb-3 text-center font-medium">Score</TableHead>
+                  <TableHead className="pb-3 pr-4 text-right font-medium">Acción</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="divide-y divide-black/5 dark:divide-white/5">
                 {filteredAdvisors.map((advisor) => {
                   const workloadTheme = getWorkloadTheme(advisor.workload_percentage);
                   const speedBadge = getResponseSpeedBadge(advisor.average_first_response_ms);
                   const scoreBadge = getScoreBadge(advisor.productivity_score);
 
                   return (
-                    <tr
+                    <TableRow
                       key={advisor.agent_id}
-                      className="transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02]">
+                      className="border-b border-black/5 transition-colors hover:bg-black/[0.02] dark:border-white/5 dark:hover:bg-white/[0.02]">
                       {/* Asesor info */}
-                      <td className="py-3 pl-4">
+                      <TableCell className="py-3 pl-4">
                         <div className="flex items-center gap-2.5">
                           <AvatarInitials name={advisor.name} size="sm" />
                           <div>
@@ -699,10 +713,10 @@ export const DashboardView = ({
                             </span>
                           </div>
                         </div>
-                      </td>
+                      </TableCell>
 
                       {/* Especialidad */}
-                      <td className="py-3">
+                      <TableCell className="py-3">
                         <span
                           className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${
                             advisor.department === "cobranza"
@@ -725,10 +739,10 @@ export const DashboardView = ({
                             </>
                           )}
                         </span>
-                      </td>
+                      </TableCell>
 
                       {/* Carga / Capacidad */}
-                      <td className="py-3">
+                      <TableCell className="py-3">
                         <div className="w-36 space-y-1">
                           <div className="flex items-center justify-between text-[11px]">
                             <span className={CRM_SURFACES.textMuted}>
@@ -738,27 +752,25 @@ export const DashboardView = ({
                               {advisor.workload_percentage}%
                             </span>
                           </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
-                            <div
-                              className={`h-full rounded-full transition-all ${workloadTheme.bar}`}
-                              style={{ width: `${advisor.workload_percentage}%` }}
-                            />
-                          </div>
+                          <Progress
+                            value={advisor.workload_percentage}
+                            className="h-1.5 w-full bg-slate-200 dark:bg-white/10"
+                          />
                         </div>
-                      </td>
+                      </TableCell>
 
                       {/* Columnas variables según departamento */}
                       {departmentTab === "cobranza" ? (
                         <>
-                          <td className="py-3 text-right">
+                          <TableCell className="py-3 text-right">
                             <span className="font-semibold text-foreground">
                               {advisor.processed_payments}
                             </span>
                             <span className="block text-[11px] text-muted-foreground">
                               {advisor.approved_payments} ap. / {advisor.rejected_payments} rech.
                             </span>
-                          </td>
-                          <td className="py-3 text-right">
+                          </TableCell>
+                          <TableCell className="py-3 text-right">
                             <Badge
                               variant="outline"
                               className={
@@ -768,49 +780,49 @@ export const DashboardView = ({
                               }>
                               {advisor.approval_rate}%
                             </Badge>
-                          </td>
-                          <td className="py-3 text-right font-medium text-emerald-600 dark:text-emerald-400">
+                          </TableCell>
+                          <TableCell className="py-3 text-right font-medium text-emerald-600 dark:text-emerald-400">
                             {formatCurrency(advisor.approved_payment_amount, currency)}
-                          </td>
+                          </TableCell>
                         </>
                       ) : departmentTab === "soporte" ? (
                         <>
-                          <td className="py-3 text-right">
+                          <TableCell className="py-3 text-right">
                             <span className="font-semibold text-foreground">
                               {advisor.resolved_conversations}
                             </span>
                             <span className="block text-[11px] text-muted-foreground">
                               {advisor.resolution_rate}% efect.
                             </span>
-                          </td>
-                          <td className="py-3 text-right">
+                          </TableCell>
+                          <TableCell className="py-3 text-right">
                             <span className="font-semibold text-foreground">
                               {advisor.resolved_tickets}
                             </span>
                             <span className="block text-[11px] text-muted-foreground">
                               de {advisor.assigned_tickets}
                             </span>
-                          </td>
-                          <td className="py-3 text-right">
+                          </TableCell>
+                          <TableCell className="py-3 text-right">
                             <Badge variant="outline" className={speedBadge.className}>
                               {speedBadge.text}
                             </Badge>
-                          </td>
-                          <td className="py-3 text-right text-muted-foreground">
+                          </TableCell>
+                          <TableCell className="py-3 text-right text-muted-foreground">
                             {formatDuration(advisor.average_resolution_ms)}
-                          </td>
+                          </TableCell>
                         </>
                       ) : (
                         <>
-                          <td className="py-3 text-right">
+                          <TableCell className="py-3 text-right">
                             <span className="font-semibold text-foreground">
                               {advisor.resolved_conversations}
                             </span>
                             <span className="block text-[11px] text-muted-foreground">
                               {advisor.resolution_rate}% resueltas
                             </span>
-                          </td>
-                          <td className="py-3 text-right">
+                          </TableCell>
+                          <TableCell className="py-3 text-right">
                             {advisor.department === "cobranza" ? (
                               <span
                                 className="text-muted-foreground/50 font-mono text-xs"
@@ -822,8 +834,8 @@ export const DashboardView = ({
                                 {advisor.resolved_tickets} / {advisor.assigned_tickets}
                               </span>
                             )}
-                          </td>
-                          <td className="py-3 text-right">
+                          </TableCell>
+                          <TableCell className="py-3 text-right">
                             {advisor.department === "soporte" ? (
                               <span
                                 className="text-muted-foreground/50 font-mono text-xs"
@@ -835,17 +847,17 @@ export const DashboardView = ({
                                 {formatCurrency(advisor.approved_payment_amount, currency)}
                               </span>
                             )}
-                          </td>
-                          <td className="py-3 text-right">
+                          </TableCell>
+                          <TableCell className="py-3 text-right">
                             <Badge variant="outline" className={speedBadge.className}>
                               {speedBadge.text}
                             </Badge>
-                          </td>
+                          </TableCell>
                         </>
                       )}
 
                       {/* Score General */}
-                      <td className="py-3 text-center">
+                      <TableCell className="py-3 text-center">
                         <span
                           className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${scoreBadge.className}`}>
                           {advisor.productivity_score > 0 ? (
@@ -860,24 +872,24 @@ export const DashboardView = ({
                             </>
                           )}
                         </span>
-                      </td>
+                      </TableCell>
 
                       {/* Acción */}
-                      <td className="py-3 pr-4 text-right">
-                        <Button
+                      <TableCell className="py-3 pr-4 text-right">
+                        <CrmButton
                           variant="ghost"
                           size="sm"
                           onClick={() => setSelectedAdvisor(advisor)}
                           className="h-8 gap-1 text-xs text-crm-accent hover:bg-crm-accent/10 hover:text-crm-accent">
                           <Eye className="size-3.5" />
                           Detalle
-                        </Button>
-                      </td>
-                    </tr>
+                        </CrmButton>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
@@ -1038,9 +1050,9 @@ export const DashboardView = ({
               </div>
 
               <div className="mt-5 flex justify-end">
-                <Button variant="outline" size="sm" onClick={() => setSelectedAdvisor(null)}>
+                <CrmButton variant="secondary" size="sm" onClick={() => setSelectedAdvisor(null)}>
                   Cerrar
-                </Button>
+                </CrmButton>
               </div>
             </div>
           ) : null}

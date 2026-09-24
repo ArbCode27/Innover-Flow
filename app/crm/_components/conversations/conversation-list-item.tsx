@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { Bot, CheckCircle2, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -23,7 +24,7 @@ interface ConversationListItemProps {
   onSelect: (id: number) => void;
 }
 
-export const ConversationListItem = ({
+export const ConversationListItem = memo(({
   conversation,
   client,
   labels,
@@ -147,4 +148,6 @@ export const ConversationListItem = ({
       ) : null}
     </button>
   );
-};
+});
+
+ConversationListItem.displayName = "ConversationListItem";

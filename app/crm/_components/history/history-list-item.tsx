@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { Archive, Bot, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -19,7 +20,7 @@ interface HistoryListItemProps {
   onSelect: (id: number) => void;
 }
 
-export const HistoryListItem = ({
+export const HistoryListItem = memo(({
   entry,
   isActive,
   onSelect,
@@ -91,4 +92,6 @@ export const HistoryListItem = ({
       </div>
     </button>
   );
-};
+});
+
+HistoryListItem.displayName = "HistoryListItem";

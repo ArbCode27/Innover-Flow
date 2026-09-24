@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import {
   AlertCircle,
   Bot,
@@ -37,7 +37,7 @@ const hasRequestedPaymentReceipt = (message: Message) => {
   return false;
 };
 
-export const MessageBubble = ({
+export const MessageBubble = memo(({
   message,
   onProcessPaymentReceipt,
   onResendMessage,
@@ -206,4 +206,6 @@ export const MessageBubble = ({
       ) : null}
     </div>
   );
-};
+});
+
+MessageBubble.displayName = "MessageBubble";

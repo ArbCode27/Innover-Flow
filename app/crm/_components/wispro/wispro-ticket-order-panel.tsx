@@ -12,7 +12,6 @@ import {
   FileText,
   Hammer,
   HelpCircle,
-  Loader2,
   RefreshCw,
   Search,
   Sparkles,
@@ -44,6 +43,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CrmButton } from "../shared/crm-button";
+import { Spinner } from "@/components/ui/spinner";
 import { CRM_SURFACES, CRM_PANEL } from "../../_lib/crm-theme";
 import {
   parseReporte,
@@ -754,7 +754,7 @@ export const WisproTicketOrderPanel = ({
                     className="pl-9 text-xs"
                   />
                   {isSearchingClients && (
-                    <Loader2 className="absolute right-3 top-2.5 size-4 animate-spin text-slate-400" />
+                    <Spinner className="absolute right-3 top-2.5 size-4 text-slate-400" />
                   )}
                 </div>
 
@@ -1067,7 +1067,7 @@ export const WisproTicketOrderPanel = ({
               disabled={!isFormValid || isSubmitting}>
               {isSubmitting ? (
                 <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  <Spinner className="mr-2 size-4" />
                   Procesando con Wispro...
                 </>
               ) : (
