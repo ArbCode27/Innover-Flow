@@ -14,6 +14,7 @@ import {
   PRIVACY_LAST_UPDATED,
   PRIVACY_PRODUCT,
   PRIVACY_SECTIONS,
+  PRIVACY_TAX_ID,
 } from "./_lib/privacy-policy";
 
 const PrivacyPage = () => (
@@ -33,7 +34,7 @@ const PrivacyPage = () => (
               {PRIVACY_CONTROLLER}
             </span>
             <span className={`block text-[11px] ${CRM_SURFACES.textMuted}`}>
-              {PRIVACY_PRODUCT}
+              {PRIVACY_PRODUCT} · RIF {PRIVACY_TAX_ID}
             </span>
           </span>
         </Link>
@@ -70,6 +71,10 @@ const PrivacyPage = () => (
                 {item.label}
               </span>
             ))}
+            <span
+              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${CRM_BADGE_TONES.neutral}`}>
+              RIF {PRIVACY_TAX_ID}
+            </span>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${CRM_BADGE_TONES.neutral}`}>
               <CalendarDays className="size-3" aria-hidden="true" />

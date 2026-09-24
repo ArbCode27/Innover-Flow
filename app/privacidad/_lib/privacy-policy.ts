@@ -1,6 +1,7 @@
 export const PRIVACY_LAST_UPDATED = "23 de septiembre de 2026";
 export const PRIVACY_CONTROLLER = "Conexiones Innover";
 export const PRIVACY_PRODUCT = "Innover Flow";
+export const PRIVACY_TAX_ID = "J-50316437-9";
 
 export type PrivacySection = {
   id: string;
@@ -17,7 +18,7 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
     title: "1. Quién es el responsable",
     summary: "Identidad del operador",
     paragraphs: [
-      `${PRIVACY_CONTROLLER} opera ${PRIVACY_PRODUCT}, un CRM de atención por WhatsApp para gestionar conversaciones, clientes, tickets, cobranza y pagos de servicios de internet.`,
+      `${PRIVACY_CONTROLLER}, RIF ${PRIVACY_TAX_ID}, opera ${PRIVACY_PRODUCT}, un CRM de atención por WhatsApp para gestionar conversaciones, clientes, tickets, cobranza y pagos de servicios de internet.`,
       "Esta política aplica a las personas que escriben al número de WhatsApp Business conectado a la aplicación, a los asesores que usan el CRM y a Meta, que exige una URL pública que explique cómo se usan los datos recibidos a través de WhatsApp Cloud API.",
       `Cuando una organización o sucursal configura su propio número de WhatsApp dentro de la plataforma, esa organización también trata los datos de sus clientes para prestar el servicio. En ese caso, ${PRIVACY_CONTROLLER} actúa como proveedor tecnológico y la organización como responsable del trato cotidiano con sus usuarios.`,
     ],
@@ -200,7 +201,7 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
     title: "15. Contacto",
     summary: "Cómo escribirnos",
     paragraphs: [
-      `El responsable de esta política es ${PRIVACY_CONTROLLER}, operador de ${PRIVACY_PRODUCT}.`,
+      `El responsable de esta política es ${PRIVACY_CONTROLLER}, RIF ${PRIVACY_TAX_ID}, operador de ${PRIVACY_PRODUCT}.`,
       "Para preguntas sobre privacidad, acceso a tus datos o eliminación, escribe al número de WhatsApp Business de la organización que te atiende e indica que tu mensaje es una solicitud de privacidad. Si eres asesor o administrador, también puedes gestionar estos pedidos desde el CRM.",
     ],
   },
