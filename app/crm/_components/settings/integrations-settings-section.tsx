@@ -2,22 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  AlertTriangle,
-  Check,
   CheckCircle2,
   Cloud,
-  Copy,
-  ExternalLink,
-  HelpCircle,
-  Info,
   Link2,
   MessageCircle,
-  Radio,
   RefreshCw,
   Server,
   ShieldCheck,
   Smartphone,
-  Sparkles,
   Unplug,
   Zap,
 } from "lucide-react";
@@ -53,14 +45,19 @@ import type {
   OrganizationRole,
 } from "../../_lib/types";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
+import {
+  WhatsAppEmbeddedSignupButton,
+  type EmbeddedSignupConfig,
+  type SignupPhone,
+} from "./whatsapp-embedded-signup-button";
 
 type Provider = "wispro" | "whatsapp";
 
 interface WebhookMetadata {
   webhook_url?: string;
-  verify_token?: string;
   required_fields?: string[];
   coexistence_supported?: boolean;
+  embedded_signup?: EmbeddedSignupConfig;
 }
 
 const emptyIntegration = (provider: Provider): OrganizationIntegration => ({
@@ -94,26 +91,15 @@ const WhatsAppCoexistenceCard = ({
   canEdit: boolean;
   onChanged: (integration: OrganizationIntegration) => void;
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [isUpdatingConfig, setIsUpdatingConfig] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-
-  // Campos del formulario
-  const [apiToken, setApiToken] = useState("");
-  const [wabaId, setWabaId] = useState(String(integration.config.waba_id || ""));
-  const [phoneNumberId, setPhoneNumberId] = useState(
-    String(integration.config.phone_number_id || ""),
-  );
-
-  useEffect(() => {
-    setWabaId(String(integration.config.waba_id || ""));
-    setPhoneNumberId(String(integration.config.phone_number_id || ""));
-  }, [integration.config]);
 
   const isConnected = integration.status === "connected";
+  const isPending = integration.status === "pending";
+  const pendingPhones = Array.isArray(integration.config.pending_phones)
+    ? (integration.config.pending_phones as SignupPhone[])
+    : [];
+  const signupReady = metadata?.embedded_signup?.ready !== false;
   const displayPhone = String(
     integration.config.display_phone_number ||
       integration.config.phone_number_id ||
@@ -125,44 +111,6 @@ const WhatsAppCoexistenceCard = ({
   // Flags de coexistencia
   const autoHuman = integration.config.coexistence_auto_human !== false;
   const syncEchoes = integration.config.coexistence_sync_echoes !== false;
-
-  const handleCopy = (text: string, key: string) => {
-    if (!text) return;
-    navigator.clipboard.writeText(text);
-    setCopiedKey(key);
-    toast.success("Copiado al portapapeles");
-    setTimeout(() => setCopiedKey(null), 2500);
-  };
-
-  const handleSave = async () => {
-    if (!canEdit || isSaving) return;
-    setIsSaving(true);
-    try {
-      const response = await fetch("/api/crm/integrations/whatsapp", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accessToken: apiToken,
-          wabaId: wabaId.trim(),
-          phoneNumberId: phoneNumberId.trim(),
-        }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || "No se pudo conectar con Meta");
-      }
-      onChanged(payload.integration);
-      setApiToken("");
-      setIsOpen(false);
-      toast.success("WhatsApp conectado exitosamente con Coexistencia");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Error conectando con WhatsApp",
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const handleTest = async () => {
     setIsTesting(true);
@@ -225,14 +173,6 @@ const WhatsAppCoexistenceCard = ({
     toast.success("WhatsApp desconectado");
   };
 
-  // Resuelve la URL del webhook en el cliente si no viene del server
-  const webhookUrl =
-    metadata?.webhook_url ||
-    (typeof window !== "undefined"
-      ? `${window.location.origin}/api/whatsapp/webhook`
-      : "/api/whatsapp/webhook");
-  const verifyToken = metadata?.verify_token || "innover-2403-whatsapp-key";
-
   return (
     <Card className="col-span-1 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 shadow-xs dark:border-emerald-500/20 dark:bg-emerald-950/10 lg:col-span-2">
       <CardHeader className="pb-3">
@@ -264,6 +204,13 @@ const WhatsAppCoexistenceCard = ({
                 <span>Coexistencia Activa</span>
               </Badge>
             ) : null}
+            {isPending ? (
+              <Badge
+                variant="outline"
+                className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">
+                Pendiente de número
+              </Badge>
+            ) : null}
 
             <Badge
               variant={isConnected ? "default" : "secondary"}
@@ -291,7 +238,7 @@ const WhatsAppCoexistenceCard = ({
                   Número Conectado
                 </p>
                 <p className="mt-1 font-semibold text-foreground">
-                  {displayPhone || "ID: " + phoneNumberId}
+                  {displayPhone || "Pendiente de número"}
                 </p>
               </div>
 
@@ -414,157 +361,40 @@ const WhatsAppCoexistenceCard = ({
               </div>
             </div>
 
-            {/* Parámetros del Webhook de Meta para Copiar */}
-            <div className="rounded-xl border border-black/5 bg-background/50 p-4 text-xs dark:border-white/10">
-              <div className="mb-2 flex items-center justify-between">
-                <div className="flex items-center gap-1.5 font-medium text-foreground">
-                  <Radio className="size-3.5 text-emerald-600" aria-hidden="true" />
-                  <span>Configuración del Webhook en Meta Developers</span>
-                </div>
-                <Badge variant="secondary" className="text-[10px]">
-                  Campos: messages, message_echoes
-                </Badge>
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="flex items-center justify-between gap-2 rounded-lg bg-black/5 p-2 font-mono text-[11px] dark:bg-white/5">
-                  <span className="truncate" title={webhookUrl}>
-                    {webhookUrl}
-                  </span>
-                  <CrmButton
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-6 shrink-0"
-                    onClick={() => handleCopy(webhookUrl, "url")}
-                    title="Copiar URL del Webhook">
-                    {copiedKey === "url" ? (
-                      <Check className="size-3.5 text-emerald-600" />
-                    ) : (
-                      <Copy className="size-3.5" />
-                    )}
-                  </CrmButton>
-                </div>
-
-                <div className="flex items-center justify-between gap-2 rounded-lg bg-black/5 p-2 font-mono text-[11px] dark:bg-white/5">
-                  <span className="truncate">
-                    Token: <span className="font-semibold">{verifyToken}</span>
-                  </span>
-                  <CrmButton
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-6 shrink-0"
-                    onClick={() => handleCopy(verifyToken, "token")}
-                    title="Copiar Token de Verificación">
-                    {copiedKey === "token" ? (
-                      <Check className="size-3.5 text-emerald-600" />
-                    ) : (
-                      <Copy className="size-3.5" />
-                    )}
-                  </CrmButton>
-                </div>
-              </div>
-            </div>
           </>
         ) : (
-          /* Estado Desconectado */
           <div className="rounded-xl border border-black/5 bg-background/50 p-6 text-center dark:border-white/10">
             <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600">
               <Smartphone className="size-6" aria-hidden="true" />
             </div>
             <h4 className="text-sm font-semibold text-foreground">
-              Conecta tu número oficial con Coexistencia
+              {isPending
+                ? "Meta autorizó la cuenta. Falta elegir el número"
+                : "Conecta WhatsApp con coexistencia"}
             </h4>
-            <p className={`mx-auto mt-1.5 max-w-lg text-xs leading-relaxed ${CRM_SURFACES.textMuted}`}>
-              No tienes que dar de baja tu WhatsApp Business en el celular. Con la coexistencia oficial
-              de Meta, el número sigue funcionando en el teléfono de tu equipo mientras este CRM atiende
-              mensajes, registra comprobantes y ejecuta la IA en paralelo.
+            <p
+              className={`mx-auto mt-1.5 max-w-lg text-xs leading-relaxed ${CRM_SURFACES.textMuted}`}>
+              La única vía es Embedded Signup de Meta. El número sigue en WhatsApp
+              Business del celular; el CRM recibe mensajes y ecos al mismo tiempo.
             </p>
+            {!signupReady ? (
+              <p className="mx-auto mt-3 max-w-lg text-[11px] text-amber-700 dark:text-amber-300">
+                Falta configurar en Vercel: NEXT_PUBLIC_META_APP_ID,
+                NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID y WHATSAPP_APP_SECRET.
+              </p>
+            ) : null}
           </div>
         )}
 
-        {/* Botones de Acción */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Dialog open={isOpen} onOpenChange={setIsOpen}>
-              <DialogTrigger asChild>
-                <CrmButton disabled={!canEdit} size="sm">
-                  <Link2 className="size-4" />
-                  {isConnected ? "Reconfigurar Credenciales" : "Conectar WhatsApp"}
-                </CrmButton>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <MessageCircle className="size-5 text-emerald-600" />
-                    Conectar WhatsApp Cloud API & Coexistencia
-                  </DialogTitle>
-                  <DialogDescription>
-                    Ingresa las credenciales de tu aplicación en Meta for Developers. Tus tokens se
-                    cifran en el servidor con AES-256.
-                  </DialogDescription>
-                </DialogHeader>
-
-                <div className="space-y-3.5 py-1">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="wa-waba-id" className="text-xs font-medium">
-                      WhatsApp Business Account ID (WABA ID)
-                    </Label>
-                    <Input
-                      id="wa-waba-id"
-                      value={wabaId}
-                      onChange={(event) => setWabaId(event.target.value)}
-                      placeholder="Ej. 102938475610293"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="wa-phone-id" className="text-xs font-medium">
-                      Phone Number ID
-                    </Label>
-                    <Input
-                      id="wa-phone-id"
-                      value={phoneNumberId}
-                      onChange={(event) => setPhoneNumberId(event.target.value)}
-                      placeholder="Ej. 962760359910040"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="wa-token" className="text-xs font-medium">
-                      Token de Acceso Permanente (System User Token)
-                    </Label>
-                    <Input
-                      id="wa-token"
-                      type="password"
-                      autoComplete="new-password"
-                      value={apiToken}
-                      onChange={(event) => setApiToken(event.target.value)}
-                      placeholder="EAAa..."
-                    />
-                    <p className={`text-[11px] ${CRM_SURFACES.textMuted}`}>
-                      Requiere permisos: <code className="text-foreground">whatsapp_business_messaging</code> y{" "}
-                      <code className="text-foreground">whatsapp_business_management</code>.
-                    </p>
-                  </div>
-                </div>
-
-                <DialogFooter className="gap-2 sm:gap-0">
-                  <CrmButton
-                    type="button"
-                    variant="secondary"
-                    onClick={() => setIsOpen(false)}>
-                    Cancelar
-                  </CrmButton>
-                  <CrmButton
-                    onClick={() => void handleSave()}
-                    disabled={isSaving || !apiToken || !wabaId || !phoneNumberId}>
-                    {isSaving ? "Verificando con Meta..." : "Validar y Conectar"}
-                  </CrmButton>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <WhatsAppEmbeddedSignupButton
+              canEdit={canEdit}
+              isConnected={isConnected}
+              signup={metadata?.embedded_signup}
+              pendingPhones={pendingPhones}
+              onConnected={onChanged}
+            />
 
             {isConnected ? (
               <CrmButton
@@ -576,19 +406,9 @@ const WhatsAppCoexistenceCard = ({
                 Probar Conexión
               </CrmButton>
             ) : null}
-
-            <CrmButton
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowGuide((prev) => !prev)}
-              className="text-xs">
-              <HelpCircle className="size-3.5" />
-              {showGuide ? "Ocultar Guía de Coexistencia" : "¿Cómo activar Coexistencia?"}
-            </CrmButton>
           </div>
 
-          {isConnected ? (
+          {isConnected || isPending ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <CrmButton size="sm" variant="ghost" disabled={!canEdit} className="text-red-600 hover:text-red-700">
@@ -614,51 +434,6 @@ const WhatsAppCoexistenceCard = ({
             </AlertDialog>
           ) : null}
         </div>
-
-        {/* Guía Desplegable de Activación de Coexistencia */}
-        {showGuide ? (
-          <div className="rounded-xl border border-black/10 bg-black/5 p-4 text-xs dark:border-white/10 dark:bg-white/5 space-y-2.5 animate-in fade-in-50">
-            <div className="flex items-center gap-1.5 font-semibold text-foreground">
-              <Sparkles className="size-4 text-emerald-600" />
-              <span>Guía para habilitar Coexistencia en Meta Business</span>
-            </div>
-            <ol className="list-decimal space-y-2 pl-4 text-muted-foreground">
-              <li>
-                <strong className="text-foreground">App en Meta for Developers:</strong> Accede a{" "}
-                <a
-                  href="https://developers.facebook.com"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-crm-accent underline inline-flex items-center gap-0.5">
-                  developers.facebook.com <ExternalLink className="size-3 inline" />
-                </a>{" "}
-                y crea o selecciona una app de tipo <strong>Negocios</strong> con el producto <strong>WhatsApp</strong>.
-              </li>
-              <li>
-                <strong className="text-foreground">Configurar Webhook:</strong> En la sección WhatsApp → Configuración de la App,
-                registra la URL del Webhook y el Verify Token que se muestran arriba.
-              </li>
-              <li>
-                <strong className="text-foreground">Suscribir Campos Requeridos:</strong> En la suscripción de Webhook de WhatsApp, activa
-                obligatoriamente:
-                <div className="mt-1 flex gap-2">
-                  <Badge variant="outline" className="font-mono text-[10px]">messages</Badge>
-                  <Badge variant="outline" className="font-mono text-[10px]">message_echoes</Badge>
-                </div>
-                <span className="text-[11px] block mt-1">
-                  El campo <code className="font-semibold text-foreground">message_echoes</code> es el que permite que cuando respondas
-                  desde tu teléfono celular, el CRM lo sincronice en tiempo real y pause la IA.
-                </span>
-              </li>
-              <li>
-                <strong className="text-foreground">Generar Token Permanente:</strong> En Meta Business Manager → Usuarios del Sistema,
-                crea un usuario con rol de Administrador y genera un token con permisos{" "}
-                <code className="text-foreground">whatsapp_business_messaging</code> y{" "}
-                <code className="text-foreground">whatsapp_business_management</code>.
-              </li>
-            </ol>
-          </div>
-        ) : null}
       </CardContent>
     </Card>
   );

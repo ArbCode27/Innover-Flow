@@ -10,6 +10,12 @@ import {
   encryptIntegrationSecret,
 } from "../../_lib/integration-secrets";
 import { getSupabaseAdmin } from "../../_lib/supabase-admin";
+import {
+  getEmbeddedSignupEnv,
+  verifyWhatsappPhone,
+  WhatsappGraphError,
+} from "../../_lib/whatsapp-graph";
+import { sanitizeIntegration } from "../../_lib/whatsapp-integration";
 
 const wisproSchema = z.object({
   apiToken: z.string().trim().min(8).max(500),
@@ -19,12 +25,6 @@ const wisproSchema = z.object({
     .url()
     .max(300)
     .default("https://www.cloud.wispro.co/api/v1"),
-});
-
-const whatsappSchema = z.object({
-  accessToken: z.string().trim().min(20).max(2000),
-  wabaId: z.string().trim().min(3).max(80),
-  phoneNumberId: z.string().trim().min(3).max(80),
 });
 
 type Provider = "wispro" | "whatsapp";
@@ -51,57 +51,11 @@ const verifyWispro = async (token: string, baseUrl: string) => {
   return { base_url: baseUrl.replace(/\/+$/, "") };
 };
 
-const verifyWhatsapp = async (
-  accessToken: string,
-  wabaId: string,
-  phoneNumberId: string,
-) => {
-  const graphVersion = process.env.META_GRAPH_VERSION?.trim() || "v22.0";
-  const response = await fetch(
-    `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(
-      phoneNumberId,
-    )}?fields=id,display_phone_number,verified_name,quality_rating,code_verification_status,status,platform_type,throughput`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      signal: AbortSignal.timeout(10_000),
-      cache: "no-store",
-    },
-  );
-  const body = (await response.json()) as Record<string, unknown>;
-  if (!response.ok) {
-    const errorDetails = (body.error as { message?: string })?.message;
-    throw new Error(
-      errorDetails ? `Meta: ${errorDetails}` : "Meta rechazó las credenciales de WhatsApp",
-    );
-  }
-
-  return {
-    waba_id: wabaId,
-    phone_number_id: phoneNumberId,
-    display_phone_number: body.display_phone_number || null,
-    verified_name: body.verified_name || null,
-    quality_rating: body.quality_rating || null,
-    status: body.status || null,
-    code_verification_status: body.code_verification_status || null,
-    platform_type: body.platform_type || "CLOUD_API",
-    coexistence_enabled: true,
-    coexistence_auto_human: true,
-    coexistence_sync_echoes: true,
-  };
-};
-
-const sanitizeIntegration = (row: Record<string, unknown> | null) => ({
-  provider: row?.provider || null,
-  status: row?.status || "disconnected",
-  config: row?.config || {},
-  has_credentials: Boolean(row?.credentials_encrypted),
-  last_verified_at: row?.last_verified_at || null,
-  last_error: row?.last_error || null,
-  updated_at: row?.updated_at || null,
-});
-
 const handleError = (error: unknown) => {
   if (error instanceof CrmAuthError) {
+    return NextResponse.json({ error: error.message }, { status: error.status });
+  }
+  if (error instanceof WhatsappGraphError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }
   const message =
@@ -134,8 +88,7 @@ export const GET = async (
       "";
     const proto = request.headers.get("x-forwarded-proto") || "https";
     const webhookUrl = host ? `${proto}://${host}/api/whatsapp/webhook` : "/api/whatsapp/webhook";
-    const verifyToken =
-      process.env.WHATSAPP_VERIFY_TOKEN?.trim() || "innover-2403-whatsapp-key";
+    const signup = getEmbeddedSignupEnv();
 
     return NextResponse.json({
       integration: sanitizeIntegration(data),
@@ -143,9 +96,14 @@ export const GET = async (
         provider === "whatsapp"
           ? {
               webhook_url: webhookUrl,
-              verify_token: verifyToken,
               required_fields: ["messages", "message_echoes"],
               coexistence_supported: true,
+              embedded_signup: {
+                ready: signup.ready,
+                app_id: signup.appId || null,
+                config_id: signup.configId || null,
+                graph_version: signup.graphVersion,
+              },
             }
           : undefined,
     });
@@ -171,11 +129,18 @@ export const PUT = async (
       );
     }
 
+    if (provider === "whatsapp") {
+      return NextResponse.json(
+        {
+          error:
+            "WhatsApp solo se vincula con Embedded Signup de Meta. Usa Continuar con Meta.",
+        },
+        { status: 410 },
+      );
+    }
+
     const rawPayload = await request.json();
-    const parsed =
-      provider === "wispro"
-        ? wisproSchema.safeParse(rawPayload)
-        : whatsappSchema.safeParse(rawPayload);
+    const parsed = wisproSchema.safeParse(rawPayload);
     if (!parsed.success) {
       return NextResponse.json(
         { error: parsed.error.issues[0]?.message || "Datos inválidos" },
@@ -183,21 +148,9 @@ export const PUT = async (
       );
     }
 
-    let config: Record<string, unknown>;
-    let secret: string;
-    if (provider === "wispro") {
-      const wispro = parsed.data as z.infer<typeof wisproSchema>;
-      config = await verifyWispro(wispro.apiToken, wispro.baseUrl);
-      secret = wispro.apiToken;
-    } else {
-      const whatsapp = parsed.data as z.infer<typeof whatsappSchema>;
-      config = await verifyWhatsapp(
-        whatsapp.accessToken,
-        whatsapp.wabaId,
-        whatsapp.phoneNumberId,
-      );
-      secret = whatsapp.accessToken;
-    }
+    const wispro = parsed.data;
+    const config = await verifyWispro(wispro.apiToken, wispro.baseUrl);
+    const secret = wispro.apiToken;
 
     const now = new Date().toISOString();
     const { data, error } = await getSupabaseAdmin()
@@ -255,7 +208,7 @@ export const POST = async (
     const nextConfig =
       provider === "wispro"
         ? await verifyWispro(secret, String(config.base_url || ""))
-        : await verifyWhatsapp(
+        : await verifyWhatsappPhone(
             secret,
             String(config.waba_id || ""),
             String(config.phone_number_id || ""),

@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { createClient } from "@supabase/supabase-js";
 import { crmService } from "../_lib/crm-service";
+import { getSupabaseClient } from "../_lib/supabase";
 import {
   filterConversations,
   getConversationFilterCounts,
@@ -46,12 +46,6 @@ import type {
 } from "../_lib/types";
 import { DEFAULT_BOT_ENGINE } from "../_lib/bot-engine";
 import { DEFAULT_AI_MODEL } from "../_lib/ai-models";
-
-// ── Supabase client para Realtime ─────────────────────────
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-);
 
 const emptyData: CrmData = {
   agents: [],
@@ -197,6 +191,7 @@ export const useCrmData = (agent: Agent | null) => {
   // ── REALTIME: mensajes nuevos ──────────────────────────
   useEffect(() => {
     if (!agent) return;
+    const supabase = getSupabaseClient();
     const channel = supabase
       .channel(`realtime:messages:${agent.organization_id}`)
       .on(
@@ -249,6 +244,7 @@ export const useCrmData = (agent: Agent | null) => {
   // ── REALTIME: conversaciones ───────────────────────────
   useEffect(() => {
     if (!agent) return;
+    const supabase = getSupabaseClient();
     const channel = supabase
       .channel(`realtime:conversations:${agent.organization_id}`)
       .on(
@@ -334,6 +330,7 @@ export const useCrmData = (agent: Agent | null) => {
   // ── REALTIME: clientes ─────────────────────────────────
   useEffect(() => {
     if (!agent) return;
+    const supabase = getSupabaseClient();
     const channel = supabase
       .channel(`realtime:clients:${agent.organization_id}`)
       .on(
