@@ -110,12 +110,20 @@ export const assertAppChannelSecret = (request: Request) => {
     process.env.CRM_INTERNAL_SECRET?.trim() ||
     "";
   if (!expected) {
-    throw new Error("APP_CHANNEL_SECRET no está configurado");
+    const error = new Error(
+      "El servicio de acceso no está disponible en este momento. Intenta más tarde.",
+    ) as Error & { status: number; code: string };
+    error.status = 503;
+    error.code = "SECRET_NOT_CONFIGURED";
+    throw error;
   }
   const header = request.headers.get("x-app-secret")?.trim() || "";
   if (header !== expected) {
-    const error = new Error("Secret de app inválido") as Error & { status: number };
+    const error = new Error(
+      "No se pudo validar la aplicación. Contacte a soporte.",
+    ) as Error & { status: number; code: string };
     error.status = 401;
+    error.code = "INVALID_SECRET";
     throw error;
   }
 };

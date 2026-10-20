@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/app/api/crm/_lib/supabase-admin";
-import {
-  FieldTicketError,
-  listFieldTicketsForClient,
-  toClientAppTicket,
-} from "@/app/api/crm/_lib/field-tickets";
+import { listFieldTicketsForClient, toClientAppTicket } from "@/app/api/crm/_lib/field-tickets";
 import { FIELD_TICKET_STATUSES } from "@/lib/field-tickets";
-import { AppAuthError, getAppAuthContext } from "../_lib/app-auth";
-
-const isMissingTable = (error: { code?: string } | null | undefined) =>
-  error?.code === "PGRST205" || error?.code === "42P01";
+import { getAppAuthContext } from "../_lib/app-auth";
+import { APP_ERROR_CODES, toAppErrorResponse } from "../_lib/app-errors";
 
 const parseStatusFilter = (raw: string | null) => {
   if (!raw?.trim()) return null;
@@ -43,27 +37,9 @@ export const GET = async (request: NextRequest) => {
       tickets: filtered.map(toClientAppTicket),
     });
   } catch (error) {
-    if (isMissingTable(error as { code?: string })) {
-      return NextResponse.json(
-        { error: "Aplica la migración de field_tickets en Supabase" },
-        { status: 503 },
-      );
-    }
-    if (error instanceof AppAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    if (error instanceof FieldTicketError) {
-      return NextResponse.json(
-        { error: error.message, code: error.code },
-        { status: error.status },
-      );
-    }
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "No se pudieron cargar los tickets",
-      },
-      { status: 500 },
-    );
+    return toAppErrorResponse(error, {
+      code: APP_ERROR_CODES.TICKETS_LOAD_FAILED,
+      error: "No se pudieron cargar tus tickets. Intenta de nuevo.",
+    });
   }
 };

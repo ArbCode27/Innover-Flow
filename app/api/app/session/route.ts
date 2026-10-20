@@ -13,33 +13,35 @@ import {
   verifyClientAppPassword,
   getClientInitials,
 } from "@/lib/client-auth-utils";
+import {
+  APP_ERROR_CODES,
+  AppApiError,
+  parseAppJsonBody,
+  parseAppSchema,
+  toAppErrorResponse,
+} from "../_lib/app-errors";
 
 const sessionRequestSchema = z.object({
-  action: z.enum(["login", "register"]).default("login"),
-  // organization_slug es opcional: el cliente se identifica unívocamente por su cédula
-  organization_slug: z.string().trim().max(80).optional(),
-  // Login: cédula y clave
-  cedula: z.string().trim().max(40).optional(),
-  identifier: z.string().trim().max(80).optional(),
-  password: z.string().trim().max(80).optional(),
-  // Registro desde la app:
-  name: z.string().trim().max(120).optional(),
-  phone: z.string().trim().max(40).optional(),
+  action: z
+    .enum(["login", "register"], {
+      errorMap: () => ({ message: "La acción debe ser login o register" }),
+    })
+    .default("login"),
+  organization_slug: z
+    .string()
+    .trim()
+    .max(80, "El identificador de la organización es demasiado largo")
+    .optional(),
+  cedula: z.string().trim().max(40, "La cédula es demasiado larga").optional(),
+  identifier: z.string().trim().max(80, "El identificador es demasiado largo").optional(),
+  password: z.string().trim().max(80, "La contraseña es demasiado larga").optional(),
+  name: z.string().trim().max(120, "El nombre es demasiado largo").optional(),
+  phone: z.string().trim().max(40, "El teléfono es demasiado largo").optional(),
 });
 
 export const POST = async (request: NextRequest) => {
   try {
     assertAppChannelSecret(request);
-    const body = await request.json();
-    const parsed = sessionRequestSchema.safeParse(body);
-
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.issues[0]?.message || "Datos inválidos" },
-        { status: 400 },
-      );
-    }
-
     const {
       action,
       organization_slug,
@@ -48,7 +50,11 @@ export const POST = async (request: NextRequest) => {
       password,
       name,
       phone,
-    } = parsed.data;
+    } = parseAppSchema(
+      sessionRequestSchema,
+      await parseAppJsonBody(request),
+      "Revisa los datos e intenta de nuevo.",
+    );
 
     const supabase = getSupabaseAdmin();
 
@@ -58,26 +64,29 @@ export const POST = async (request: NextRequest) => {
     if (action === "register") {
       const cleanName = (name || "").trim();
       if (!cleanName || cleanName.length < 2) {
-        return NextResponse.json(
-          { error: "El nombre completo es requerido para registrar el cliente" },
-          { status: 400 },
+        throw new AppApiError(
+          APP_ERROR_CODES.NAME_REQUIRED,
+          "El nombre completo es requerido para registrar el cliente",
+          400,
         );
       }
 
       const cleanCedula = extractCedulaDigits(cedula || identifier);
       if (!cleanCedula || cleanCedula.length < 5) {
-        return NextResponse.json(
-          { error: "La cédula o documento de identidad válido es requerido (mínimo 5 dígitos)" },
-          { status: 400 },
+        throw new AppApiError(
+          APP_ERROR_CODES.CEDULA_INVALID,
+          "La cédula o documento de identidad válido es requerido (mínimo 5 dígitos)",
+          400,
         );
       }
 
       const rawPhone = (phone || "").trim();
       const normalizedPhone = normalizeChannelPhone(rawPhone);
       if (!normalizedPhone || normalizedPhone.length < 7) {
-        return NextResponse.json(
-          { error: "Un número de teléfono válido es requerido para el registro" },
-          { status: 400 },
+        throw new AppApiError(
+          APP_ERROR_CODES.PHONE_REQUIRED,
+          "Un número de teléfono válido es requerido para el registro",
+          400,
         );
       }
 
@@ -95,9 +104,10 @@ export const POST = async (request: NextRequest) => {
 
         if (orgErr) throw orgErr;
         if (!orgBySlug) {
-          return NextResponse.json(
-            { error: "Organización no encontrada o inactiva" },
-            { status: 404 },
+          throw new AppApiError(
+            APP_ERROR_CODES.ORGANIZATION_NOT_FOUND,
+            "No encontramos la organización. Verifica los datos o contacta a soporte.",
+            404,
           );
         }
         targetOrgId = orgBySlug.id;
@@ -114,9 +124,10 @@ export const POST = async (request: NextRequest) => {
 
         if (defOrgErr) throw defOrgErr;
         if (!defaultOrg) {
-          return NextResponse.json(
-            { error: "No hay ninguna organización activa disponible en el sistema" },
-            { status: 404 },
+          throw new AppApiError(
+            APP_ERROR_CODES.ORGANIZATION_NOT_FOUND,
+            "El servicio no está disponible en este momento. Intenta más tarde.",
+            404,
           );
         }
         targetOrgId = defaultOrg.id;
@@ -135,9 +146,10 @@ export const POST = async (request: NextRequest) => {
 
       if (client) {
         if (client.app_enabled === false) {
-          return NextResponse.json(
-            { error: "El acceso a la app móvil está deshabilitado para esta cuenta. Contacte a soporte." },
-            { status: 403 },
+          throw new AppApiError(
+            APP_ERROR_CODES.APP_DISABLED,
+            "El acceso a la app está deshabilitado para esta cuenta. Contacte a soporte.",
+            403,
           );
         }
 
@@ -191,9 +203,10 @@ export const POST = async (request: NextRequest) => {
       }
 
       if (!targetOrgId || !targetOrgData) {
-        return NextResponse.json(
-          { error: "No se pudo determinar la organización activa para el registro" },
-          { status: 400 },
+        throw new AppApiError(
+          APP_ERROR_CODES.ORGANIZATION_NOT_FOUND,
+          "No se pudo completar el registro. Intenta de nuevo.",
+          400,
         );
       }
 
@@ -240,25 +253,28 @@ export const POST = async (request: NextRequest) => {
     // ========================================================================
     const rawCedula = (cedula || identifier || "").trim();
     if (!rawCedula) {
-      return NextResponse.json(
-        { error: "Debe ingresar su cédula para iniciar sesión" },
-        { status: 400 },
+      throw new AppApiError(
+        APP_ERROR_CODES.CEDULA_REQUIRED,
+        "Ingresa tu cédula para iniciar sesión",
+        400,
       );
     }
 
     const cleanPassword = (password || "").trim();
     if (!cleanPassword) {
-      return NextResponse.json(
-        { error: "Debe ingresar su contraseña para iniciar sesión" },
-        { status: 400 },
+      throw new AppApiError(
+        APP_ERROR_CODES.PASSWORD_REQUIRED,
+        "Ingresa tu contraseña para iniciar sesión",
+        400,
       );
     }
 
     const cleanCedula = extractCedulaDigits(rawCedula);
     if (!cleanCedula || cleanCedula.length < 5) {
-      return NextResponse.json(
-        { error: "El formato de la cédula es inválido (mínimo 5 dígitos)" },
-        { status: 400 },
+      throw new AppApiError(
+        APP_ERROR_CODES.CEDULA_INVALID,
+        "El formato de la cédula no es válido. Usa al menos 5 dígitos.",
+        400,
       );
     }
 
@@ -285,9 +301,10 @@ export const POST = async (request: NextRequest) => {
 
     const client = matchedClients?.[0];
     if (!client) {
-      return NextResponse.json(
-        { error: "No se encontró ningún cliente registrado con esta cédula" },
-        { status: 404 },
+      throw new AppApiError(
+        APP_ERROR_CODES.CLIENT_NOT_FOUND,
+        "No encontramos un cliente con esta cédula. Verifica el número o contacta a soporte.",
+        404,
       );
     }
 
@@ -300,16 +317,18 @@ export const POST = async (request: NextRequest) => {
 
     if (orgError) throw orgError;
     if (!organization || organization.status !== "active") {
-      return NextResponse.json(
-        { error: "La organización asociada a su cuenta no se encuentra activa o disponible" },
-        { status: 403 },
+      throw new AppApiError(
+        APP_ERROR_CODES.ORGANIZATION_INACTIVE,
+        "Tu proveedor no está disponible en este momento. Contacte a soporte.",
+        403,
       );
     }
 
     if (client.app_enabled === false) {
-      return NextResponse.json(
-        { error: "El acceso a la app móvil está deshabilitado para esta cuenta. Contacte a soporte." },
-        { status: 403 },
+      throw new AppApiError(
+        APP_ERROR_CODES.APP_DISABLED,
+        "El acceso a la app está deshabilitado para esta cuenta. Contacte a soporte.",
+        403,
       );
     }
 
@@ -321,12 +340,10 @@ export const POST = async (request: NextRequest) => {
     );
 
     if (!isPasswordValid) {
-      return NextResponse.json(
-        {
-          error:
-            "Contraseña incorrecta. Recuerde que su contraseña corresponde a los números de su cédula seguidos de sus iniciales en mayúsculas (ejemplo: 28123456CP).",
-        },
-        { status: 401 },
+      throw new AppApiError(
+        APP_ERROR_CODES.WRONG_PASSWORD,
+        "Contraseña incorrecta. Es tu cédula seguida de tus iniciales en mayúsculas (ejemplo: 28123456CP).",
+        401,
       );
     }
 
@@ -365,13 +382,9 @@ export const POST = async (request: NextRequest) => {
       },
     });
   } catch (error) {
-    const status = (error as { status?: number }).status || 500;
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "No se pudo procesar la sesión de la app",
-      },
-      { status },
-    );
+    return toAppErrorResponse(error, {
+      code: APP_ERROR_CODES.SESSION_FAILED,
+      error: "No se pudo iniciar sesión. Intenta de nuevo.",
+    });
   }
 };

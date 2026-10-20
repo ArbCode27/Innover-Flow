@@ -16,7 +16,7 @@ export const getAppAuthContext = async (
   const bearer = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   const session = await verifyAppSessionToken(bearer);
   if (!session) {
-    throw new AppAuthError("Sesión de app inválida o expirada");
+    throw new AppAuthError("Tu sesión expiró. Inicia sesión de nuevo.", 401);
   }
   return session;
 };

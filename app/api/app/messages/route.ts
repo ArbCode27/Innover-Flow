@@ -10,10 +10,21 @@ import {
 } from "@/app/api/crm/_lib/channel-messages";
 import { withOptionalOrganizationWispro } from "@/app/api/crm/_lib/wispro-api";
 import { replyToConversationWithAi } from "@/app/api/crm/ai/_lib/reply-to-conversation";
-import { AppAuthError, getAppAuthContext } from "../_lib/app-auth";
+import { getAppAuthContext } from "../_lib/app-auth";
+import {
+  APP_ERROR_CODES,
+  AppApiError,
+  parseAppJsonBody,
+  parseAppSchema,
+  toAppErrorResponse,
+} from "../_lib/app-errors";
 
 const textSchema = z.object({
-  content: z.string().trim().min(1).max(4096),
+  content: z
+    .string({ invalid_type_error: "El mensaje no es válido" })
+    .trim()
+    .min(1, "El mensaje no puede estar vacío")
+    .max(4096, "El mensaje es demasiado largo (máximo 4096 caracteres)"),
 });
 
 const scheduleAi = (
@@ -71,11 +82,10 @@ export const GET = async (request: NextRequest) => {
       messages: messages || [],
     });
   } catch (error) {
-    const status = error instanceof AppAuthError ? error.status : 500;
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "No se pudieron cargar los mensajes" },
-      { status },
-    );
+    return toAppErrorResponse(error, {
+      code: APP_ERROR_CODES.MESSAGE_LOAD_FAILED,
+      error: "No se pudieron cargar los mensajes. Intenta de nuevo.",
+    });
   }
 };
 
@@ -107,12 +117,21 @@ export const POST = async (request: NextRequest) => {
           : "image";
       caption = String(form.get("caption") || "").trim() || null;
       if (file instanceof File) {
-        const uploaded = await uploadChannelMedia(supabase, {
-          organizationId: session.organizationId,
-          conversationId: Number(conversation.id),
-          file,
-          kind,
-        });
+        let uploaded;
+        try {
+          uploaded = await uploadChannelMedia(supabase, {
+            organizationId: session.organizationId,
+            conversationId: Number(conversation.id),
+            file,
+            kind,
+          });
+        } catch {
+          throw new AppApiError(
+            APP_ERROR_CODES.MEDIA_UPLOAD_FAILED,
+            "No se pudo subir el archivo. Intenta con otro o más tarde.",
+            400,
+          );
+        }
         mediaUrl = uploaded.publicUrl;
         mimeType = uploaded.mimeType;
         mediaType = kind;
@@ -129,18 +148,20 @@ export const POST = async (request: NextRequest) => {
         content = caption || String(form.get("content") || "").trim();
       }
     } else {
-      const parsed = textSchema.safeParse(await request.json());
-      if (!parsed.success) {
-        return NextResponse.json(
-          { error: parsed.error.issues[0]?.message || "Datos inválidos" },
-          { status: 400 },
-        );
-      }
-      content = parsed.data.content;
+      const parsed = parseAppSchema(
+        textSchema,
+        await parseAppJsonBody(request),
+        "El mensaje no es válido",
+      );
+      content = parsed.content;
     }
 
     if (!content.trim()) {
-      return NextResponse.json({ error: "El mensaje no puede estar vacío" }, { status: 400 });
+      throw new AppApiError(
+        APP_ERROR_CODES.MESSAGE_EMPTY,
+        "El mensaje no puede estar vacío",
+        400,
+      );
     }
 
     const saved = await persistInboundMessage(supabase, {
@@ -163,10 +184,9 @@ export const POST = async (request: NextRequest) => {
 
     return NextResponse.json({ success: true, message: saved });
   } catch (error) {
-    const status = error instanceof AppAuthError ? error.status : 500;
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "No se pudo enviar el mensaje" },
-      { status },
-    );
+    return toAppErrorResponse(error, {
+      code: APP_ERROR_CODES.MESSAGE_SEND_FAILED,
+      error: "No se pudo enviar el mensaje. Intenta de nuevo.",
+    });
   }
 };
