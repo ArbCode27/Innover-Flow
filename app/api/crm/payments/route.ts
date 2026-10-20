@@ -19,13 +19,13 @@ import {
   withOrganizationWispro,
 } from "@/app/api/crm/_lib/wispro-api";
 import { getCrmAuthContext } from "@/app/api/crm/_lib/crm-auth-context";
-import { getOrganizationIntegration } from "@/app/api/crm/_lib/organization-integrations";
 import { matchInvoicesToPaymentAmount } from "@/app/api/crm/_lib/wispro-invoice-match";
 import { getCrmSettings } from "@/app/api/crm/_lib/crm-settings";
 import {
   applyPaymentReviewOwnership,
   patchPaymentReceiptMetadata,
 } from "@/app/api/crm/_lib/payment-review-ownership";
+import { persistOutboundMessage } from "@/app/api/crm/_lib/channel-messages";
 import { buildPaymentSuccessMessage } from "@/app/crm/_lib/payment-success-message";
 
 type PaymentWithLatestInvoice = Awaited<
@@ -112,8 +112,6 @@ const enrichPaymentsWithLatestInvoiceDate = async (
   });
 };
 
-const GRAPH_API_VERSION = "v19.0";
-
 const getServerEnv = (key: string) => {
   const value = process.env[key];
   if (!value) throw new Error(`Missing environment variable: ${key}`);
@@ -126,110 +124,10 @@ const getServiceClient = () =>
     getServerEnv("SUPABASE_SERVICE_ROLE_KEY"),
   );
 
-const normalizeWhatsAppPhone = (phone: string) => phone.replace(/\D/g, "");
-
 const wasPaymentNotificationSent = (metadata: unknown) => {
   if (!metadata || typeof metadata !== "object") return false;
   const value = (metadata as Record<string, unknown>).payment_loaded_notified_at;
   return typeof value === "string" && value.trim().length > 0;
-};
-
-const resolvePaymentRecipientPhone = async (
-  supabase: ReturnType<typeof getServiceClient>,
-  input: {
-    conversationId: number | null;
-    clientId: number | null;
-    organizationId: string;
-  },
-) => {
-  const knownPhones: string[] = [];
-
-  if (input.conversationId) {
-    const { data: conversation } = await supabase
-      .from("conversations")
-      .select("id, client_id, customer_phone")
-      .eq("id", input.conversationId)
-      .eq("organization_id", input.organizationId)
-      .maybeSingle<{
-        id: number;
-        client_id: number | null;
-        customer_phone: string | null;
-      }>();
-
-    if (conversation?.customer_phone) {
-      knownPhones.push(normalizeWhatsAppPhone(conversation.customer_phone));
-    }
-
-    if (!input.clientId) {
-      input.clientId = conversation?.client_id ?? null;
-    }
-  }
-
-  if (input.clientId) {
-    const { data: client } = await supabase
-      .from("clients")
-      .select("phone, whatsapp_id")
-      .eq("id", input.clientId)
-      .eq("organization_id", input.organizationId)
-      .maybeSingle<{
-        phone: string | null;
-        whatsapp_id: string | null;
-      }>();
-
-    if (client?.whatsapp_id) {
-      knownPhones.unshift(normalizeWhatsAppPhone(client.whatsapp_id));
-    }
-    if (client?.phone) {
-      knownPhones.push(normalizeWhatsAppPhone(client.phone));
-    }
-  }
-
-  const uniquePhones = [...new Set(knownPhones.filter(Boolean))];
-  const recipient = uniquePhones.find(
-    (phone) => phone.length >= 8 && phone.length <= 15,
-  );
-
-  return recipient || null;
-};
-
-const sendWhatsAppPaymentApprovedMessage = async (
-  organizationId: string,
-  to: string,
-  message: string,
-) => {
-  const whatsapp = await getOrganizationIntegration(
-    organizationId,
-    "whatsapp",
-  );
-  const phoneNumberId = String(whatsapp.config.phone_number_id || "");
-  const waResponse = await fetch(
-    `https://graph.facebook.com/${process.env.META_GRAPH_VERSION || GRAPH_API_VERSION}/${phoneNumberId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${whatsapp.secret}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "text",
-        text: { body: message },
-      }),
-      cache: "no-store",
-    },
-  );
-
-  const waData = (await waResponse.json()) as {
-    error?: { message?: string };
-    messages?: Array<{ id?: string }>;
-  };
-  if (!waResponse.ok || waData.error) {
-    throw new Error(waData.error?.message || "Error al enviar WhatsApp");
-  }
-
-  return String(waData.messages?.[0]?.id || "").trim() || null;
 };
 
 const notifyClientPaymentApproved = async (
@@ -243,13 +141,8 @@ const notifyClientPaymentApproved = async (
     return { sent: false, skipped: "already_sent" as const };
   }
 
-  const recipientPhone = await resolvePaymentRecipientPhone(supabase, {
-    conversationId: input.conversationId,
-    clientId: input.payment.client_id,
-    organizationId: input.payment.organization_id,
-  });
-  if (!recipientPhone) {
-    return { sent: false, skipped: "missing_phone" as const };
+  if (!input.conversationId) {
+    return { sent: false, skipped: "missing_conversation" as const };
   }
 
   const settings = await getCrmSettings(
@@ -261,45 +154,22 @@ const notifyClientPaymentApproved = async (
     paymentDate: input.payment.payment_date,
   });
 
-  const waMessageId = await sendWhatsAppPaymentApprovedMessage(
-    input.payment.organization_id,
-    recipientPhone,
-    message,
-  );
   const now = new Date().toISOString();
-
-  if (input.conversationId) {
-    await supabase.from("messages").insert({
-      organization_id: input.payment.organization_id,
-      conversation_id: input.conversationId,
-      wa_message_id: waMessageId,
-      type: "out",
-      content: message,
-      sender_type: "bot",
-      sent_by: "Bot IA",
-      status: "sent",
-      metadata: {
-        crm_payment_id: input.payment.id,
-        payment_loaded_notice: true,
-      },
-      created_at: now,
-    });
-
-    await supabase
-      .from("conversations")
-      .update({
-        preview: message,
-        updated_at: now,
-        last_message_at: now,
-      })
-      .eq("id", input.conversationId)
-      .eq("organization_id", input.payment.organization_id);
-  }
+  const saved = await persistOutboundMessage(supabase, {
+    organizationId: input.payment.organization_id,
+    conversationId: input.conversationId,
+    content: message,
+    senderType: "bot",
+    sentBy: "Bot IA",
+    metadata: {
+      crm_payment_id: input.payment.id,
+      payment_loaded_notice: true,
+    },
+  });
 
   const nextMetadata = {
     payment_loaded_notified_at: now,
-    payment_loaded_notified_wa_message_id: waMessageId,
-    payment_loaded_notified_to: recipientPhone,
+    payment_loaded_notified_message_id: saved.id,
   };
 
   // Merge — do not replace whole receipt_metadata (preserves assign/label audit).
@@ -694,7 +564,7 @@ export async function PATCH(req: NextRequest) {
           payment_loaded_notification_error:
             notificationError instanceof Error
               ? notificationError.message
-              : "No se pudo notificar por WhatsApp",
+              : "No se pudo notificar al cliente",
           payment_loaded_notification_error_at: new Date().toISOString(),
         });
       }

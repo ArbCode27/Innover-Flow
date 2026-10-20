@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DEFAULT_AI_SYSTEM_PROMPT } from "@/app/crm/_lib/ai-default-prompt";
+import { listOpenTicketsForConversation } from "@/app/api/crm/_lib/field-tickets";
+import { fieldTicketStatusLabel } from "@/lib/field-tickets";
 import { parseClientEnvoicing, resolveLinkedClientIdentity } from "@/app/crm/_lib/client-profile-utils";
 import {
   DEFAULT_AI_FALLBACK_MODEL,
@@ -16,6 +17,7 @@ import {
   AFTER_HOURS_PAYMENTS_PROMPT,
   type BotReplyMode,
 } from "@/app/api/crm/_lib/bot-reply-policy";
+import { DEFAULT_AI_SYSTEM_PROMPT } from "@/app/crm/_lib/ai-default-prompt";
 import {
   buildAgentContents,
   AI_MEDIA_CONTRACT_PROMPT,
@@ -90,6 +92,7 @@ const buildIdentityBlock = (input: {
   conversationId: number;
   customerPhone: string | null;
   client: AgentClientSnapshot | null;
+  openTickets?: Array<{ publicId: number; status: string; windowStart: string | null; windowEnd: string | null }>;
 }) => {
   const linked = Boolean(input.client?.wispro_id);
   const billing = parseClientEnvoicing(input.client?.envoicing);
@@ -108,10 +111,10 @@ const buildIdentityBlock = (input: {
     input.client?.plan?.trim() ||
     "N/D";
 
-  return [
+  const lines = [
     "Identidad de ESTE chat (inyectada por el sistema; no la inventes):",
     `- conversation_id: ${input.conversationId}`,
-    `- telefono_whatsapp: ${input.customerPhone || input.client?.whatsapp_id || input.client?.phone || "N/D"}`,
+    `- telefono_cliente: ${input.customerPhone || input.client?.whatsapp_id || input.client?.phone || "N/D"}`,
     `- cliente_crm_id: ${input.client?.id ?? "N/D"}`,
     `- nombre_crm: ${input.client?.name || input.client?.wa_name || "Desconocido"}`,
     `- wa_name: ${input.client?.wa_name || "N/D"}`,
@@ -123,7 +126,19 @@ const buildIdentityBlock = (input: {
     `- service_suspended: ${serviceSuspended}`,
     `- wispro_id: ${input.client?.wispro_id || "N/D"}`,
     `- vinculado_wispro: ${linked ? "sí" : "no"}`,
-  ].join("\n");
+  ];
+
+  if (input.openTickets?.length) {
+    const ticket = input.openTickets[0];
+    lines.push(
+      `- ticket_campo_abierto: #${ticket.publicId} estado=${fieldTicketStatusLabel(ticket.status)} ventana=${ticket.windowStart || "N/D"} / ${ticket.windowEnd || "N/D"}`,
+    );
+    lines.push(
+      "- Si el cliente pregunta por SU visita, comparte solo el número, el estado y la ventana. No mezcles casos de otros.",
+    );
+  }
+
+  return lines.join("\n");
 };
 
 const createAgentContext = (input: {
@@ -193,7 +208,7 @@ const resolveSafeCustomerReply = async (input: {
           {
             text: [
               "Tu respuesta anterior no es válida para el cliente (contenía razonamiento interno, system prompt o detalles de herramientas).",
-              "Reescríbela ahora SOLO como mensaje de WhatsApp para el cliente, en español, breve y útil.",
+              "Reescríbela ahora SOLO como mensaje para el cliente, en español, breve y útil.",
               "No cites el system prompt, no uses inglés de depuración y no nombres tools.",
             ].join(" "),
           },
@@ -431,6 +446,40 @@ export const runAiAgent = async (input: {
     throw new Error("empty_history");
   }
 
+  let openTickets: Array<{
+    publicId: number;
+    status: string;
+    windowStart: string | null;
+    windowEnd: string | null;
+  }> = [];
+  try {
+    const { data: conversationRow } = await input.supabase
+      .from("conversations")
+      .select("organization_id, client_id")
+      .eq("id", input.conversationId)
+      .maybeSingle();
+    if (conversationRow?.organization_id) {
+      const tickets = await listOpenTicketsForConversation(
+        input.supabase,
+        String(conversationRow.organization_id),
+        {
+          conversationId: input.conversationId,
+          crmClientId: conversationRow.client_id
+            ? Number(conversationRow.client_id)
+            : input.client?.id ?? null,
+        },
+      );
+      openTickets = tickets.map((ticket) => ({
+        publicId: ticket.publicId,
+        status: ticket.status,
+        windowStart: ticket.windowStart,
+        windowEnd: ticket.windowEnd,
+      }));
+    }
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} open_tickets_inject_failed`, error);
+  }
+
   const systemPrompt = [
     input.businessPrompt?.trim() || DEFAULT_AI_SYSTEM_PROMPT,
     "",
@@ -450,6 +499,7 @@ export const runAiAgent = async (input: {
       conversationId: input.conversationId,
       customerPhone: input.customerPhone,
       client: input.client,
+      openTickets,
     }),
   ]
     .filter((block): block is string => block !== null)

@@ -9,13 +9,10 @@ import {
   decryptIntegrationSecret,
   encryptIntegrationSecret,
 } from "../../_lib/integration-secrets";
-import { getSupabaseAdmin } from "../../_lib/supabase-admin";
 import {
-  getEmbeddedSignupEnv,
-  verifyWhatsappPhone,
-  WhatsappGraphError,
-} from "../../_lib/whatsapp-graph";
-import { sanitizeIntegration } from "../../_lib/whatsapp-integration";
+  sanitizeIntegration,
+} from "../../_lib/organization-integrations";
+import { getSupabaseAdmin } from "../../_lib/supabase-admin";
 
 const wisproSchema = z.object({
   apiToken: z.string().trim().min(8).max(500),
@@ -27,10 +24,10 @@ const wisproSchema = z.object({
     .default("https://www.cloud.wispro.co/api/v1"),
 });
 
-type Provider = "wispro" | "whatsapp";
+type Provider = "wispro";
 
 const parseProvider = (value: string): Provider | null =>
-  value === "wispro" || value === "whatsapp" ? value : null;
+  value === "wispro" ? value : null;
 
 const verifyWispro = async (token: string, baseUrl: string) => {
   const response = await fetch(
@@ -53,9 +50,6 @@ const verifyWispro = async (token: string, baseUrl: string) => {
 
 const handleError = (error: unknown) => {
   if (error instanceof CrmAuthError) {
-    return NextResponse.json({ error: error.message }, { status: error.status });
-  }
-  if (error instanceof WhatsappGraphError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }
   const message =
@@ -82,30 +76,8 @@ export const GET = async (
       .maybeSingle();
     if (error) throw error;
 
-    const host =
-      request.headers.get("x-forwarded-host") ||
-      request.headers.get("host") ||
-      "";
-    const proto = request.headers.get("x-forwarded-proto") || "https";
-    const webhookUrl = host ? `${proto}://${host}/api/whatsapp/webhook` : "/api/whatsapp/webhook";
-    const signup = getEmbeddedSignupEnv();
-
     return NextResponse.json({
       integration: sanitizeIntegration(data),
-      metadata:
-        provider === "whatsapp"
-          ? {
-              webhook_url: webhookUrl,
-              required_fields: ["messages", "message_echoes"],
-              coexistence_supported: true,
-              embedded_signup: {
-                ready: signup.ready,
-                app_id: signup.appId || null,
-                config_id: signup.configId || null,
-                graph_version: signup.graphVersion,
-              },
-            }
-          : undefined,
     });
   } catch (error) {
     return handleError(error);
@@ -126,16 +98,6 @@ export const PUT = async (
       return NextResponse.json(
         { error: "Solo administradores pueden configurar integraciones" },
         { status: 403 },
-      );
-    }
-
-    if (provider === "whatsapp") {
-      return NextResponse.json(
-        {
-          error:
-            "WhatsApp solo se vincula con Embedded Signup de Meta. Usa Continuar con Meta.",
-        },
-        { status: 410 },
       );
     }
 
@@ -205,14 +167,10 @@ export const POST = async (
 
     const secret = decryptIntegrationSecret(data.credentials_encrypted);
     const config = (data.config || {}) as Record<string, unknown>;
-    const nextConfig =
-      provider === "wispro"
-        ? await verifyWispro(secret, String(config.base_url || ""))
-        : await verifyWhatsappPhone(
-            secret,
-            String(config.waba_id || ""),
-            String(config.phone_number_id || ""),
-          );
+    const nextConfig = await verifyWispro(
+      secret,
+      String(config.base_url || ""),
+    );
     const now = new Date().toISOString();
     const { data: updated, error: updateError } = await supabase
       .from("organization_integrations")
@@ -226,71 +184,6 @@ export const POST = async (
       .eq("id", data.id)
       .select("*")
       .single();
-    if (updateError) throw updateError;
-    return NextResponse.json({ integration: sanitizeIntegration(updated) });
-  } catch (error) {
-    return handleError(error);
-  }
-};
-
-export const PATCH = async (
-  request: NextRequest,
-  { params }: { params: Promise<{ provider: string }> },
-) => {
-  try {
-    const provider = parseProvider((await params).provider);
-    if (!provider) {
-      return NextResponse.json({ error: "Integración inválida" }, { status: 404 });
-    }
-    const context = await getCrmAuthContext(request);
-    if (!canManageOrganization(context)) {
-      return NextResponse.json(
-        { error: "Solo administradores pueden modificar la configuración" },
-        { status: 403 },
-      );
-    }
-
-    const payload = (await request.json()) as Record<string, unknown>;
-    const supabase = getSupabaseAdmin();
-    const { data: existing, error: fetchError } = await supabase
-      .from("organization_integrations")
-      .select("*")
-      .eq("organization_id", context.organizationId)
-      .eq("provider", provider)
-      .maybeSingle();
-
-    if (fetchError || !existing) {
-      return NextResponse.json(
-        { error: "Integración no encontrada" },
-        { status: 404 },
-      );
-    }
-
-    const currentConfig = (existing.config || {}) as Record<string, unknown>;
-    const updatedConfig = {
-      ...currentConfig,
-      ...(payload.coexistence_enabled !== undefined
-        ? { coexistence_enabled: Boolean(payload.coexistence_enabled) }
-        : {}),
-      ...(payload.coexistence_auto_human !== undefined
-        ? { coexistence_auto_human: Boolean(payload.coexistence_auto_human) }
-        : {}),
-      ...(payload.coexistence_sync_echoes !== undefined
-        ? { coexistence_sync_echoes: Boolean(payload.coexistence_sync_echoes) }
-        : {}),
-    };
-
-    const now = new Date().toISOString();
-    const { data: updated, error: updateError } = await supabase
-      .from("organization_integrations")
-      .update({
-        config: updatedConfig,
-        updated_at: now,
-      })
-      .eq("id", existing.id)
-      .select("*")
-      .single();
-
     if (updateError) throw updateError;
     return NextResponse.json({ integration: sanitizeIntegration(updated) });
   } catch (error) {

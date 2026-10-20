@@ -16,64 +16,18 @@ import {
   classifyInboundIntent,
   type InboundIntent,
 } from "./inbound-intent";
-import { getWhatsappRuntimeConfig } from "../../_lib/whatsapp-runtime";
+import { persistOutboundMessage } from "@/app/api/crm/_lib/channel-messages";
 
 const LOG_PREFIX = "[AI_AGENT]";
-const GRAPH_API_VERSION = "v19.0";
 /** Soft holds allowed in the window before hard human handoff. */
 const SOFT_FAIL_LIMIT = 2;
 const SOFT_FAIL_WINDOW_MS = 15 * 60 * 1000;
 const ACK_WINDOW_MS = 45 * 1000;
 
-const normalizePhone = (value: string) => value.replace(/\D/g, "");
-
-const sendWhatsAppText = async (to: string, message: string) => {
-  const whatsapp = getWhatsappRuntimeConfig();
-  const response = await fetch(
-    `https://graph.facebook.com/${GRAPH_API_VERSION}/${whatsapp.phoneNumberId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${whatsapp.accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "text",
-        text: { body: message },
-      }),
-    },
-  );
-
-  const data = await response.json();
-  if (!response.ok || data.error) {
-    console.error(`${LOG_PREFIX} whatsapp_send_failed`, {
-      to,
-      status: response.status,
-      error: data.error || data,
-    });
-    throw new Error(data.error?.message || "Error al enviar fallback a WhatsApp");
-  }
-
-  const waMessageId = String(data.messages?.[0]?.id || "").trim();
-  if (!waMessageId) {
-    throw new Error("WhatsApp no devolvió message id para el fallback");
-  }
-
-  return waMessageId;
-};
-
 const readMetadata = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== "object") return null;
   return value as Record<string, unknown>;
 };
-
-const resolveRecipientPhone = (candidates: Array<string | null | undefined>) =>
-  candidates
-    .map((value) => normalizePhone(String(value || "")))
-    .find((value) => value.length >= 8 && value.length <= 15) || null;
 
 const countRecentSoftHolds = async (
   supabase: SupabaseClient,
@@ -250,7 +204,7 @@ export const sendProcessingAck = async (
 ): Promise<GuaranteedReplyResult> => {
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id, customer_phone, status")
+    .select("id, organization_id, customer_phone, status")
     .eq("id", input.conversationId)
     .maybeSingle();
 
@@ -280,17 +234,6 @@ export const sendProcessingAck = async (
     return { ok: true, skipped: true, reason: "ack_already_sent", recovery: "ack" };
   }
 
-  const to = resolveRecipientPhone([
-    input.customerPhone,
-    conversation.customer_phone,
-    input.whatsappId,
-    input.clientPhone,
-  ]);
-
-  if (!to) {
-    return { ok: false, reason: "missing_recipient" };
-  }
-
   const intent = resolveIntent(input);
   const message = resolveAiRecoveryMessage({
     kind: "ack",
@@ -299,48 +242,22 @@ export const sendProcessingAck = async (
   });
 
   try {
-    const waMessageId = await sendWhatsAppText(to, message);
-    const now = new Date().toISOString();
-    const { data: saved, error: saveError } = await supabase
-      .from("messages")
-      .insert({
-        conversation_id: input.conversationId,
-        wa_message_id: waMessageId,
-        type: "out",
-        content: message,
-        sender_type: "bot",
-        sent_by: "Bot IA",
-        status: "sent",
-        created_at: now,
-        metadata: {
-          engine: "ai",
-          action: "ack",
-          reason: "ai_processing_ack",
-          ai_ack: true,
-          ai_recovery: "ack",
-          intent,
-          trigger_message_id: input.triggerMessageId ?? null,
-        },
-      })
-      .select("id")
-      .single();
-
-    if (saveError) {
-      console.error(`${LOG_PREFIX} ack_persist_failed`, {
-        conversationId: input.conversationId,
-        error: saveError.message,
-      });
-      return { ok: false, reason: "ack_persist_failed", recovery: "ack" };
-    }
-
-    await supabase
-      .from("conversations")
-      .update({
-        preview: message,
-        updated_at: now,
-        last_message_at: now,
-      })
-      .eq("id", input.conversationId);
+    const saved = await persistOutboundMessage(supabase, {
+      organizationId: String(conversation.organization_id),
+      conversationId: input.conversationId,
+      content: message,
+      senderType: "bot",
+      sentBy: "Bot IA",
+      metadata: {
+        engine: "ai",
+        action: "ack",
+        reason: "ai_processing_ack",
+        ai_ack: true,
+        ai_recovery: "ack",
+        intent,
+        trigger_message_id: input.triggerMessageId ?? null,
+      },
+    });
 
     console.log(`${LOG_PREFIX} ack_sent`, {
       conversationId: input.conversationId,
@@ -373,13 +290,13 @@ export const sendGuaranteedClientReply = async (
   input: RecoveryInput & {
     /** Force hard handoff (e.g. failed business handoff send). */
     forceHardHandoff?: boolean;
-    /** Skip a second WhatsApp message when an ack already covered this trigger. */
+    /** Skip a second soft message when an ack already covered this trigger. */
     skipSoftWhatsApp?: boolean;
   },
 ): Promise<GuaranteedReplyResult> => {
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id, human_mode, customer_phone, client_id, status")
+    .select("id, organization_id, human_mode, customer_phone, client_id, status")
     .eq("id", input.conversationId)
     .maybeSingle();
 
@@ -418,20 +335,6 @@ export const sendGuaranteedClientReply = async (
       conversationId: input.conversationId,
     });
     return { ok: false, skipped: true, reason: "empty_conversation" };
-  }
-
-  const to = resolveRecipientPhone([
-    input.customerPhone,
-    conversation.customer_phone,
-    input.whatsappId,
-    input.clientPhone,
-  ]);
-
-  if (!to) {
-    console.error(`${LOG_PREFIX} missing_recipient`, {
-      conversationId: input.conversationId,
-    });
-    return { ok: false, reason: "missing_recipient" };
   }
 
   const intent = resolveIntent(input);
@@ -483,53 +386,32 @@ export const sendGuaranteedClientReply = async (
   const recovery: "soft" | "hard" = useSoft ? "soft" : "hard";
 
   try {
-    const waMessageId = await sendWhatsAppText(to, message);
     const now = new Date().toISOString();
-
-    const { data: saved, error: saveError } = await supabase
-      .from("messages")
-      .insert({
-        conversation_id: input.conversationId,
-        wa_message_id: waMessageId,
-        type: "out",
-        content: message,
-        sender_type: "bot",
-        sent_by: "Bot IA",
-        status: "sent",
-        created_at: now,
-        metadata: {
-          engine: "ai",
-          action: recovery === "soft" ? "soft_hold" : "handoff",
-          reason:
-            recovery === "soft" ? "ai_soft_hold" : "ai_guaranteed_fallback",
-          ai_fallback: recovery === "hard",
-          ai_recovery: recovery,
-          ai_soft_fail_count: recentSoftFails + (recovery === "soft" ? 1 : 0),
-          ai_error: input.errorMessage || null,
-          intent,
-          trigger_message_id: input.triggerMessageId ?? null,
-        },
-      })
-      .select("id")
-      .single();
-
-    if (saveError) {
-      console.error(`${LOG_PREFIX} message_persist_failed`, {
-        conversationId: input.conversationId,
-        error: saveError.message,
-        recovery,
-      });
-      return { ok: false, reason: "fallback_persist_failed", recovery };
-    }
+    const saved = await persistOutboundMessage(supabase, {
+      organizationId: String(conversation.organization_id),
+      conversationId: input.conversationId,
+      content: message,
+      senderType: "bot",
+      sentBy: "Bot IA",
+      metadata: {
+        engine: "ai",
+        action: recovery === "soft" ? "soft_hold" : "handoff",
+        reason:
+          recovery === "soft" ? "ai_soft_hold" : "ai_guaranteed_fallback",
+        ai_fallback: recovery === "hard",
+        ai_recovery: recovery,
+        ai_soft_fail_count: recentSoftFails + (recovery === "soft" ? 1 : 0),
+        ai_error: input.errorMessage || null,
+        intent,
+        trigger_message_id: input.triggerMessageId ?? null,
+      },
+    });
 
     if (recovery === "hard") {
       await supabase
         .from("conversations")
         .update({
           human_mode: true,
-          preview: message,
-          updated_at: now,
-          last_message_at: now,
         })
         .eq("id", input.conversationId);
 
@@ -543,15 +425,6 @@ export const sendGuaranteedClientReply = async (
       } else if (intent !== "human_request") {
         await ensureConversationLabel(supabase, input.conversationId, "soporte");
       }
-    } else {
-      await supabase
-        .from("conversations")
-        .update({
-          preview: message,
-          updated_at: now,
-          last_message_at: now,
-        })
-        .eq("id", input.conversationId);
     }
 
     await persistTriggerRecovery(supabase, input.triggerMessageId, {
@@ -565,7 +438,6 @@ export const sendGuaranteedClientReply = async (
     console.log(`${LOG_PREFIX} sent`, {
       conversationId: input.conversationId,
       messageId: saved?.id ?? null,
-      to,
       intent,
       recovery,
       recentSoftFails,

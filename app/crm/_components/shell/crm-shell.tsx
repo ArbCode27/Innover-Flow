@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { LoadingState } from "../shared/loading-state";
 import { CrmLogin } from "../auth/crm-login";
@@ -20,7 +20,12 @@ import { LabelsView } from "../labels/labels-view";
 import { QuickRepliesView } from "../quick-replies/quick-replies-view";
 import { SettingsView } from "../settings/settings-view";
 import { PaymentsView } from "../payments/payments-view";
-import { TicketsView } from "../tickets/tickets-view";
+import { FieldTicketsView } from "../tickets/field-tickets-view";
+import { useFieldTickets } from "../../_hooks/use-field-tickets";
+import {
+  isOpenFieldTicketStatus,
+  resolveTicketConversationId,
+} from "@/lib/field-tickets";
 import { DashboardView } from "../dashboard/dashboard-view";
 import { CrmAppearanceHydrator } from "./crm-appearance-hydrator";
 import { CrmMobileNav, CrmSidebar } from "./crm-sidebar";
@@ -30,6 +35,19 @@ export const CrmShell = () => {
   const [activeView, setActiveView] = useState<CrmView>("dashboard");
   const auth = useCrmAuth();
   const crm = useCrmData(auth.agent);
+  const fieldTickets = useFieldTickets(Boolean(auth.agent));
+  const openTicketConversationIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const ticket of fieldTickets.tickets) {
+      if (!isOpenFieldTicketStatus(ticket.status)) continue;
+      const conversationId = resolveTicketConversationId(
+        ticket,
+        crm.conversations,
+      );
+      if (conversationId) ids.add(conversationId);
+    }
+    return ids;
+  }, [fieldTickets.tickets, crm.conversations]);
 
   useEffect(() => {
     if (!auth.agent) return;
@@ -59,6 +77,10 @@ export const CrmShell = () => {
   const handleSelectView = (view: CrmView) => {
     if (!isViewAllowed(view, auth.agent, auth.organizationRole)) return;
     setActiveView(view);
+  };
+  const handleOpenTicketChat = (conversationId: number) => {
+    setActiveView("conversations");
+    void crm.selectConversation(conversationId);
   };
   const handleUpdateAppearance = async (patch: {
     ui_accent?: CrmAccentId;
@@ -124,6 +146,9 @@ export const CrmShell = () => {
                 labels={crm.labels}
                 agents={crm.agents}
                 ticketsByClientId={crm.ticketsByClientId}
+                fieldTickets={fieldTickets.tickets}
+                technicians={fieldTickets.technicians}
+                openTicketConversationIds={openTicketConversationIds}
                 messages={crm.messages}
                 selectedConversation={crm.selectedConversation}
                 selectedClient={crm.selectedClient}
@@ -158,6 +183,10 @@ export const CrmShell = () => {
                 onCreatePaymentPromise={async () => {
                   await crm.createWisproPaymentPromise();
                 }}
+                onCreateFieldTicket={async (payload) => {
+                  await fieldTickets.createTicket(payload as never);
+                }}
+                onUploadFacade={fieldTickets.uploadFacade}
                 onOpenSettingsView={handleSelectView}
               />
             ) : null}
@@ -171,6 +200,9 @@ export const CrmShell = () => {
                 labels={crm.labels}
                 agents={crm.agents}
                 ticketsByClientId={crm.ticketsByClientId}
+                fieldTickets={fieldTickets.tickets}
+                technicians={fieldTickets.technicians}
+                openTicketConversationIds={openTicketConversationIds}
                 messages={crm.messages}
                 selectedConversation={crm.selectedConversation}
                 selectedClient={crm.selectedClient}
@@ -204,6 +236,10 @@ export const CrmShell = () => {
                 onCreatePaymentPromise={async () => {
                   await crm.createWisproPaymentPromise();
                 }}
+                onCreateFieldTicket={async (payload) => {
+                  await fieldTickets.createTicket(payload as never);
+                }}
+                onUploadFacade={fieldTickets.uploadFacade}
                 onOpenSettingsView={handleSelectView}
               />
             ) : null}
@@ -265,12 +301,28 @@ export const CrmShell = () => {
               />
             ) : null}
             {activeView === "tickets" && isViewAllowed("tickets", auth.agent, auth.organizationRole) ? (
-              <TicketsView
-                tickets={crm.tickets}
-                clients={crm.clients}
-                clientsById={crm.clientsById}
-                agents={crm.agents}
-                onCreateTicket={crm.createTicket}
+              <FieldTicketsView
+                tickets={fieldTickets.tickets}
+                technicians={fieldTickets.technicians}
+                isLoading={fieldTickets.isLoading}
+                error={fieldTickets.error}
+                onRefresh={fieldTickets.refresh}
+                onCreate={fieldTickets.createTicket}
+                onUpdate={fieldTickets.updateTicket}
+                onFinalize={fieldTickets.finalizeTicket}
+                onReassign={fieldTickets.reassignTicket}
+                onDelete={fieldTickets.deleteTicket}
+                onBulkReassign={fieldTickets.bulkReassign}
+                onBulkDelete={fieldTickets.bulkDelete}
+                onGetTicket={fieldTickets.getTicket}
+                onUploadFacade={fieldTickets.uploadFacade}
+                onOpenChat={handleOpenTicketChat}
+                resolveConversationId={(ticket) =>
+                  resolveTicketConversationId(ticket, crm.conversations)
+                }
+                conversation={crm.selectedConversation}
+                client={crm.selectedClient}
+                messages={crm.messages}
               />
             ) : null}
             {activeView === "labels" && isViewAllowed("labels", auth.agent, auth.organizationRole) ? (

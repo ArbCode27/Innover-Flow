@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import type { Message } from "../_lib/types";
 
 interface SendMessageInput {
-  to: string;
+  to?: string;
   message: string;
   conversation_id: number;
   agent_id?: number;
@@ -12,12 +12,11 @@ interface SendMessageInput {
 
 interface SendMessageResponse {
   success: true;
-  wa_message_id: string | null;
   message: Message;
 }
 
 interface SendVoiceNoteInput {
-  to: string;
+  to?: string;
   conversation_id: number;
   agent_id: number;
   audio: Blob;
@@ -25,7 +24,7 @@ interface SendVoiceNoteInput {
 }
 
 interface SendImageMessageInput {
-  to: string;
+  to?: string;
   conversation_id: number;
   agent_id: number;
   image: File;
@@ -52,7 +51,6 @@ interface ResendMessageInput {
 
 interface ResendMessageResponse {
   success: true;
-  wa_message_id: string | null;
   message: Message;
 }
 
@@ -65,12 +63,13 @@ export function useSendMessage() {
     setError(null);
 
     try {
-      const res = await fetch("/api/whatsapp/send", {
+      const res = await fetch("/api/crm/messages/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...input,
           message: input.message.trim(),
+          conversation_id: input.conversation_id,
+          agent_id: input.agent_id,
         }),
       });
 
@@ -98,10 +97,8 @@ export function useSendMessage() {
 
     try {
       const formData = new FormData();
-      formData.append("to", input.to);
       formData.append("conversation_id", String(input.conversation_id));
       formData.append("duration_ms", String(input.duration_ms));
-
       formData.append("agent_id", String(input.agent_id));
 
       const mimeType = input.audio.type || "audio/webm";
@@ -109,7 +106,7 @@ export function useSendMessage() {
       const filename = `voice-note.${extension}`;
       formData.append("audio", input.audio, filename);
 
-      const res = await fetch("/api/whatsapp/send-audio", {
+      const res = await fetch("/api/crm/messages/send-audio", {
         method: "POST",
         body: formData,
       });
@@ -139,7 +136,6 @@ export function useSendMessage() {
 
     try {
       const formData = new FormData();
-      formData.append("to", input.to);
       formData.append("conversation_id", String(input.conversation_id));
       formData.append("agent_id", String(input.agent_id));
 
@@ -156,7 +152,7 @@ export function useSendMessage() {
       const filename = input.image.name?.trim() || `image.${extension}`;
       formData.append("image", input.image, filename);
 
-      const res = await fetch("/api/whatsapp/send-image", {
+      const res = await fetch("/api/crm/messages/send-image", {
         method: "POST",
         body: formData,
       });
@@ -217,7 +213,7 @@ export function useSendMessage() {
     setError(null);
 
     try {
-      const res = await fetch("/api/whatsapp/resend", {
+      const res = await fetch("/api/crm/messages/resend", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

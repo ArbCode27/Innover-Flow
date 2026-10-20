@@ -8,7 +8,7 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "test": "node --test lib/parseReporte.test.ts",
+    "test": "node --test lib/parseReporte.test.ts lib/field-tickets/field-tickets.test.ts lib/scoring.test.ts lib/client-auth-utils.test.ts",
     "start": "next start",
     "db:check": "node scripts/check-supabase.mjs"
   },

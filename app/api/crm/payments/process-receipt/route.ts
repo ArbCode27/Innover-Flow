@@ -5,7 +5,6 @@ import { replyToConversationWithAi } from "@/app/api/crm/ai/_lib/reply-to-conver
 import { intakeCrmReceipt } from "@/app/api/crm/_lib/crm-payments";
 import { resolveLinkedClientIdentity } from "@/app/crm/_lib/client-profile-utils";
 import { getCrmAuthContext } from "@/app/api/crm/_lib/crm-auth-context";
-import { withOrganizationWhatsapp } from "@/app/api/crm/_lib/whatsapp-runtime";
 import { withOptionalOrganizationWispro } from "@/app/api/crm/_lib/wispro-api";
 
 const payloadSchema = z.object({
@@ -321,17 +320,15 @@ export async function POST(req: NextRequest) {
     // Run AI after response so the UI stays snappy; forceRun allows human_mode chats.
     after(async () => {
       try {
-        const result = await withOrganizationWhatsapp(
+        const result = await withOptionalOrganizationWispro(
           context.organizationId,
           () =>
-            withOptionalOrganizationWispro(context.organizationId, () =>
-              replyToConversationWithAi(supabase, {
-                conversationId,
-                triggerMessageId: message.id,
-                forceRun: true,
-                paymentRequestedByAgentId: agentId,
-              }),
-            ),
+            replyToConversationWithAi(supabase, {
+              conversationId,
+              triggerMessageId: message.id,
+              forceRun: true,
+              paymentRequestedByAgentId: agentId,
+            }),
         );
 
         console.log("[PROCESS_RECEIPT] ai_finished", {

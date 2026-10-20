@@ -16,7 +16,7 @@ const LOG_PREFIX = "[WISPRO_BILLING_REFRESH]";
 /** Skip Wispro when snapshot is fresher than this (except new conversations). */
 export const BILLING_REFRESH_TTL_MS = 15 * 60 * 1000;
 
-/** Soft-fail budget so the WhatsApp webhook / AI path is never blocked long. */
+/** Soft-fail budget so the inbound app / AI path is never blocked long. */
 export const BILLING_REFRESH_TIMEOUT_MS = 8_000;
 
 export type BillingRefreshSkipReason =

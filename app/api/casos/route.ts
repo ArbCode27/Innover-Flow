@@ -95,7 +95,6 @@ export async function POST(req: NextRequest) {
     // Resolver contexto de CRM y credenciales
     let organizationId: string | null = null;
     let override: { apiKey?: string; baseUrl?: string } | undefined;
-    let authAgentName = ticketData.agent_name || "Agente de Soporte";
 
     try {
       const context = await getCrmAuthContext(req);
@@ -162,27 +161,6 @@ export async function POST(req: NextRequest) {
           id: ticketId,
           publicId: ticketPublicId,
         };
-
-        // Guardar o sincronizar en la base de datos de nuestro CRM
-        if (organizationId) {
-          try {
-            const supabase = getSupabaseAdmin();
-            await supabase.from("tickets").upsert(
-              {
-                id: `TK-${ticketPublicId}`,
-                organization_id: organizationId,
-                client_id: ticketData.crm_client_id || null,
-                type: ticketData.category_name || "Falla técnica",
-                status: "Abierto",
-                agent: authAgentName,
-                description: `${ticketData.title}\n\n${ticketData.description}`,
-              },
-              { onConflict: "id" },
-            );
-          } catch (dbErr) {
-            console.warn("[CASOS_CRM_DB_SYNC_WARN]", dbErr);
-          }
-        }
       } catch (err) {
         const errorMessage =
           err instanceof WisproHttpError

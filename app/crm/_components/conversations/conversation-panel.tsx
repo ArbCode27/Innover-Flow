@@ -31,11 +31,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
 import { getManualPaymentBlockReason } from "../../_lib/client-profile-utils";
 import type { Agent, Client, Conversation, Label, Message, QuickReply, Ticket, WisproCustomer, WisproSearchResult } from "../../_lib/types";
+import type { FieldTicket, Technician } from "@/lib/field-tickets";
+import { FieldTicketFormDialog } from "../tickets/field-ticket-form-dialog";
 import { AssignAgentDialog } from "../agents/assign-agent-dialog";
 import { LabelPickerDialog } from "../labels/label-picker-dialog";
 import { UnknownClientBanner } from "../wispro/unknown-client-banner";
 import { WisproSearchDialog } from "../wispro/wispro-search-dialog";
-import { WisproTicketModal } from "./wispro-ticket-modal";
 import { ResolveConversationDialog } from "./resolve-conversation-dialog";
 import { ConversationDetails } from "./conversation-details";
 import { ConversationHeader } from "./conversation-header";
@@ -54,6 +55,8 @@ interface ConversationPanelProps {
   conversations: Conversation[];
   currentAgent: Agent;
   tickets: Ticket[];
+  fieldTickets?: FieldTicket[];
+  technicians?: Technician[];
   isMessagesLoading: boolean;
   isSendingMessage: boolean;
   isResolvingConversation?: boolean;
@@ -76,6 +79,8 @@ interface ConversationPanelProps {
   onAssociateWispro: (result: WisproSearchResult) => Promise<void>;
   onUnlinkWispro: () => Promise<void>;
   onCreatePaymentPromise: () => Promise<void>;
+  onCreateFieldTicket?: (payload: Record<string, unknown>) => Promise<void>;
+  onUploadFacade?: (file: File) => Promise<string>;
 }
 
 export const ConversationPanel = ({
@@ -89,6 +94,8 @@ export const ConversationPanel = ({
   conversations,
   currentAgent,
   tickets,
+  fieldTickets = [],
+  technicians = [],
   isMessagesLoading,
   isSendingMessage,
   isResolvingConversation = false,
@@ -108,6 +115,8 @@ export const ConversationPanel = ({
   onAssociateWispro,
   onUnlinkWispro,
   onCreatePaymentPromise,
+  onCreateFieldTicket,
+  onUploadFacade,
 }: ConversationPanelProps) => {
   const [isLabelDialogOpen, setIsLabelDialogOpen] = useState(false);
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false);
@@ -118,7 +127,7 @@ export const ConversationPanel = ({
   const [isPromiseDialogOpen, setIsPromiseDialogOpen] = useState(false);
   const [isCreatingPaymentPromise, setIsCreatingPaymentPromise] = useState(false);
   const [isResolveDialogOpen, setIsResolveDialogOpen] = useState(false);
-  const [isWisproTicketModalOpen, setIsWisproTicketModalOpen] = useState(false);
+  const [isFieldTicketOpen, setIsFieldTicketOpen] = useState(false);
   const [isDetailsSheetOpen, setIsDetailsSheetOpen] = useState(false);
   const [note, setNote] = useState("");
 
@@ -243,7 +252,6 @@ export const ConversationPanel = ({
           isResolving={isResolvingConversation}
           onOpenNote={() => setIsNoteDialogOpen(true)}
           onOpenAssign={() => setIsAssignDialogOpen(true)}
-          onOpenWisproTicket={() => setIsWisproTicketModalOpen(true)}
         />
         {showUnknownBanner ? (
           <UnknownClientBanner onOpenWispro={() => setIsWisproDialogOpen(true)} />
@@ -296,7 +304,10 @@ export const ConversationPanel = ({
               isWisproLinked ? () => setIsPromiseDialogOpen(true) : undefined
             }
             isCreatingPaymentPromise={isCreatingPaymentPromise}
-            onOpenWisproTicket={() => setIsWisproTicketModalOpen(true)}
+            fieldTickets={fieldTickets}
+            onCreateFieldTicket={
+              onCreateFieldTicket ? () => setIsFieldTicketOpen(true) : undefined
+            }
           />
         </SheetContent>
       </Sheet>
@@ -317,18 +328,26 @@ export const ConversationPanel = ({
           isWisproLinked ? () => setIsPromiseDialogOpen(true) : undefined
         }
         isCreatingPaymentPromise={isCreatingPaymentPromise}
-        onOpenWisproTicket={() => setIsWisproTicketModalOpen(true)}
+        fieldTickets={fieldTickets}
+        onCreateFieldTicket={
+          onCreateFieldTicket ? () => setIsFieldTicketOpen(true) : undefined
+        }
       />
 
-      <WisproTicketModal
-        open={isWisproTicketModalOpen}
-        onOpenChange={setIsWisproTicketModalOpen}
-        conversation={conversation}
-        client={client}
-        wisproSnapshot={wisproSnapshot}
-        messages={messages}
-        agentName={currentAgent.name}
-      />
+      {onCreateFieldTicket && onUploadFacade ? (
+        <FieldTicketFormDialog
+          open={isFieldTicketOpen}
+          mode="create"
+          technicians={technicians}
+          conversation={conversation}
+          client={client}
+          messages={messages}
+          onOpenChange={setIsFieldTicketOpen}
+          onUploadFacade={onUploadFacade}
+          onSubmitCreate={onCreateFieldTicket}
+          onSubmitUpdate={async () => undefined}
+        />
+      ) : null}
 
       <WisproSearchDialog
         open={isWisproDialogOpen}
@@ -361,7 +380,7 @@ export const ConversationPanel = ({
               <span className={`font-medium ${CRM_SURFACES.textPrimary}`}>
                 {clientDisplayName}
               </span>
-              . El chat de WhatsApp se mantiene y podrás vincular otra cédula
+              . El chat se mantiene y podrás vincular otra cédula
               después.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -399,7 +418,7 @@ export const ConversationPanel = ({
               </span>
               , válida por 48 horas, solo si el servicio está suspendido. Si el
               servicio está activo, no se crea. El cliente no recibirá ningún
-              mensaje de WhatsApp sobre esta acción.
+              mensaje al cliente sobre esta acción.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

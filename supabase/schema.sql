@@ -100,11 +100,14 @@ CREATE TABLE IF NOT EXISTS public.clients (
   bg text,
   initials text,
   envoicing text,
+  cedula text,
+  app_enabled boolean DEFAULT true,
   created_at timestamptz DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS clients_phone_idx ON public.clients (phone);
 CREATE INDEX IF NOT EXISTS clients_org_idx ON public.clients (organization_id);
 CREATE INDEX IF NOT EXISTS clients_wispro_id_idx ON public.clients (wispro_id);
+CREATE UNIQUE INDEX IF NOT EXISTS clients_unique_cedula_idx ON public.clients (cedula) WHERE cedula IS NOT NULL AND trim(cedula) <> '';
 
 -- -----------------------------------------------------------------------------
 -- 6. TABLA: CONVERSACIONES
@@ -175,6 +178,124 @@ CREATE TABLE IF NOT EXISTS public.tickets (
 );
 CREATE INDEX IF NOT EXISTS tickets_org_idx ON public.tickets (organization_id);
 CREATE INDEX IF NOT EXISTS tickets_client_idx ON public.tickets (client_id);
+
+-- -----------------------------------------------------------------------------
+-- 8b. TABLA: TÉCNICOS Y TICKETS DE CAMPO (fuente de verdad local)
+-- -----------------------------------------------------------------------------
+CREATE SEQUENCE IF NOT EXISTS public.field_tickets_public_id_seq START WITH 2000 INCREMENT BY 1;
+
+CREATE TABLE IF NOT EXISTS public.technicians (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  phone text,
+  document text,
+  is_supervisor boolean NOT NULL DEFAULT false,
+  source_employee_id text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS technicians_org_source_employee_idx
+  ON public.technicians (organization_id, source_employee_id)
+  WHERE source_employee_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS technicians_org_name_idx
+  ON public.technicians (organization_id, lower(name));
+CREATE INDEX IF NOT EXISTS technicians_phone_last10_idx
+  ON public.technicians (
+    organization_id,
+    right(regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g'), 10)
+  )
+  WHERE phone IS NOT NULL;
+CREATE INDEX IF NOT EXISTS technicians_document_idx
+  ON public.technicians (
+    organization_id,
+    regexp_replace(coalesce(document, ''), '[^0-9]', '', 'g')
+  )
+  WHERE document IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS public.field_tickets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  issue_id uuid NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+  public_id integer NOT NULL UNIQUE,
+  conversation_id bigint REFERENCES public.conversations(id) ON DELETE SET NULL,
+  crm_client_id bigint REFERENCES public.clients(id) ON DELETE SET NULL,
+  employee_id text,
+  employee_name text,
+  employee_phone text,
+  employee_document text,
+  status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'scheduled', 'done', 'cancelled')),
+  priority text NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
+  kind text NOT NULL CHECK (kind IN ('technical', 'installation', 'resignation', 'feasibility')),
+  title text NOT NULL CHECK (char_length(title) <= 80),
+  cause text,
+  description text,
+  client_name text,
+  client_phone text,
+  maps_url text,
+  latitude numeric,
+  longitude numeric,
+  address_text text,
+  facade_media_url text,
+  facade_message_id text,
+  window_start timestamptz,
+  window_end timestamptz,
+  last_technician_report_at timestamptz,
+  last_technician_report_key text,
+  closed_at timestamptz,
+  resolution_observation text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS field_tickets_org_created_idx
+  ON public.field_tickets (organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS field_tickets_conversation_idx
+  ON public.field_tickets (conversation_id)
+  WHERE conversation_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS field_tickets_crm_client_idx
+  ON public.field_tickets (crm_client_id)
+  WHERE crm_client_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS field_tickets_employee_status_idx
+  ON public.field_tickets (employee_id, status)
+  WHERE status IN ('open', 'scheduled');
+CREATE INDEX IF NOT EXISTS field_tickets_employee_phone_last10_idx
+  ON public.field_tickets (
+    organization_id,
+    right(regexp_replace(coalesce(employee_phone, ''), '[^0-9]', '', 'g'), 10)
+  )
+  WHERE employee_phone IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION public.field_tickets_before_insert()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.issue_id IS NULL THEN
+    NEW.issue_id := gen_random_uuid();
+  END IF;
+  IF NEW.public_id IS NULL THEN
+    NEW.public_id := nextval('public.field_tickets_public_id_seq');
+  END IF;
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS field_tickets_before_insert ON public.field_tickets;
+CREATE TRIGGER field_tickets_before_insert
+BEFORE INSERT ON public.field_tickets
+FOR EACH ROW EXECUTE FUNCTION public.field_tickets_before_insert();
+
+CREATE OR REPLACE FUNCTION public.field_tickets_touch_updated_at()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS field_tickets_touch_updated_at ON public.field_tickets;
+CREATE TRIGGER field_tickets_touch_updated_at
+BEFORE UPDATE ON public.field_tickets
+FOR EACH ROW EXECUTE FUNCTION public.field_tickets_touch_updated_at();
 
 -- -----------------------------------------------------------------------------
 -- 9. TABLA: ETIQUETAS (Labels)
@@ -385,7 +506,7 @@ CREATE TABLE IF NOT EXISTS public.conversation_events (
 CREATE INDEX IF NOT EXISTS conv_events_metrics_idx ON public.conversation_events (organization_id, event_type, occurred_at DESC);
 
 -- -----------------------------------------------------------------------------
--- 16. TABLA: INTEGRACIONES POR ORGANIZACIÓN (Wispro, WhatsApp)
+-- 16. TABLA: INTEGRACIONES POR ORGANIZACIÓN (Wispro; whatsapp legacy en CHECK)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.organization_integrations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -401,6 +522,22 @@ CREATE TABLE IF NOT EXISTS public.organization_integrations (
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (organization_id, provider)
 );
+
+-- -----------------------------------------------------------------------------
+-- 16b. TABLA: DISPOSITIVOS DE LA APP MÓVIL (push tokens)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.app_devices (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  client_id bigint NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
+  push_token text NOT NULL,
+  platform text NOT NULL DEFAULT 'android' CHECK (platform IN ('ios', 'android', 'web')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, push_token)
+);
+CREATE INDEX IF NOT EXISTS app_devices_client_idx
+  ON public.app_devices (organization_id, client_id);
 
 -- -----------------------------------------------------------------------------
 -- 17. TRIGGERS DE MÉTRICAS Y TIEMPO DE RESPUESTA
@@ -627,7 +764,8 @@ DECLARE
   t text;
   all_tables text[] := ARRAY[
     'organizations', 'organization_members', 'organization_integrations',
-    'agents', 'clients', 'conversations', 'messages', 'tickets', 'labels',
+    'agents', 'clients', 'conversations', 'messages', 'tickets', 'field_tickets',
+    'technicians', 'app_devices', 'labels',
     'quick_replies', 'crm_settings', 'crm_settings_history', 'conversation_history',
     'history_messages', 'crm_payments', 'ai_runs', 'ai_tool_invocations',
     'conversation_assignments', 'conversation_events'

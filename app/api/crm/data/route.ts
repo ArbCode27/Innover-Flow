@@ -17,6 +17,7 @@ import {
   getCrmAuthContext,
 } from "../_lib/crm-auth-context";
 import { getSupabaseAdmin } from "../_lib/supabase-admin";
+import { extractCedulaDigits } from "@/lib/client-auth-utils";
 
 const actionSchema = z.discriminatedUnion("action", [
   z.object({
@@ -54,6 +55,8 @@ const actionSchema = z.discriminatedUnion("action", [
     action: z.literal("createClient"),
     name: z.string().trim().min(2).max(120),
     phone: z.string().trim().min(7).max(30),
+    cedula: z.string().trim().max(40).optional().nullable(),
+    app_enabled: z.boolean().optional(),
     plan: z.string().trim().max(120),
     zone: z.string().trim().max(120),
     account: z.enum(["Al día", "Con deuda", "Suspendido", "Prospecto"]),
@@ -404,6 +407,22 @@ export const POST = async (request: NextRequest) => {
     }
 
     if (input.action === "createClient") {
+      const cleanCedula = input.cedula ? extractCedulaDigits(input.cedula) || null : null;
+      if (cleanCedula) {
+        const { data: existingClient } = await supabase
+          .from("clients")
+          .select("id, name")
+          .eq("cedula", cleanCedula)
+          .maybeSingle();
+
+        if (existingClient) {
+          return NextResponse.json(
+            { error: `Ya existe un cliente registrado con la cédula ${cleanCedula} (${existingClient.name})` },
+            { status: 409 },
+          );
+        }
+      }
+
       const { count } = await supabase
         .from("clients")
         .select("id", { count: "exact", head: true })
@@ -415,6 +434,8 @@ export const POST = async (request: NextRequest) => {
           organization_id: organizationId,
           name: input.name,
           phone: input.phone,
+          cedula: cleanCedula,
+          app_enabled: input.app_enabled ?? true,
           plan: input.plan,
           zone: input.zone,
           account: input.account,
@@ -424,7 +445,15 @@ export const POST = async (request: NextRequest) => {
         })
         .select("*")
         .single();
-      if (error) throw error;
+      if (error) {
+        if (error.code === "23505" || error.message?.includes("unique") || error.message?.includes("cedula")) {
+          return NextResponse.json(
+            { error: "Ya existe un cliente registrado con esta cédula" },
+            { status: 409 },
+          );
+        }
+        throw error;
+      }
       return NextResponse.json({ data });
     }
 

@@ -14,7 +14,7 @@ export const UnknownClientBanner = ({ onOpenWispro }: UnknownClientBannerProps) 
       aria-hidden="true"
     />
     <p className="min-w-0 flex-1 text-xs text-amber-900 dark:text-amber-100">
-      Cliente sin vincular a Wispro. Puedes responder por WhatsApp; asócialo para ver su ficha.
+      Cliente sin vincular a Wispro. Puedes responder por el chat; asócialo para ver su ficha.
     </p>
     <CrmButton
       type="button"

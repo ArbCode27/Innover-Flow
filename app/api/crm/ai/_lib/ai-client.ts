@@ -3,7 +3,7 @@ import {
   DEFAULT_GROQ_VISION_MODEL,
   DEFAULT_GROQ_WHISPER_MODEL,
 } from "@/app/crm/_lib/ai-models";
-import { AI_TOOL_DECLARATIONS } from "./ai-tools";
+import { AI_TOOL_DECLARATIONS, TECHNICIAN_TOOL_DECLARATIONS } from "./ai-tools";
 
 export class AiApiError extends Error {
   status: number | null;
@@ -93,10 +93,15 @@ export const getAiApiKey = () => {
 
 export const getGroqApiKey = getAiApiKey;
 
+const ALL_TOOL_DECLARATIONS = [
+  ...AI_TOOL_DECLARATIONS,
+  ...TECHNICIAN_TOOL_DECLARATIONS,
+];
+
 const toOpenAiTools = (allowedToolNames?: string[] | null) => {
   const declarations =
     allowedToolNames && allowedToolNames.length
-      ? AI_TOOL_DECLARATIONS.filter((tool) =>
+      ? ALL_TOOL_DECLARATIONS.filter((tool) =>
           allowedToolNames.includes(tool.name),
         )
       : AI_TOOL_DECLARATIONS;

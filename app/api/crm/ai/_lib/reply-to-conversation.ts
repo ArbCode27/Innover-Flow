@@ -22,7 +22,8 @@ import {
   detectInternalLeakInCustomerReply,
   SAFE_INTERNAL_LEAK_CUSTOMER_REPLY,
 } from "./reply-sanitizer";
-import { getWhatsappRuntimeConfig } from "../../_lib/whatsapp-runtime";
+import { persistOutboundMessage } from "@/app/api/crm/_lib/channel-messages";
+import { tryHandleTechnicianTurn } from "./technician-turn";
 import {
   claimConversationAiLock,
   findLatestInboundId,
@@ -35,7 +36,6 @@ import {
 } from "./turn-coordinator";
 
 const LOG_PREFIX = "[AI_AGENT]";
-const GRAPH_API_VERSION = "v19.0";
 const HISTORY_LIMIT = 24;
 const ACK_DELAY_MS = 5000;
 const HISTORY_SELECT =
@@ -50,8 +50,6 @@ type ConversationRow = {
   status: string | null;
   bot_engine: string | null;
 };
-
-const normalizePhone = (value: string) => value.replace(/\D/g, "");
 
 const logAiNoReply = (
   kind: "skipped" | "failed",
@@ -68,54 +66,6 @@ const logAiNoReply = (
   }
 
   console.warn(`${LOG_PREFIX} no_reply`, payload);
-};
-
-const resolveRecipient = (
-  conversation: ConversationRow,
-  client: AgentClientSnapshot | null,
-) => {
-  const candidates = [
-    conversation.customer_phone,
-    client?.whatsapp_id,
-    client?.phone,
-  ]
-    .map((value) => normalizePhone(String(value || "")))
-    .filter((value) => value.length >= 8 && value.length <= 15);
-
-  return candidates[0] || null;
-};
-
-const sendWhatsAppText = async (to: string, message: string) => {
-  const whatsapp = getWhatsappRuntimeConfig();
-  const response = await fetch(
-    `https://graph.facebook.com/${GRAPH_API_VERSION}/${whatsapp.phoneNumberId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${whatsapp.accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "text",
-        text: { body: message },
-      }),
-    },
-  );
-
-  const data = await response.json();
-  if (!response.ok || data.error) {
-    console.error(`${LOG_PREFIX} whatsapp_send_failed`, {
-      to,
-      status: response.status,
-      error: data.error || data,
-    });
-    throw new Error(data.error?.message || "Error al enviar a WhatsApp");
-  }
-
-  return String(data.messages?.[0]?.id || "") || null;
 };
 
 const mapFallbackResult = (
@@ -471,6 +421,39 @@ export const replyToConversationWithAi = async (
       messages: chronological,
     });
 
+    try {
+      const technicianTurn = await tryHandleTechnicianTurn({
+        supabase,
+        conversation: {
+          id: conversation.id,
+          organization_id: conversation.organization_id,
+          customer_phone: conversation.customer_phone,
+        },
+        messages: chronological,
+        latestInbound,
+        recipientPhone: conversation.customer_phone,
+      });
+      if (technicianTurn.handled) {
+        console.log(`${LOG_PREFIX} technician_turn`, {
+          ...baseContext,
+          reason: technicianTurn.reason,
+          ok: technicianTurn.ok,
+        });
+        return {
+          ok: technicianTurn.ok,
+          reason: technicianTurn.reason,
+        };
+      }
+    } catch (technicianError) {
+      console.warn(`${LOG_PREFIX} technician_turn_failed`, {
+        ...baseContext,
+        error:
+          technicianError instanceof Error
+            ? technicianError.message
+            : "unknown_error",
+      });
+    }
+
     const isTurnStale = async () => {
       if (forceRun || !effectiveTriggerId) return false;
       const latestId = await findLatestInboundId(
@@ -812,44 +795,22 @@ export const replyToConversationWithAi = async (
         });
       }
 
-      const to = resolveRecipient(freshConversation, client);
-      if (!to) {
-        logAiNoReply("failed", {
-          ...baseContext,
-          reason: "handoff_missing_recipient_phone",
-          action: "handoff",
-          runId: decision.runId,
-        });
-        return tryHandoffFallback("handoff_missing_recipient_phone");
-      }
-
       try {
-        const waMessageId = await sendWhatsAppText(to, handoffText);
-        const now = new Date().toISOString();
-        const { data: saved, error: saveError } = await supabase
-          .from("messages")
-          .insert({
-            conversation_id: conversation.id,
-            wa_message_id: waMessageId,
-            type: "out",
-            content: handoffText,
-            sender_type: "bot",
-            sent_by: "Bot IA",
-            status: "sent",
-            created_at: now,
-            metadata: {
-              engine: "ai",
-              action: "handoff",
-              reason: decision.reason || null,
-              run_id: decision.runId,
-              trigger_message_id: effectiveTriggerId,
-              intent,
-            },
-          })
-          .select("id")
-          .single();
-
-        if (saveError) throw saveError;
+        const saved = await persistOutboundMessage(supabase, {
+          organizationId: String(conversation.organization_id),
+          conversationId: conversation.id,
+          content: handoffText,
+          senderType: "bot",
+          sentBy: "Bot IA",
+          metadata: {
+            engine: "ai",
+            action: "handoff",
+            reason: decision.reason || null,
+            run_id: decision.runId,
+            trigger_message_id: effectiveTriggerId,
+            intent,
+          },
+        });
 
         recordAiCircuitSuccess();
 
@@ -857,9 +818,6 @@ export const replyToConversationWithAi = async (
           .from("conversations")
           .update({
             human_mode: true,
-            preview: handoffText,
-            updated_at: now,
-            last_message_at: now,
           })
           .eq("id", conversation.id);
 
@@ -884,10 +842,10 @@ export const replyToConversationWithAi = async (
         };
       } catch (error) {
         const errorMessage =
-          error instanceof Error ? error.message : "handoff_whatsapp_send_failed";
+          error instanceof Error ? error.message : "handoff_send_failed";
         logAiNoReply("failed", {
           ...baseContext,
-          reason: "handoff_whatsapp_send_failed",
+          reason: "handoff_send_failed",
           action: "handoff",
           runId: decision.runId,
           error: errorMessage,
@@ -924,89 +882,23 @@ export const replyToConversationWithAi = async (
     const staleReply = await skipIfStaleBeforeSend(decision);
     if (staleReply) return staleReply;
 
-    const to = resolveRecipient(freshConversation, client);
-    if (!to) {
-      const result = {
-        ok: false,
-        skipped: true,
-        reason: "missing_recipient_phone",
-        runId: decision.runId,
-      } as const;
-      await closeRun("failed", {
-        error: result.reason,
-        metadata: { intent, aiRunId: decision.runId },
-      });
-      logAiNoReply("failed", {
-        ...baseContext,
-        ...result,
-        customerPhone: freshConversation.customer_phone,
-        clientPhone: client?.phone ?? null,
-        clientWhatsappId: client?.whatsapp_id ?? null,
-      });
-      return result;
-    }
-
-    let waMessageId: string | null;
-    try {
-      waMessageId = await sendWhatsAppText(to, replyText);
-    } catch (sendError) {
-      logAiNoReply("failed", {
-        ...baseContext,
-        reason: "whatsapp_send_failed",
-        to,
-        runId: decision.runId,
-        error: sendError instanceof Error ? sendError.message : "unknown_error",
-        replyPreview: replyText.slice(0, 120),
-      });
-      throw sendError;
-    }
-
-    const now = new Date().toISOString();
-
-    const { data: savedMessage, error: saveError } = await supabase
-      .from("messages")
-      .insert({
-        conversation_id: conversation.id,
-        wa_message_id: waMessageId,
-        type: "out",
-        content: replyText,
-        sender_type: "bot",
-        sent_by: "Bot IA",
-        status: "sent",
-        created_at: now,
-        metadata: {
-          engine: "ai",
-          action: "reply",
-          reason: decision.reason || null,
-          run_id: decision.runId,
-          trigger_message_id: effectiveTriggerId,
-          intent,
-        },
-      })
-      .select("id")
-      .single();
-
-    if (saveError) {
-      logAiNoReply("failed", {
-        ...baseContext,
-        reason: "message_persist_failed",
-        error: saveError.message,
-        waMessageId,
-        runId: decision.runId,
-      });
-      throw saveError;
-    }
+    const savedMessage = await persistOutboundMessage(supabase, {
+      organizationId: String(conversation.organization_id),
+      conversationId: conversation.id,
+      content: replyText,
+      senderType: "bot",
+      sentBy: "Bot IA",
+      metadata: {
+        engine: "ai",
+        action: "reply",
+        reason: decision.reason || null,
+        run_id: decision.runId,
+        trigger_message_id: effectiveTriggerId,
+        intent,
+      },
+    });
 
     recordAiCircuitSuccess();
-
-    await supabase
-      .from("conversations")
-      .update({
-        preview: replyText,
-        updated_at: now,
-        last_message_at: now,
-      })
-      .eq("id", conversation.id);
 
     await closeRun("replied", {
       metadata: { intent, aiRunId: decision.runId, ackSent },
@@ -1015,7 +907,6 @@ export const replyToConversationWithAi = async (
     console.log(`${LOG_PREFIX} reply_sent`, {
       ...baseContext,
       messageId: savedMessage?.id ?? null,
-      to,
       runId: decision.runId,
       willReplyToClient: true,
     });

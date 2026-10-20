@@ -152,7 +152,7 @@ export const WisproSearchDialog = ({
             </DialogTitle>
             <DialogDescription className={CRM_SURFACES.textMuted}>
               {isRelink
-                ? "Busca por cédula o RIF (solo números). El chat de WhatsApp se mantiene; solo se actualiza la ficha Wispro."
+                ? "Busca por cédula o RIF (solo números). El chat se mantiene; solo se actualiza la ficha Wispro."
                 : "Consulta por cédula o RIF (solo números, sin V ni J) y asocia el resultado a la conversación activa."}
             </DialogDescription>
           </DialogHeader>
@@ -289,7 +289,7 @@ export const WisproSearchDialog = ({
                   ? ` (${pendingResult.customer.national_identification_number})`
                   : ""}
               </strong>
-              . El chat de WhatsApp se mantiene; solo cambia la ficha Wispro.
+              . El chat se mantiene; solo cambia la ficha Wispro.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

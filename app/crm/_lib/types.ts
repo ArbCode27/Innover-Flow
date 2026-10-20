@@ -1,3 +1,4 @@
+import type { TeamRow } from "@/lib/scoring";
 import type {
   AfterHoursPaymentsConfig,
   OfficeHoursConfig,
@@ -120,6 +121,8 @@ export interface Client {
   organization_id?: string;
   name: string;
   phone: string;
+  cedula?: string | null;
+  app_enabled?: boolean | null;
   plan: string | null;
   zone: string | null;
   account: ClientAccountStatus | null;
@@ -338,6 +341,8 @@ export interface CrmData {
 export interface CreateClientInput {
   name: string;
   phone: string;
+  cedula?: string;
+  app_enabled?: boolean;
   plan: string;
   zone: string;
   account: ClientAccountStatus;
@@ -383,59 +388,21 @@ export interface UpsertAgentInput {
   maxConversations: number;
 }
 
-export interface AdvisorProductivityMetric {
-  agent_id: number;
-  name: string;
-  status: AgentStatus | string;
-  department: AgentDepartment;
-  max_conversations: number;
-
-  // Carga actual
-  active_conversations: number;
-  workload_percentage: number;
-
-  // Soporte
-  resolved_conversations: number;
-  resolution_rate: number;
-  average_first_response_ms: number | null;
-  average_resolution_ms: number | null;
-  assigned_tickets: number;
-  resolved_tickets: number;
-  ticket_resolution_rate: number;
-
-  // Cobranza
-  processed_payments: number;
-  approved_payments: number;
-  rejected_payments: number;
-  approval_rate: number;
-  approved_payment_amount: number;
-
-  // Calificación integral (0-100)
-  productivity_score: number;
+export interface OfficeDepartmentStats {
+  agentCount: number;
+  chatsVolume: number;
+  ticketsCreated: number;
+  paymentsValidated: number;
+  tmrMinutes: number | null;
 }
 
-export interface DepartmentSupportStats {
-  total_agents: number;
-  online_agents: number;
-  resolved_conversations: number;
-  resolved_tickets: number;
-  average_first_response_ms: number | null;
-  average_resolution_ms: number | null;
-}
-
-export interface DepartmentBillingStats {
-  total_agents: number;
-  online_agents: number;
-  processed_payments: number;
-  approved_payments: number;
-  rejected_payments: number;
-  approved_payment_amount: number;
-  approval_rate: number;
-}
-
-export interface DepartmentStats {
-  support: DepartmentSupportStats;
-  billing: DepartmentBillingStats;
+export interface FieldDepartmentStats {
+  technicianCount: number;
+  ticketsAssigned: number;
+  ticketsResolved: number;
+  recurrences72h: number;
+  recurrenceRate: number | null;
+  slaCompliance: number | null;
 }
 
 export interface DashboardMetrics {
@@ -449,7 +416,8 @@ export interface DashboardMetrics {
   open_tickets: number;
   approved_payments: number;
   approved_payment_amount: number;
-  department_stats?: DepartmentStats;
+  office: OfficeDepartmentStats;
+  field: FieldDepartmentStats;
 }
 
 export interface DashboardPayload {
@@ -457,5 +425,5 @@ export interface DashboardPayload {
   range?: { from: string; to: string };
   metrics: DashboardMetrics;
   daily_volume: Array<{ date: string; received: number; resolved: number }>;
-  advisors: AdvisorProductivityMetric[];
+  team: TeamRow[];
 }

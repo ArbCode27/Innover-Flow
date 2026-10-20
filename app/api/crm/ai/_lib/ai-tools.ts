@@ -200,6 +200,84 @@ export const AI_TOOL_DECLARATIONS = [
   },
 ] as const;
 
+export const LIST_MY_PENDING_TICKETS_TOOL = "list_my_pending_tickets";
+export const GET_MY_TICKET_DETAIL_TOOL = "get_my_ticket_detail";
+export const FINALIZE_MY_TICKET_TOOL = "finalize_my_ticket";
+export const GET_TECHNICIAN_ASSIGNED_TICKETS_TOOL =
+  "get_technician_assigned_tickets";
+
+export const listMyPendingTicketsArgsSchema = z.object({});
+
+export const getMyTicketDetailArgsSchema = z.object({
+  public_id: z.number().int().positive().optional(),
+  client_name: z.string().trim().min(2).max(160).optional(),
+});
+
+export const finalizeMyTicketArgsSchema = z.object({
+  observation: z.string().trim().min(3).max(4000),
+  public_id: z.number().int().positive().optional(),
+  client_name: z.string().trim().min(2).max(160).optional(),
+});
+
+export const getTechnicianAssignedTicketsArgsSchema = z.object({
+  technician_name: z.string().trim().min(2).max(160),
+});
+
+export const TECHNICIAN_TOOL_DECLARATIONS = [
+  {
+    name: LIST_MY_PENDING_TICKETS_TOOL,
+    description:
+      "Lista los casos pendientes asignados al técnico identificado. Devuelve texto con nombre, título y ubicación. Sin fotos. Si delivered=true no escribas más texto.",
+    parameters: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: GET_MY_TICKET_DETAIL_TOOL,
+    description:
+      "Ficha de UN caso del técnico. El sistema envía primero el texto y después la foto de fachada si existe. Nunca respondas solo con la foto.",
+    parameters: {
+      type: "object",
+      properties: {
+        public_id: { type: "number", description: "Número visible del caso, ej. 2046" },
+        client_name: { type: "string", description: "Nombre del cliente si lo dijo" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: FINALIZE_MY_TICKET_TOOL,
+    description:
+      "Cierra el caso en el CRM. observation obligatoria (texto o transcripción). Confirmación corta. No nombres sistemas internos.",
+    parameters: {
+      type: "object",
+      properties: {
+        observation: { type: "string", description: "Observación de cierre, mínimo 3 caracteres" },
+        public_id: { type: "number" },
+        client_name: { type: "string" },
+      },
+      required: ["observation"],
+    },
+  },
+  {
+    name: GET_TECHNICIAN_ASSIGNED_TICKETS_TOOL,
+    description:
+      "Solo supervisores. Lista los pendientes de un técnico por el nombre tal cual lo dijo.",
+    parameters: {
+      type: "object",
+      properties: {
+        technician_name: { type: "string", description: "Nombre del técnico tal cual lo dijo" },
+      },
+      required: ["technician_name"],
+    },
+  },
+] as const;
+
+export const TECHNICIAN_TOOL_NAMES = [
+  LIST_MY_PENDING_TICKETS_TOOL,
+  GET_MY_TICKET_DETAIL_TOOL,
+  FINALIZE_MY_TICKET_TOOL,
+  GET_TECHNICIAN_ASSIGNED_TICKETS_TOOL,
+] as const;
+
 export const AI_TOOLS_CONTRACT_PROMPT = `Herramientas disponibles (obligatorio respetar):
 1) lookup_wispro_by_cedula — cédula o RIF del abonado (solo números; el sistema prueba prefijos V/E/J/G). Trae debt_usd, debt_bs, bcv_rate, account_status y service_suspended. Si hay 1 solo match, vincula automáticamente al chat (linked=true).
 2) get_bcv_rate — solo si preguntan la tasa BCV del día sin consultar saldo (fuente rates.dolarvzla.com/bcv).
@@ -232,4 +310,4 @@ Reglas:
 - No inventes monto, referencia ni banco.
 - Si hay varios matches Wispro, confirma cuál es antes del submit.
 - Si service_suspended=true: incentiva el pago y di que al registrar el comprobante el servicio se activa de forma inmediata. No digas "suspendido" si service_suspended=false.
-- Responde siempre en texto claro por WhatsApp (sin JSON).`;
+- Responde siempre en texto claro por el chat de la app (sin JSON).`;

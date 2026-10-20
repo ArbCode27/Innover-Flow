@@ -14,6 +14,7 @@ import type {
   WisproCustomer,
   WisproSearchResult,
 } from "../../_lib/types";
+import type { FieldTicket, Technician } from "@/lib/field-tickets";
 import { CRM_PANEL, CRM_SURFACES } from "../../_lib/crm-theme";
 import { ConversationFilters } from "./conversation-filters";
 import { ConversationList } from "./conversation-list";
@@ -31,6 +32,9 @@ interface ConversationsViewProps {
   quickReplies: QuickReply[];
   agents: Agent[];
   ticketsByClientId: Map<number, Ticket[]>;
+  fieldTickets: FieldTicket[];
+  technicians: Technician[];
+  openTicketConversationIds: Set<number>;
   messages: Message[];
   selectedConversation: Conversation | null;
   selectedClient: Client | null;
@@ -65,6 +69,8 @@ interface ConversationsViewProps {
   onAssociateWispro: (result: WisproSearchResult) => Promise<void>;
   onUnlinkWispro: () => Promise<void>;
   onCreatePaymentPromise: () => Promise<void>;
+  onCreateFieldTicket: (payload: Record<string, unknown>) => Promise<void>;
+  onUploadFacade: (file: File) => Promise<string>;
   onOpenSettingsView: (view: CrmView) => void;
 }
 
@@ -78,6 +84,9 @@ export const ConversationsView = ({
   quickReplies,
   agents,
   ticketsByClientId,
+  fieldTickets,
+  technicians,
+  openTicketConversationIds,
   messages,
   selectedConversation,
   selectedClient,
@@ -109,6 +118,8 @@ export const ConversationsView = ({
   onAssociateWispro,
   onUnlinkWispro,
   onCreatePaymentPromise,
+  onCreateFieldTicket,
+  onUploadFacade,
   onOpenSettingsView,
 }: ConversationsViewProps) => {
   const selectedTickets =
@@ -153,6 +164,7 @@ export const ConversationsView = ({
           clientsById={clientsById}
           labelsById={labelsById}
           selectedConversationId={selectedConversationId}
+          openTicketConversationIds={openTicketConversationIds}
           onSelect={onSelectConversation}
         />
       </aside>
@@ -171,6 +183,8 @@ export const ConversationsView = ({
           conversations={conversations}
           currentAgent={currentAgent}
           tickets={selectedTickets}
+          fieldTickets={fieldTickets}
+          technicians={technicians}
           isMessagesLoading={isMessagesLoading}
           isSendingMessage={isSendingMessage}
           isResolvingConversation={isResolvingConversation}
@@ -190,6 +204,8 @@ export const ConversationsView = ({
           onAssociateWispro={onAssociateWispro}
           onUnlinkWispro={onUnlinkWispro}
           onCreatePaymentPromise={onCreatePaymentPromise}
+          onCreateFieldTicket={onCreateFieldTicket}
+          onUploadFacade={onUploadFacade}
         />
       </div>
     </div>

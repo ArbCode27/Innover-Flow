@@ -10,6 +10,7 @@ interface ConversationListProps {
   clientsById: Map<number, Client>;
   labelsById: Map<number, Label>;
   selectedConversationId: number | null;
+  openTicketConversationIds?: Set<number>;
   onSelect: (id: number) => void;
 }
 
@@ -18,6 +19,7 @@ export const ConversationList = ({
   clientsById,
   labelsById,
   selectedConversationId,
+  openTicketConversationIds,
   onSelect,
 }: ConversationListProps) => {
   if (!conversations.length) {
@@ -45,6 +47,7 @@ export const ConversationList = ({
             .map((id) => labelsById.get(id))
             .filter((label): label is Label => Boolean(label))}
           isActive={selectedConversationId === conversation.id}
+          hasOpenTicket={openTicketConversationIds?.has(conversation.id)}
           onSelect={onSelect}
         />
       ))}

@@ -10,6 +10,7 @@ import {
 } from "../../_lib/conversation-inbox-utils";
 import type { Client, Conversation, Label } from "../../_lib/types";
 import { formatCrmTime } from "../../_lib/formatters";
+import { Badge } from "@/components/ui/badge";
 import { CRM_BADGE_TONES, CRM_FOCUS_RING, CRM_INBOX_ITEM, CRM_SURFACES } from "../../_lib/crm-theme";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { LabelChip } from "../shared/label-chip";
@@ -21,6 +22,7 @@ interface ConversationListItemProps {
   client: Client | null;
   labels: Label[];
   isActive: boolean;
+  hasOpenTicket?: boolean;
   onSelect: (id: number) => void;
 }
 
@@ -29,6 +31,7 @@ export const ConversationListItem = memo(({
   client,
   labels,
   isActive,
+  hasOpenTicket = false,
   onSelect,
 }: ConversationListItemProps) => {
   const displayName =
@@ -125,6 +128,11 @@ export const ConversationListItem = memo(({
                 title={agentControlName}>
                 <span className="truncate">{agentControlName}</span>
               </span>
+            ) : null}
+            {hasOpenTicket ? (
+              <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-medium">
+                Ticket
+              </Badge>
             ) : null}
           </div>
           <p

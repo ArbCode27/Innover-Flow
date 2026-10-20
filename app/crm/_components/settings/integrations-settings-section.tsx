@@ -3,15 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   CheckCircle2,
-  Cloud,
   Link2,
-  MessageCircle,
   RefreshCw,
   Server,
-  ShieldCheck,
-  Smartphone,
   Unplug,
-  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -39,26 +34,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import type {
   OrganizationIntegration,
   OrganizationRole,
 } from "../../_lib/types";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
-import {
-  WhatsAppEmbeddedSignupButton,
-  type EmbeddedSignupConfig,
-  type SignupPhone,
-} from "./whatsapp-embedded-signup-button";
 
-type Provider = "wispro" | "whatsapp";
-
-interface WebhookMetadata {
-  webhook_url?: string;
-  required_fields?: string[];
-  coexistence_supported?: boolean;
-  embedded_signup?: EmbeddedSignupConfig;
-}
+type Provider = "wispro";
 
 const emptyIntegration = (provider: Provider): OrganizationIntegration => ({
   provider,
@@ -75,368 +57,6 @@ const statusLabel: Record<OrganizationIntegration["status"], string> = {
   disconnected: "Sin conectar",
   pending: "Pendiente",
   error: "Con error",
-};
-
-/**
- * Tarjeta especializada en WhatsApp Cloud API con soporte nativo de Coexistencia.
- */
-const WhatsAppCoexistenceCard = ({
-  integration,
-  metadata,
-  canEdit,
-  onChanged,
-}: {
-  integration: OrganizationIntegration;
-  metadata?: WebhookMetadata;
-  canEdit: boolean;
-  onChanged: (integration: OrganizationIntegration) => void;
-}) => {
-  const [isTesting, setIsTesting] = useState(false);
-  const [isUpdatingConfig, setIsUpdatingConfig] = useState(false);
-
-  const isConnected = integration.status === "connected";
-  const isPending = integration.status === "pending";
-  const pendingPhones = Array.isArray(integration.config.pending_phones)
-    ? (integration.config.pending_phones as SignupPhone[])
-    : [];
-  const signupReady = metadata?.embedded_signup?.ready !== false;
-  const displayPhone = String(
-    integration.config.display_phone_number ||
-      integration.config.phone_number_id ||
-      "",
-  );
-  const verifiedName = String(integration.config.verified_name || "");
-  const qualityRating = String(integration.config.quality_rating || "").toUpperCase();
-
-  // Flags de coexistencia
-  const autoHuman = integration.config.coexistence_auto_human !== false;
-  const syncEchoes = integration.config.coexistence_sync_echoes !== false;
-
-  const handleTest = async () => {
-    setIsTesting(true);
-    try {
-      const response = await fetch("/api/crm/integrations/whatsapp", {
-        method: "POST",
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || "La verificación falló");
-      }
-      onChanged(payload.integration);
-      toast.success("Conexión con Meta Graph API verificada y activa");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "La conexión con Meta falló",
-      );
-    } finally {
-      setIsTesting(false);
-    }
-  };
-
-  const handleToggleCoexistenceSetting = async (
-    key: "coexistence_auto_human" | "coexistence_sync_echoes",
-    nextValue: boolean,
-  ) => {
-    if (!canEdit || isUpdatingConfig) return;
-    setIsUpdatingConfig(true);
-    try {
-      const response = await fetch("/api/crm/integrations/whatsapp", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [key]: nextValue }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || "No se pudo actualizar");
-      }
-      onChanged(payload.integration);
-      toast.success("Ajuste de coexistencia actualizado");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Error al actualizar ajuste",
-      );
-    } finally {
-      setIsUpdatingConfig(false);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    const response = await fetch("/api/crm/integrations/whatsapp", {
-      method: "DELETE",
-    });
-    if (!response.ok) {
-      const payload = await response.json();
-      toast.error(payload.error || "No se pudo desconectar");
-      return;
-    }
-    onChanged(emptyIntegration("whatsapp"));
-    toast.success("WhatsApp desconectado");
-  };
-
-  return (
-    <Card className="col-span-1 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 shadow-xs dark:border-emerald-500/20 dark:bg-emerald-950/10 lg:col-span-2">
-      <CardHeader className="pb-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="flex size-11 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-md shadow-emerald-600/30">
-              <MessageCircle className="size-6" aria-hidden="true" />
-            </span>
-            <div>
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-base font-semibold">
-                  WhatsApp Cloud API & Coexistencia
-                </CardTitle>
-              </div>
-              <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-                Opera con tu aplicación WhatsApp Business en el celular y con este CRM al mismo tiempo.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {isConnected ? (
-              <Badge
-                variant="outline"
-                className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                <Smartphone className="size-3.5" aria-hidden="true" />
-                <span className="mx-1">+</span>
-                <Cloud className="size-3.5" aria-hidden="true" />
-                <span>Coexistencia Activa</span>
-              </Badge>
-            ) : null}
-            {isPending ? (
-              <Badge
-                variant="outline"
-                className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">
-                Pendiente de número
-              </Badge>
-            ) : null}
-
-            <Badge
-              variant={isConnected ? "default" : "secondary"}
-              className={
-                isConnected
-                  ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                  : ""
-              }>
-              {isConnected ? (
-                <span className="mr-1.5 flex size-2 rounded-full bg-white animate-pulse" />
-              ) : null}
-              {statusLabel[integration.status]}
-            </Badge>
-          </div>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        {isConnected ? (
-          <>
-            {/* Resumen del número verificado en Meta */}
-            <div className="grid gap-3 rounded-xl border border-emerald-500/20 bg-background/60 p-4 sm:grid-cols-2 md:grid-cols-4">
-              <div>
-                <p className={`text-[11px] font-medium uppercase tracking-wider ${CRM_SURFACES.textMuted}`}>
-                  Número Conectado
-                </p>
-                <p className="mt-1 font-semibold text-foreground">
-                  {displayPhone || "Pendiente de número"}
-                </p>
-              </div>
-
-              <div>
-                <p className={`text-[11px] font-medium uppercase tracking-wider ${CRM_SURFACES.textMuted}`}>
-                  Nombre en Meta
-                </p>
-                <div className="mt-1 flex items-center gap-1.5">
-                  <ShieldCheck className="size-4 text-emerald-600" aria-hidden="true" />
-                  <span className="truncate font-medium text-foreground">
-                    {verifiedName || "Verificado"}
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <p className={`text-[11px] font-medium uppercase tracking-wider ${CRM_SURFACES.textMuted}`}>
-                  Calidad de Línea
-                </p>
-                <div className="mt-1 flex items-center gap-1.5">
-                  <span
-                    className={`size-2.5 rounded-full ${
-                      qualityRating === "GREEN"
-                        ? "bg-emerald-500"
-                        : qualityRating === "YELLOW"
-                          ? "bg-amber-500"
-                          : "bg-red-500"
-                    }`}
-                  />
-                  <span className="text-xs font-medium text-foreground">
-                    {qualityRating === "GREEN"
-                      ? "Excelente (Verde)"
-                      : qualityRating === "YELLOW"
-                        ? "Media (Amarillo)"
-                        : qualityRating || "Normal"}
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <p className={`text-[11px] font-medium uppercase tracking-wider ${CRM_SURFACES.textMuted}`}>
-                  Última Validación
-                </p>
-                <p className="mt-1 text-xs text-foreground">
-                  {integration.last_verified_at
-                    ? new Date(integration.last_verified_at).toLocaleTimeString(
-                        "es-VE",
-                        {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          day: "2-digit",
-                          month: "short",
-                        },
-                      )
-                    : "Reciente"}
-                </p>
-              </div>
-            </div>
-
-            {/* Panel de Controles de Coexistencia Inteligente */}
-            <div className="rounded-xl border border-black/5 bg-background/80 p-4 dark:border-white/10">
-              <div className="mb-3 flex items-center gap-2">
-                <Zap className="size-4 text-crm-accent" aria-hidden="true" />
-                <h4 className="text-sm font-semibold text-foreground">
-                  Comportamiento de Coexistencia (Móvil & CRM)
-                </h4>
-              </div>
-
-              <div className="space-y-3.5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <Label
-                      htmlFor="switch-auto-human"
-                      className="cursor-pointer text-xs font-medium text-foreground">
-                      Pausa automática de IA al responder desde el celular
-                    </Label>
-                    <p className={`text-[11px] leading-relaxed ${CRM_SURFACES.textMuted}`}>
-                      Si tú o tus asesores responden a un cliente directamente desde la app de WhatsApp
-                      Business en el celular, el CRM detecta el mensaje y activa el modo humano en ese
-                      chat para que la IA no interfiera.
-                    </p>
-                  </div>
-                  <Switch
-                    id="switch-auto-human"
-                    checked={autoHuman}
-                    disabled={!canEdit || isUpdatingConfig}
-                    onCheckedChange={(checked) =>
-                      void handleToggleCoexistenceSetting(
-                        "coexistence_auto_human",
-                        checked,
-                      )
-                    }
-                  />
-                </div>
-
-                <div className="border-t border-black/5 pt-3 dark:border-white/5 flex items-start justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <Label
-                      htmlFor="switch-sync-echoes"
-                      className="cursor-pointer text-xs font-medium text-foreground">
-                      Sincronización de respuestas móviles en el historial (Echoes)
-                    </Label>
-                    <p className={`text-[11px] leading-relaxed ${CRM_SURFACES.textMuted}`}>
-                      Guarda automáticamente en el hilo de conversación del CRM los mensajes que tú o tu
-                      equipo envíen desde el teléfono móvil físico.
-                    </p>
-                  </div>
-                  <Switch
-                    id="switch-sync-echoes"
-                    checked={syncEchoes}
-                    disabled={!canEdit || isUpdatingConfig}
-                    onCheckedChange={(checked) =>
-                      void handleToggleCoexistenceSetting(
-                        "coexistence_sync_echoes",
-                        checked,
-                      )
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-
-          </>
-        ) : (
-          <div className="rounded-xl border border-black/5 bg-background/50 p-6 text-center dark:border-white/10">
-            <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600">
-              <Smartphone className="size-6" aria-hidden="true" />
-            </div>
-            <h4 className="text-sm font-semibold text-foreground">
-              {isPending
-                ? "Meta autorizó la cuenta. Falta elegir el número"
-                : "Conecta WhatsApp con coexistencia"}
-            </h4>
-            <p
-              className={`mx-auto mt-1.5 max-w-lg text-xs leading-relaxed ${CRM_SURFACES.textMuted}`}>
-              La única vía es Embedded Signup de Meta. El número sigue en WhatsApp
-              Business del celular; el CRM recibe mensajes y ecos al mismo tiempo.
-            </p>
-            {!signupReady ? (
-              <p className="mx-auto mt-3 max-w-lg text-[11px] text-amber-700 dark:text-amber-300">
-                Falta configurar en Vercel: NEXT_PUBLIC_META_APP_ID,
-                NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID y WHATSAPP_APP_SECRET.
-              </p>
-            ) : null}
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <WhatsAppEmbeddedSignupButton
-              canEdit={canEdit}
-              isConnected={isConnected}
-              signup={metadata?.embedded_signup}
-              pendingPhones={pendingPhones}
-              onConnected={onChanged}
-            />
-
-            {isConnected ? (
-              <CrmButton
-                size="sm"
-                variant="secondary"
-                onClick={() => void handleTest()}
-                disabled={isTesting}>
-                <RefreshCw className={`size-3.5 ${isTesting ? "animate-spin" : ""}`} />
-                Probar Conexión
-              </CrmButton>
-            ) : null}
-          </div>
-
-          {isConnected || isPending ? (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <CrmButton size="sm" variant="ghost" disabled={!canEdit} className="text-red-600 hover:text-red-700">
-                  <Unplug className="size-3.5" />
-                  Desconectar
-                </CrmButton>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>¿Desconectar WhatsApp?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    El CRM dejará de recibir y enviar mensajes con esta cuenta inmediatamente. Tu app
-                    móvil de WhatsApp seguirá funcionando intacta en tu teléfono.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => void handleDisconnect()}>
-                    Desconectar
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          ) : null}
-        </div>
-      </CardContent>
-    </Card>
-  );
 };
 
 /**
@@ -660,9 +280,7 @@ export const IntegrationsSettingsSection = ({
 }) => {
   const [integrations, setIntegrations] = useState<Record<Provider, OrganizationIntegration>>({
     wispro: emptyIntegration("wispro"),
-    whatsapp: emptyIntegration("whatsapp"),
   });
-  const [whatsappMetadata, setWhatsappMetadata] = useState<WebhookMetadata>({});
   const canEdit = organizationRole === "owner" || organizationRole === "admin";
 
   const loadIntegration = useCallback(async (provider: Provider) => {
@@ -675,20 +293,17 @@ export const IntegrationsSettingsSection = ({
       ...current,
       [provider]: payload.integration,
     }));
-    if (provider === "whatsapp" && payload.metadata) {
-      setWhatsappMetadata(payload.metadata);
-    }
   }, []);
 
   useEffect(() => {
-    void Promise.all([loadIntegration("wispro"), loadIntegration("whatsapp")]);
+    void loadIntegration("wispro");
   }, [loadIntegration]);
 
   const handleChanged = (integration: OrganizationIntegration) => {
-    if (!integration.provider) return;
+    if (integration.provider !== "wispro") return;
     setIntegrations((current) => ({
       ...current,
-      [integration.provider]: integration,
+      wispro: integration,
     }));
   };
 
@@ -697,16 +312,11 @@ export const IntegrationsSettingsSection = ({
       <CardHeader>
         <CardTitle className="text-base">Canales e Integraciones</CardTitle>
         <p className={`text-sm ${CRM_SURFACES.textMuted}`}>
-          Configura y gestiona las conexiones oficiales de WhatsApp y sistemas externos para tu organización.
+          La atención a clientes corre por la app móvil vía endpoints propios del CRM.
+          Aquí configuras sistemas externos como Wispro.
         </p>
       </CardHeader>
       <CardContent className="grid gap-5">
-        <WhatsAppCoexistenceCard
-          integration={integrations.whatsapp}
-          metadata={whatsappMetadata}
-          canEdit={canEdit}
-          onChanged={handleChanged}
-        />
         <WisproCard
           integration={integrations.wispro}
           canEdit={canEdit}

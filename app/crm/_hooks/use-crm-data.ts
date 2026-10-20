@@ -10,7 +10,6 @@ import {
   matchesConversationLabel,
   matchesConversationSearch,
 } from "../_lib/conversation-filter-utils";
-import { resolveRecipientPhone } from "../_lib/conversation-recipient";
 import {
   applyInboundMessageToConversation,
   sortConversationsForInbox,
@@ -69,8 +68,8 @@ const emptyData: CrmData = {
   },
 };
 
-const MAX_WHATSAPP_AUDIO_BYTES = 16 * 1024 * 1024;
-const MAX_WHATSAPP_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const formatVoiceNotePreview = (durationMs: number) => {
   const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -100,11 +99,11 @@ export const useCrmData = (agent: Agent | null) => {
     Record<number, WisproCustomer>
   >({});
   const {
-    sendMessage: sendWhatsAppMessage,
-    sendVoiceNote: sendWhatsAppVoiceNote,
-    sendImageMessage: sendWhatsAppImageMessage,
+    sendMessage: sendChannelMessage,
+    sendVoiceNote: sendChannelVoiceNote,
+    sendImageMessage: sendChannelImageMessage,
     processPaymentReceipt: processPaymentReceiptRequest,
-    resendMessage: resendWhatsAppMessage,
+    resendMessage: resendChannelMessage,
     isSending: isSendingMessage,
   } = useSendMessage();
   const [isResolvingConversation, setIsResolvingConversation] = useState(false);
@@ -595,15 +594,7 @@ export const useCrmData = (agent: Agent | null) => {
       throw new Error("El mensaje no puede estar vacío");
     }
 
-    const to = resolveRecipientPhone(selectedClient, selectedConversation);
-    if (!to) {
-      throw new Error(
-        "No hay un número de WhatsApp disponible para responder esta conversación",
-      );
-    }
-
-    const response = await sendWhatsAppMessage({
-      to,
+    const response = await sendChannelMessage({
       message: trimmedContent,
       conversation_id: selectedConversation.id,
       agent_id: agent?.id,
@@ -648,7 +639,7 @@ export const useCrmData = (agent: Agent | null) => {
       throw new Error("Graba una nota de voz válida antes de enviarla");
     }
 
-    if (audioBlob.size > MAX_WHATSAPP_AUDIO_BYTES) {
+    if (audioBlob.size > MAX_AUDIO_BYTES) {
       throw new Error("La nota de voz supera el límite de 16 MB");
     }
 
@@ -656,15 +647,7 @@ export const useCrmData = (agent: Agent | null) => {
       type: meta.mimeType || audioBlob.type || "audio/webm",
     });
 
-    const to = resolveRecipientPhone(selectedClient, selectedConversation);
-    if (!to) {
-      throw new Error(
-        "No hay un número de WhatsApp disponible para responder esta conversación",
-      );
-    }
-
-    const response = await sendWhatsAppVoiceNote({
-      to,
+    const response = await sendChannelVoiceNote({
       audio: normalizedAudio,
       conversation_id: selectedConversation.id,
       duration_ms: meta.durationMs,
@@ -707,20 +690,12 @@ export const useCrmData = (agent: Agent | null) => {
     if (!(imageFile instanceof File) || imageFile.size <= 0) {
       throw new Error("Selecciona una imagen válida antes de enviarla");
     }
-    if (imageFile.size > MAX_WHATSAPP_IMAGE_BYTES) {
+    if (imageFile.size > MAX_IMAGE_BYTES) {
       throw new Error("La imagen supera el límite de 5 MB");
     }
 
-    const to = resolveRecipientPhone(selectedClient, selectedConversation);
-    if (!to) {
-      throw new Error(
-        "No hay un número de WhatsApp disponible para responder esta conversación",
-      );
-    }
-
     const trimmedCaption = caption?.trim();
-    const response = await sendWhatsAppImageMessage({
-      to,
+    const response = await sendChannelImageMessage({
       image: imageFile,
       conversation_id: selectedConversation.id,
       agent_id: agent.id,
@@ -813,7 +788,7 @@ export const useCrmData = (agent: Agent | null) => {
       throw new Error("Por ahora solo se pueden reenviar mensajes de texto");
     }
 
-    const response = await resendWhatsAppMessage({
+    const response = await resendChannelMessage({
       message_id: messageId,
       conversation_id: selectedConversation.id,
       agent_id: agent.id,

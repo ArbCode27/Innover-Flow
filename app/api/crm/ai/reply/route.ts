@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin } from "../../_lib/supabase-admin";
 import { replyToConversationWithAi } from "../_lib/reply-to-conversation";
-import { withOrganizationWhatsapp } from "../../_lib/whatsapp-runtime";
 import { withOptionalOrganizationWispro } from "../../_lib/wispro-api";
 
 const LOG_PREFIX = "[AI_AGENT]";
@@ -54,15 +53,11 @@ export async function POST(req: NextRequest) {
       );
     }
     const organizationId = String(conversation.organization_id);
-    const result = await withOrganizationWhatsapp(
-      organizationId,
-      () =>
-        withOptionalOrganizationWispro(organizationId, () =>
-          replyToConversationWithAi(supabase, {
-            conversationId: payload.data.conversation_id,
-            triggerMessageId: payload.data.message_id ?? null,
-          }),
-        ),
+    const result = await withOptionalOrganizationWispro(organizationId, () =>
+      replyToConversationWithAi(supabase, {
+        conversationId: payload.data.conversation_id,
+        triggerMessageId: payload.data.message_id ?? null,
+      }),
     );
 
     if (!result.ok) {

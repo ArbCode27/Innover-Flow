@@ -3,6 +3,16 @@ import { getSupabaseAdmin } from "./supabase-admin";
 
 export type IntegrationProvider = "wispro" | "whatsapp";
 
+export const sanitizeIntegration = (row: Record<string, unknown> | null) => ({
+  provider: row?.provider || null,
+  status: row?.status || "disconnected",
+  config: row?.config || {},
+  has_credentials: Boolean(row?.credentials_encrypted),
+  last_verified_at: row?.last_verified_at || null,
+  last_error: row?.last_error || null,
+  updated_at: row?.updated_at || null,
+});
+
 export const getOrganizationIntegration = async (
   organizationId: string,
   provider: IntegrationProvider,
@@ -21,32 +31,12 @@ export const getOrganizationIntegration = async (
     !data.credentials_encrypted
   ) {
     throw new Error(
-      `${provider === "wispro" ? "Wispro" : "WhatsApp Business"} no está conectado para esta organización`,
+      `${provider === "wispro" ? "Wispro" : "Integración"} no está conectado para esta organización`,
     );
   }
 
   return {
     config: (data.config || {}) as Record<string, unknown>,
     secret: decryptIntegrationSecret(data.credentials_encrypted),
-  };
-};
-
-export const findOrganizationByWhatsappPhoneId = async (
-  phoneNumberId: string,
-) => {
-  const { data, error } = await getSupabaseAdmin()
-    .from("organization_integrations")
-    .select("organization_id, config, credentials_encrypted")
-    .eq("provider", "whatsapp")
-    .eq("status", "connected")
-    .contains("config", { phone_number_id: phoneNumberId })
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!data?.credentials_encrypted) return null;
-  return {
-    organizationId: String(data.organization_id),
-    config: (data.config || {}) as Record<string, unknown>,
-    accessToken: decryptIntegrationSecret(data.credentials_encrypted),
   };
 };

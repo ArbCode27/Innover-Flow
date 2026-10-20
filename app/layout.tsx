@@ -4,10 +4,11 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
   title: "CRM · Conexiones Innover",
-  description: "CRM de WhatsApp para gestión de conversaciones, clientes y pagos.",
+  description: "CRM de atención por app móvil para gestión de conversaciones, clientes y pagos.",
 };
 
 export default function RootLayout({
@@ -20,8 +21,15 @@ export default function RootLayout({
       <body
         suppressHydrationWarning
         className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
-        {children}
-        <Toaster />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          storageKey="crm-theme"
+          disableTransitionOnChange>
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

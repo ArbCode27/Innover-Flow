@@ -51,7 +51,7 @@ const PrivacyPage = () => (
           </div>
           <p
             className={`mb-2 text-xs font-medium uppercase tracking-wide ${CRM_SURFACES.textMuted}`}>
-            Documento público · WhatsApp Business
+            Documento público · App de atención
           </p>
           <h1
             className={`text-3xl font-semibold tracking-tight sm:text-4xl ${CRM_SURFACES.textPrimary}`}>
@@ -59,9 +59,9 @@ const PrivacyPage = () => (
           </h1>
           <p className={`mt-3 max-w-2xl text-sm leading-6 ${CRM_SURFACES.textSecondary}`}>
             Explica cómo {PRIVACY_CONTROLLER} usa los datos que llegan por
-            WhatsApp Cloud API, el CRM de atención y las integraciones de
+            la app móvil de atención, el CRM y las integraciones de
             facturación y pagos. Esta página es pública y no requiere inicio de
-            sesión, tal como lo pide Meta para configurar la aplicación.
+            sesión.
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-2">
             {PRIVACY_HIGHLIGHTS.map((item) => (
@@ -161,10 +161,10 @@ const PrivacyPage = () => (
         className={`mt-10 border-t pt-6 text-center text-xs ${CRM_SURFACES.border} ${CRM_SURFACES.textMuted}`}>
         <p>
           © {new Date().getFullYear()} {PRIVACY_CONTROLLER}. {PRIVACY_PRODUCT} ·
-          Atención por WhatsApp Business.
+          Atención por app móvil.
         </p>
         <p className="mt-1">
-          Documento público para la configuración de la aplicación en Meta.
+          Documento público sobre el tratamiento de datos del canal de atención.
         </p>
       </footer>
     </main>

@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Hammer } from "lucide-react";
+import { Plus } from "lucide-react";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type {
   Agent,
@@ -11,11 +11,15 @@ import type {
   Ticket,
   WisproCustomer,
 } from "../../_lib/types";
+import {
+  fieldTicketStatusLabel,
+  openCasosForConversation,
+  type FieldTicket,
+} from "@/lib/field-tickets";
 import { formatCrmDate } from "../../_lib/formatters";
 import { AvatarInitials } from "../shared/avatar-initials";
 import { CrmButton } from "../shared/crm-button";
 import { LabelChip } from "../shared/label-chip";
-import { StatusBadge } from "../shared/status-badge";
 import { ClientProfileSection } from "./client-profile-section";
 
 interface ConversationDetailsProps {
@@ -24,6 +28,7 @@ interface ConversationDetailsProps {
   wisproSnapshot?: WisproCustomer | null;
   labels: Label[];
   tickets: Ticket[];
+  fieldTickets?: FieldTicket[];
   agents: Agent[];
   className?: string;
   onToggleLabel: (labelId: number) => Promise<void>;
@@ -32,7 +37,7 @@ interface ConversationDetailsProps {
   isUnlinkingWispro?: boolean;
   onCreatePaymentPromise?: () => void;
   isCreatingPaymentPromise?: boolean;
-  onOpenWisproTicket?: () => void;
+  onCreateFieldTicket?: () => void;
 }
 
 export const ConversationDetails = ({
@@ -40,7 +45,8 @@ export const ConversationDetails = ({
   client,
   wisproSnapshot,
   labels,
-  tickets,
+  tickets: _tickets,
+  fieldTickets = [],
   agents,
   className,
   onToggleLabel,
@@ -49,12 +55,9 @@ export const ConversationDetails = ({
   isUnlinkingWispro = false,
   onCreatePaymentPromise,
   isCreatingPaymentPromise = false,
-  onOpenWisproTicket,
+  onCreateFieldTicket,
 }: ConversationDetailsProps) => {
-  const activeTicket =
-    tickets.find((ticket) => ticket.status !== "Resuelto") ||
-    tickets[0] ||
-    null;
+  const activeTickets = openCasosForConversation(fieldTickets, conversation);
   const onlineAgents = agents.filter(
     (agent) => agent.status === "online" || agent.status === "busy",
   );
@@ -126,38 +129,44 @@ export const ConversationDetails = ({
           <h3 className={`text-[11px] font-semibold uppercase tracking-wide ${CRM_SURFACES.textMuted}`}>
             Ticket activo
           </h3>
-          {onOpenWisproTicket ? (
+          {onCreateFieldTicket ? (
             <button
               type="button"
-              onClick={onOpenWisproTicket}
+              onClick={onCreateFieldTicket}
               className="text-[11px] font-medium text-crm-accent hover:underline">
-              + Crear Wispro
+              + Crear ticket
             </button>
           ) : null}
         </div>
-        {activeTicket ? (
-          <div className="space-y-2">
-            <p className={`font-mono text-sm ${CRM_SURFACES.textPrimary}`}>
-              {activeTicket.id}
-            </p>
-            <p className={`text-sm ${CRM_SURFACES.textSecondary}`}>{activeTicket.type}</p>
-            <StatusBadge status={activeTicket.status} />
-            <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-              Agente: {activeTicket.agent}
-            </p>
+        {activeTickets.length ? (
+          <div className="space-y-3">
+            {activeTickets.map((ticket) => (
+              <div key={ticket.id} className="space-y-1">
+                <p className={`font-mono text-sm ${CRM_SURFACES.textPrimary}`}>
+                  #{ticket.publicId}
+                </p>
+                <p className={`text-sm ${CRM_SURFACES.textSecondary}`}>
+                  {ticket.cause || ticket.title}
+                </p>
+                <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                  {fieldTicketStatusLabel(ticket.status)}
+                  {ticket.employeeName ? ` · ${ticket.employeeName}` : ""}
+                </p>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="space-y-2">
             <p className={`text-xs ${CRM_SURFACES.textLabel}`}>Sin tickets activos</p>
-            {onOpenWisproTicket ? (
+            {onCreateFieldTicket ? (
               <CrmButton
                 type="button"
                 variant="secondary"
                 size="sm"
                 className="w-full text-xs"
-                onClick={onOpenWisproTicket}>
-                <Hammer className="mr-1.5 size-3 text-amber-500" />
-                Crear ticket y orden
+                onClick={onCreateFieldTicket}>
+                <Plus className="mr-1.5 size-3" />
+                Crear ticket
               </CrmButton>
             ) : null}
           </div>

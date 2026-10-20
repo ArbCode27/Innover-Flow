@@ -168,6 +168,6 @@ export const applyPaymentReviewOwnership = async (
 
 /**
  * Merge patch into receipt_metadata without clobbering sibling keys.
- * Use after WhatsApp notify / other side effects.
+ * Use after client notify / other side effects.
  */
 export const patchPaymentReceiptMetadata = mergePaymentReceiptMetadata;

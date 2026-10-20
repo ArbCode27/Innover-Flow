@@ -31,6 +31,7 @@ import {
   LINK_WISPRO_TOOL,
   LOOKUP_WISPRO_TOOL,
   SUBMIT_PAYMENT_RECEIPT_TOOL,
+  TECHNICIAN_TOOL_NAMES,
   escalateHumanArgsSchema,
   linkWisproArgsSchema,
   lookupWisproArgsSchema,
@@ -41,6 +42,7 @@ import {
   SAFE_INTERNAL_LEAK_CUSTOMER_REPLY,
 } from "./reply-sanitizer";
 import { auditToolInvocation } from "./tool-audit";
+import { handleTechnicianTool } from "./technician-turn";
 
 export type AgentRunContext = {
   supabase: SupabaseClient;
@@ -55,6 +57,10 @@ export type AgentRunContext = {
   replyMode?: "full" | "after_hours_payments" | "forced" | "skip";
   allowedToolNames?: string[] | null;
   officeHours?: OfficeHoursSnapshot | null;
+  organizationId?: string | null;
+  technicianId?: string | null;
+  technicianName?: string | null;
+  technicianIsSupervisor?: boolean;
   lastLookupByWisproId: Map<string, WisproSearchResult>;
   lastLookupCedula: string | null;
   linkedWisproId: string | null;
@@ -875,7 +881,7 @@ const handleSubmitPaymentReceipt = async (
   if (!phoneId) {
     const message = forClient(
       ctx,
-      "No pudimos identificar tu número de WhatsApp. Un asesor te ayudará en breve.",
+      "No pudimos identificar tu número de teléfono. Un asesor te ayudará en breve.",
     );
     const label = await applyPaymentVerificationLabel(ctx);
     markHandoff(ctx, "payment_missing_phone", message);
@@ -884,7 +890,7 @@ const handleSubmitPaymentReceipt = async (
       ok: false,
       response: {
         ok: false,
-        error: "No hay phone_id WhatsApp para este chat",
+        error: "No hay teléfono identificado para este chat",
         should_handoff: true,
         label_applied: label.applied,
         label_id: label.labelId,
@@ -1262,6 +1268,10 @@ export const executeAgentTool = async (
       result = await handleEscalate(ctx, rawArgs);
       break;
     default:
+      if ((TECHNICIAN_TOOL_NAMES as readonly string[]).includes(toolName)) {
+        result = await handleTechnicianTool(ctx, toolName, rawArgs);
+        break;
+      }
       result = {
         name: toolName,
         ok: false,

@@ -128,7 +128,7 @@ export const ClientProfileSection = ({
       </ProfileField>
 
       {client.whatsapp_id && client.whatsapp_id !== client.phone ? (
-        <ProfileField label="WhatsApp ID">
+        <ProfileField label="ID de canal">
           <p className={`font-mono text-sm ${CRM_SURFACES.textSecondary}`}>
             {client.whatsapp_id}
           </p>
@@ -136,7 +136,7 @@ export const ClientProfileSection = ({
       ) : null}
 
       {client.wa_name ? (
-        <ProfileField label="Nombre en WhatsApp">
+        <ProfileField label="Nombre en el canal">
           <p className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
             {client.wa_name}
           </p>
@@ -196,7 +196,7 @@ export const ClientProfileSection = ({
               : "Crear promesa 48h"}
           </CrmButton>
           <p className={`text-[11px] leading-snug ${CRM_SURFACES.textMuted}`}>
-            Solo si el servicio está suspendido. No se notifica por WhatsApp.
+            Solo si el servicio está suspendido. No se notifica por el chat.
           </p>
         </div>
       ) : null}

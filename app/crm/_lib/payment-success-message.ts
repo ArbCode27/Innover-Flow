@@ -5,7 +5,7 @@ export const DEFAULT_PAYMENT_SUCCESS_MESSAGE = `Su pago fue recibido y verificad
 
 Si todavía no formas parte de nuestra comunidad te invitamos a través del siguiente enlace. Allí compartimos información importante como reportes, promociones, caídas, o cualquier tema de su interés.
 
-No es un grupo de WhatsApp, solo recibirá información.
+No es un grupo; solo recibirá información de su cuenta.
 
 El enlace para nuestro canal es:
 https://whatsapp.com/channel/0029VbCSiefId7nGWlH4md3M
