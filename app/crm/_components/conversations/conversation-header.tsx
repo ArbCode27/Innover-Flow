@@ -52,7 +52,6 @@ export const ConversationHeader = ({
     conversation.customer_phone ||
     "Número desconocido";
   const phone =
-    client?.whatsapp_id ||
     client?.phone ||
     conversation.customer_phone ||
     "Sin identificar";

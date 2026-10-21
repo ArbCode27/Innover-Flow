@@ -307,7 +307,7 @@ export const replyToConversationWithAi = async (
       const { data: clientRow, error: clientError } = await supabase
         .from("clients")
         .select(
-          "id, name, phone, whatsapp_id, wa_name, plan, zone, account, wispro_id, envoicing",
+          "id, name, phone, plan, zone, account, wispro_id, envoicing",
         )
         .eq("id", conversation.client_id)
         .maybeSingle<AgentClientSnapshot>();
@@ -486,7 +486,7 @@ export const replyToConversationWithAi = async (
       conversationId: conversation.id,
       triggerMessageId: effectiveTriggerId,
       customerPhone: conversation.customer_phone,
-      whatsappId: client?.whatsapp_id,
+      whatsappId: conversation.customer_phone,
       clientPhone: client?.phone,
       latestInbound,
       messages: chronological,
@@ -621,7 +621,7 @@ export const replyToConversationWithAi = async (
           conversationId: conversation.id,
           triggerMessageId: effectiveTriggerId,
           customerPhone: conversation.customer_phone,
-          whatsappId: client?.whatsapp_id,
+          whatsappId: conversation.customer_phone,
           clientPhone: client?.phone,
           latestInbound,
           messages: chronological,
@@ -699,7 +699,7 @@ export const replyToConversationWithAi = async (
       const { data: linkedClient } = await supabase
         .from("clients")
         .select(
-          "id, name, phone, whatsapp_id, wa_name, plan, zone, account, wispro_id, envoicing",
+          "id, name, phone, plan, zone, account, wispro_id, envoicing",
         )
         .eq("id", decision.clientId)
         .maybeSingle<AgentClientSnapshot>();
@@ -708,7 +708,7 @@ export const replyToConversationWithAi = async (
       const { data: refreshedClient } = await supabase
         .from("clients")
         .select(
-          "id, name, phone, whatsapp_id, wa_name, plan, zone, account, wispro_id, envoicing",
+          "id, name, phone, plan, zone, account, wispro_id, envoicing",
         )
         .eq("id", client.id)
         .maybeSingle<AgentClientSnapshot>();
@@ -947,7 +947,7 @@ export const replyToConversationWithAi = async (
         conversationId: conversation.id,
         triggerMessageId: effectiveTriggerId,
         customerPhone: conversation.customer_phone,
-        whatsappId: client?.whatsapp_id,
+        whatsappId: conversation.customer_phone,
         clientPhone: client?.phone,
         latestInbound,
         messages: chronological,

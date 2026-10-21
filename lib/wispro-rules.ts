@@ -121,7 +121,7 @@ export const parseSupervisorEmployeeIds = (
     .map((item) => item.trim())
     .filter(Boolean);
 
-/** Several chats may share wispro_id. whatsapp_id is exclusive. */
+/** Two CRM rows point to the same Wispro customer. */
 export const canShareWisproId = (
   leftWisproId: string | null | undefined,
   rightWisproId: string | null | undefined,
@@ -129,22 +129,6 @@ export const canShareWisproId = (
   const left = String(leftWisproId || "").trim();
   const right = String(rightWisproId || "").trim();
   return Boolean(left) && left === right;
-};
-
-export const resolveExclusiveWhatsappReleaseIds = (input: {
-  whatsappId: string | null | undefined;
-  keepClientId: number;
-  clients: Array<{ id: number; whatsapp_id?: string | null }>;
-}): number[] => {
-  const whatsappId = String(input.whatsappId || "").trim();
-  if (!whatsappId) return [];
-  return input.clients
-    .filter(
-      (client) =>
-        client.id !== input.keepClientId &&
-        String(client.whatsapp_id || "").trim() === whatsappId,
-    )
-    .map((client) => client.id);
 };
 
 export type WisproInvoiceBalance = {

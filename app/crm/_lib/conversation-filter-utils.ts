@@ -27,7 +27,7 @@ export const matchesConversationSearch = (
   return (
     name.toLowerCase().includes(query) ||
     (client?.phone || "").toLowerCase().includes(query) ||
-    (client?.whatsapp_id || "").toLowerCase().includes(query)
+    (conversation.customer_phone || "").toLowerCase().includes(query)
   );
 };
 

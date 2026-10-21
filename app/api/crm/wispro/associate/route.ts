@@ -42,8 +42,6 @@ const associateSchema = z.object({
   invoicing: wisproInvoicingSchema,
   existingClientId: z.coerce.number().int().positive().nullable().optional(),
   conversationPhone: z.string().nullable().optional(),
-  whatsappId: z.string().nullable().optional(),
-  waName: z.string().nullable().optional(),
   linkId: z.string().trim().min(1).optional(),
 });
 
@@ -93,8 +91,6 @@ export async function POST(req: NextRequest) {
       invoicing,
       existingClientId,
       conversationPhone,
-      whatsappId,
-      waName,
     } = payload.data;
 
     linkId = payload.data.linkId || linkId;
@@ -106,7 +102,6 @@ export async function POST(req: NextRequest) {
       cedula: customer.national_identification_number,
       existingClientId: existingClientId ?? null,
       conversationPhone: maskPhone(conversationPhone),
-      whatsappId: maskPhone(whatsappId),
       accountStatus: invoicing.accountStatus,
       serviceSuspended: Boolean(invoicing.serviceSuspended),
       hasDebt: invoicing.hasDebt,
@@ -161,8 +156,6 @@ export async function POST(req: NextRequest) {
       invoicing,
       existingClientId: existingClientId ?? conversation.client_id,
       conversationPhone: conversationPhone ?? conversation.customer_phone,
-      whatsappId: whatsappId ?? conversation.customer_phone,
-      waName,
       linkId,
     });
 
@@ -171,7 +164,6 @@ export async function POST(req: NextRequest) {
       conversationId,
       clientId: client.id,
       wisproId: client.wispro_id || null,
-      hasWhatsappId: Boolean(client.whatsapp_id),
       hasEnvoicing: Boolean(client.envoicing),
       account: client.account,
     });

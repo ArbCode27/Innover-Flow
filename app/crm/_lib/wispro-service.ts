@@ -45,8 +45,6 @@ export const wisproService = {
     invoicing: WisproInvoicingSummary;
     existingClientId?: number | null;
     conversationPhone?: string | null;
-    whatsappId?: string | null;
-    waName?: string | null;
     linkId?: string | null;
   }): Promise<Client> {
     const response = await fetch("/api/crm/wispro/associate", {

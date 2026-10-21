@@ -94,8 +94,6 @@ CREATE TABLE IF NOT EXISTS public.clients (
   zone text,
   account text DEFAULT 'Prospecto',
   wispro_id text,
-  whatsapp_id text,
-  wa_name text,
   color text,
   bg text,
   initials text,
@@ -114,10 +112,12 @@ CREATE INDEX IF NOT EXISTS clients_org_idx ON public.clients (organization_id);
 CREATE INDEX IF NOT EXISTS clients_wispro_id_idx
   ON public.clients (wispro_id)
   WHERE wispro_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS clients_whatsapp_id_unique
-  ON public.clients (whatsapp_id)
-  WHERE whatsapp_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS clients_whatsapp_id_idx ON public.clients (whatsapp_id);
+CREATE UNIQUE INDEX IF NOT EXISTS clients_org_wispro_id_unique
+  ON public.clients (organization_id, wispro_id)
+  WHERE wispro_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS clients_org_cedula_unique
+  ON public.clients (organization_id, cedula)
+  WHERE cedula IS NOT NULL;
 CREATE INDEX IF NOT EXISTS clients_created_at_idx ON public.clients (created_at);
 CREATE INDEX IF NOT EXISTS clients_phone_last10_idx
   ON public.clients (
@@ -125,12 +125,6 @@ CREATE INDEX IF NOT EXISTS clients_phone_last10_idx
     right(regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g'), 10)
   )
   WHERE phone IS NOT NULL;
-CREATE INDEX IF NOT EXISTS clients_whatsapp_last10_idx
-  ON public.clients (
-    organization_id,
-    right(regexp_replace(coalesce(whatsapp_id, ''), '[^0-9]', '', 'g'), 10)
-  )
-  WHERE whatsapp_id IS NOT NULL;
 ALTER TABLE public.clients REPLICA IDENTITY FULL;
 
 -- -----------------------------------------------------------------------------

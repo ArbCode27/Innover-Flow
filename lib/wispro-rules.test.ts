@@ -12,7 +12,6 @@ import {
   parseCommercialPlanPrice,
   resolveDebtFromCurrentAccount,
   resolveApprovePayment,
-  resolveExclusiveWhatsappReleaseIds,
 } from "./wispro-rules.ts";
 
 describe("wispro debt by balance sign", () => {
@@ -121,22 +120,11 @@ describe("wispro document candidates V/E/J/G", () => {
   });
 });
 
-describe("wispro associate no-único", () => {
-  it("permite el mismo wispro_id en varios chats y libera whatsapp_id de stubs", () => {
+describe("wispro identity", () => {
+  it("reconoce el mismo wispro_id comercial", () => {
     assert.equal(canShareWisproId("abc-1", "abc-1"), true);
     assert.equal(canShareWisproId("abc-1", "abc-2"), false);
-    assert.deepEqual(
-      resolveExclusiveWhatsappReleaseIds({
-        whatsappId: "584121111111",
-        keepClientId: 10,
-        clients: [
-          { id: 10, whatsapp_id: "584121111111" },
-          { id: 11, whatsapp_id: "584121111111" },
-          { id: 12, whatsapp_id: "584122222222" },
-        ],
-      }),
-      [11],
-    );
+    assert.equal(canShareWisproId("abc-1", null), false);
   });
 });
 

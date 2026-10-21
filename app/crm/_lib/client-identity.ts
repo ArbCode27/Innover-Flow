@@ -18,30 +18,26 @@ export const isUniqueViolation = (error: { code?: string; message?: string } | n
   error?.code === "23505" ||
   Boolean(error?.message?.toLowerCase().includes("unique"));
 
-const rankIdentityMatch = (client: Client, identity: string, tail: string) => {
-  if (client.whatsapp_id === identity) return 4;
+const rankPhoneMatch = (client: Client, identity: string, tail: string) => {
   if (client.phone === identity) return 3;
-  if (tail && last10ClientDigits(client.whatsapp_id) === tail) return 2;
   if (tail && last10ClientDigits(client.phone) === tail) return 1;
   return 0;
 };
 
-export const findClientByWhatsappOrPhone = async (
+export const findClientByPhone = async (
   supabase: SupabaseClient,
   input: {
     organizationId: string;
-    whatsappId?: string | null;
     phone?: string | null;
   },
 ) => {
-  const identity =
-    normalizeClientPhone(input.whatsappId) || normalizeClientPhone(input.phone);
+  const identity = normalizeClientPhone(input.phone);
   if (!identity) return null;
 
   const tail = last10ClientDigits(identity);
-  const filters = [`whatsapp_id.eq.${identity}`, `phone.eq.${identity}`];
+  const filters = [`phone.eq.${identity}`];
   if (tail) {
-    filters.push(`whatsapp_id.like.%${tail}`, `phone.like.%${tail}`);
+    filters.push(`phone.like.%${tail}`);
   }
 
   const { data, error } = await supabase
@@ -54,43 +50,28 @@ export const findClientByWhatsappOrPhone = async (
   if (error) throw error;
 
   const ranked = ((data || []) as Client[])
-    .map((client) => ({ client, score: rankIdentityMatch(client, identity, tail) }))
+    .map((client) => ({ client, score: rankPhoneMatch(client, identity, tail) }))
     .filter((item) => item.score > 0)
     .sort((left, right) => right.score - left.score);
 
   return ranked[0]?.client ?? null;
 };
 
-export const releaseWhatsappIdFromOthers = async (
+export const findClientByWisproId = async (
   supabase: SupabaseClient,
   input: {
-    whatsappId: string;
-    keepClientId: number;
+    organizationId: string;
+    wisproId?: string | null;
   },
 ) => {
-  const whatsappId = normalizeClientPhone(input.whatsappId);
-  if (!whatsappId) return;
-
-  const { error } = await supabase
-    .from("clients")
-    .update({ whatsapp_id: null })
-    .eq("whatsapp_id", whatsappId)
-    .neq("id", input.keepClientId);
-
-  if (error) throw error;
-};
-
-export const findClientByWhatsappId = async (
-  supabase: SupabaseClient,
-  whatsappId: string,
-) => {
-  const normalized = normalizeClientPhone(whatsappId);
-  if (!normalized) return null;
+  const wisproId = input.wisproId?.trim() || "";
+  if (!wisproId) return null;
 
   const { data, error } = await supabase
     .from("clients")
     .select("*")
-    .eq("whatsapp_id", normalized)
+    .eq("organization_id", input.organizationId)
+    .eq("wispro_id", wisproId)
     .maybeSingle<Client>();
 
   if (error) throw error;
@@ -101,8 +82,6 @@ type InsertClientInput = {
   organizationId: string;
   name: string;
   phone?: string | null;
-  whatsappId?: string | null;
-  waName?: string | null;
   account?: ClientAccountStatus | null;
   plan?: string | null;
   zone?: string | null;
@@ -111,6 +90,8 @@ type InsertClientInput = {
   initials?: string | null;
   cedula?: string | null;
   appEnabled?: boolean | null;
+  wisproId?: string | null;
+  envoicing?: string | null;
   existingClientsCount?: number;
 };
 
@@ -138,7 +119,7 @@ export const insertClientRow = async (
 ) => {
   const name = input.name.trim() || UNKNOWN_CLIENT_NAME;
   const phone = normalizeClientPhone(input.phone) || null;
-  const whatsappId = normalizeClientPhone(input.whatsappId) || null;
+  const wisproId = input.wisproId?.trim() || null;
   const color = input.color
     ? { color: input.color, bg: input.bg ?? null }
     : await resolveAvatar(supabase, input.organizationId, input.existingClientsCount);
@@ -147,8 +128,6 @@ export const insertClientRow = async (
     organization_id: input.organizationId,
     name,
     phone,
-    whatsapp_id: whatsappId,
-    wa_name: input.waName?.trim() || null,
     account: input.account ?? "Prospecto",
     plan: input.plan ?? null,
     zone: input.zone ?? null,
@@ -158,6 +137,8 @@ export const insertClientRow = async (
     created_at: new Date().toISOString(),
     ...(input.cedula !== undefined ? { cedula: input.cedula } : {}),
     ...(input.appEnabled !== undefined ? { app_enabled: input.appEnabled } : {}),
+    ...(wisproId ? { wispro_id: wisproId } : {}),
+    ...(input.envoicing !== undefined ? { envoicing: input.envoicing } : {}),
   };
 
   const { data, error } = await supabase
@@ -168,9 +149,22 @@ export const insertClientRow = async (
 
   if (!error && data) return data;
 
-  if (isUniqueViolation(error) && whatsappId) {
-    const raced = await findClientByWhatsappId(supabase, whatsappId);
-    if (raced) return raced;
+  if (isUniqueViolation(error)) {
+    const racedByWispro = wisproId
+      ? await findClientByWisproId(supabase, {
+          organizationId: input.organizationId,
+          wisproId,
+        })
+      : null;
+    if (racedByWispro) return racedByWispro;
+
+    const racedByPhone = phone
+      ? await findClientByPhone(supabase, {
+          organizationId: input.organizationId,
+          phone,
+        })
+      : null;
+    if (racedByPhone) return racedByPhone;
   }
 
   if (error) throw error;

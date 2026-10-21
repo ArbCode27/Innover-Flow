@@ -71,8 +71,6 @@ export type AgentClientSnapshot = {
   id: number;
   name: string | null;
   phone: string | null;
-  whatsapp_id: string | null;
-  wa_name: string | null;
   plan: string | null;
   zone: string | null;
   account: string | null;
@@ -114,10 +112,9 @@ const buildIdentityBlock = (input: {
   const lines = [
     "Identidad de ESTE chat (inyectada por el sistema; no la inventes):",
     `- conversation_id: ${input.conversationId}`,
-    `- telefono_cliente: ${input.customerPhone || input.client?.whatsapp_id || input.client?.phone || "N/D"}`,
+    `- telefono_cliente: ${input.customerPhone || input.client?.phone || "N/D"}`,
     `- cliente_crm_id: ${input.client?.id ?? "N/D"}`,
-    `- nombre_crm: ${input.client?.name || input.client?.wa_name || "Desconocido"}`,
-    `- wa_name: ${input.client?.wa_name || "N/D"}`,
+    `- nombre_crm: ${input.client?.name || "Desconocido"}`,
     `- plan: ${planName}`,
     `- perfil_ppp: ${pppProfile}`,
     `- zona: ${input.client?.zone || "N/D"}`,
@@ -159,8 +156,8 @@ const createAgentContext = (input: {
     conversationId: input.conversationId,
     clientId: input.client?.id ?? null,
     customerPhone: input.customerPhone,
-    whatsappId: input.client?.whatsapp_id ?? null,
-    waName: input.client?.wa_name ?? null,
+    whatsappId: input.customerPhone ?? input.client?.phone ?? null,
+    waName: input.client?.name ?? null,
     runId: input.runId,
     triggerMessageId: input.triggerMessageId ?? null,
     paymentRequestedByAgentId: input.paymentRequestedByAgentId ?? null,
@@ -171,7 +168,7 @@ const createAgentContext = (input: {
     lastLookupCedula: null,
     linkedWisproId: identity.wisproId,
     linkedCedula: identity.cedula,
-    linkedClientName: identity.name || input.client?.name || input.client?.wa_name || null,
+    linkedClientName: identity.name || input.client?.name || null,
     escalated: false,
     escalateReason: null,
     escalateMessage: null,

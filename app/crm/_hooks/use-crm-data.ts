@@ -1255,7 +1255,6 @@ export const useCrmData = (agent: Agent | null) => {
       cedula: customer.national_identification_number,
       wasRelink,
       conversationPhone: selectedConversation.customer_phone || null,
-      clientWhatsappId: selectedClient?.whatsapp_id || null,
     });
 
     try {
@@ -1267,13 +1266,7 @@ export const useCrmData = (agent: Agent | null) => {
         conversationPhone:
           selectedConversation.customer_phone ??
           selectedClient?.phone ??
-          selectedClient?.whatsapp_id ??
           null,
-        whatsappId:
-          selectedClient?.whatsapp_id ??
-          selectedConversation.customer_phone ??
-          null,
-        waName: selectedClient?.wa_name ?? null,
         linkId,
       });
 
@@ -1282,7 +1275,6 @@ export const useCrmData = (agent: Agent | null) => {
         conversationId: selectedConversation.id,
         clientId: saved.id,
         wisproId: saved.wispro_id || null,
-        hasWhatsappId: Boolean(saved.whatsapp_id),
         hasEnvoicing: Boolean(saved.envoicing),
         account: saved.account,
       });

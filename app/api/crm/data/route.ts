@@ -3,6 +3,7 @@ import { z } from "zod";
 import { DEFAULT_AI_MODEL } from "@/app/crm/_lib/ai-models";
 import { DEFAULT_BOT_ENGINE, normalizeBotEngine } from "@/app/crm/_lib/bot-engine";
 import {
+  findClientByWisproId,
   insertClientRow,
   isUniqueViolation,
   normalizeClientPhone,
@@ -16,12 +17,18 @@ import {
   parseOfficeHoursConfig,
 } from "@/app/crm/_lib/office-hours";
 import { parseAiRecoveryMessages } from "@/app/crm/_lib/ai-recovery-messages";
+import { mapWisproToClientFields } from "@/app/crm/_lib/wispro-client-fields";
 import {
   canManageOrganization,
   getCrmAuthContext,
 } from "../_lib/crm-auth-context";
 import { getSupabaseAdmin } from "../_lib/supabase-admin";
-import { extractCedulaDigits } from "@/lib/client-auth-utils";
+import {
+  fetchInvoicingForWisproClientId,
+  getWisproClientById,
+  withOrganizationWispro,
+  WisproApiError,
+} from "../_lib/wispro-api";
 
 const actionSchema = z.discriminatedUnion("action", [
   z.object({
@@ -57,13 +64,9 @@ const actionSchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("createClient"),
-    name: z.string().trim().min(2).max(120),
-    phone: z.string().trim().min(7).max(30),
-    cedula: z.string().trim().max(40).optional().nullable(),
+    wispro_id: z.string().trim().min(1).max(80),
     app_enabled: z.boolean().optional(),
-    plan: z.string().trim().max(120),
-    zone: z.string().trim().max(120),
-    account: z.enum(["Al día", "Con deuda", "Suspendido", "Prospecto"]),
+    phone: z.string().trim().max(30).optional().nullable(),
   }),
   z.object({
     action: z.literal("createTicket"),
@@ -411,51 +414,87 @@ export const POST = async (request: NextRequest) => {
     }
 
     if (input.action === "createClient") {
-      const cleanCedula = input.cedula ? extractCedulaDigits(input.cedula) || null : null;
-      const normalizedPhone = normalizeClientPhone(input.phone);
-      if (!normalizedPhone) {
-        return NextResponse.json(
-          { error: "El teléfono no es válido" },
-          { status: 400 },
-        );
-      }
-
-      if (cleanCedula) {
-        const { data: existingClient } = await supabase
-          .from("clients")
-          .select("id, name")
-          .eq("organization_id", organizationId)
-          .eq("cedula", cleanCedula)
-          .maybeSingle();
-
-        if (existingClient) {
+      try {
+        const existingByWispro = await findClientByWisproId(supabase, {
+          organizationId,
+          wisproId: input.wispro_id,
+        });
+        if (existingByWispro) {
           return NextResponse.json(
-            { error: `Ya existe un cliente registrado con la cédula ${cleanCedula} (${existingClient.name})` },
+            {
+              error: `Ya existe un cliente vinculado a este registro de Wispro (${existingByWispro.name})`,
+            },
             { status: 409 },
           );
         }
-      }
 
-      try {
+        const { customer, invoicing } = await withOrganizationWispro(
+          organizationId,
+          async () => {
+            const customer = await getWisproClientById(input.wispro_id);
+            const { invoicing } = await fetchInvoicingForWisproClientId(customer.id);
+            return { customer, invoicing };
+          },
+        );
+
+        const fields = mapWisproToClientFields(customer, invoicing);
+        const phone =
+          normalizeClientPhone(input.phone) || fields.phone;
+        if (!phone) {
+          return NextResponse.json(
+            {
+              error:
+                "Wispro no trajo un teléfono válido. Ingresa el número móvil del cliente.",
+            },
+            { status: 400 },
+          );
+        }
+
+        if (fields.cedula) {
+          const { data: existingByCedula } = await supabase
+            .from("clients")
+            .select("id, name")
+            .eq("organization_id", organizationId)
+            .eq("cedula", fields.cedula)
+            .maybeSingle();
+
+          if (existingByCedula) {
+            return NextResponse.json(
+              {
+                error: `Ya existe un cliente registrado con la cédula ${fields.cedula} (${existingByCedula.name})`,
+              },
+              { status: 409 },
+            );
+          }
+        }
+
         const data = await insertClientRow(supabase, {
           organizationId,
-          name: input.name,
-          phone: normalizedPhone,
-          cedula: cleanCedula,
+          name: fields.name,
+          phone,
+          cedula: fields.cedula,
           appEnabled: input.app_enabled ?? true,
-          plan: input.plan || "Sin asignar",
-          zone: input.zone || "Sin asignar",
-          account: input.account,
+          plan: fields.plan,
+          zone: fields.zone,
+          account: fields.account,
+          wisproId: fields.wisproId,
+          envoicing: fields.envoicing,
         });
         return NextResponse.json({ data });
       } catch (error) {
+        if (error instanceof WisproApiError) {
+          return NextResponse.json(
+            { error: error.message },
+            { status: error.status },
+          );
+        }
         if (
           error &&
           typeof error === "object" &&
           isUniqueViolation(error as { code?: string; message?: string })
         ) {
           return NextResponse.json(
-            { error: "Ya existe un cliente con este WhatsApp, teléfono o cédula" },
+            { error: "Ya existe un cliente con este teléfono, cédula o Wispro ID" },
             { status: 409 },
           );
         }

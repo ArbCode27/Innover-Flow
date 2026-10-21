@@ -171,6 +171,14 @@ export const POST = async (request: NextRequest) => {
           }
         }
       } else {
+        if (!targetOrgId || !targetOrgData) {
+          throw new AppApiError(
+            APP_ERROR_CODES.ORGANIZATION_NOT_FOUND,
+            "No se pudo completar el registro. Intenta de nuevo.",
+            400,
+          );
+        }
+
         client = await insertClientRow(supabase, {
           organizationId: targetOrgId,
           name: cleanName,

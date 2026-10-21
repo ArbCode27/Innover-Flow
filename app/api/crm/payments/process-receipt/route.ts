@@ -201,20 +201,19 @@ export async function POST(req: NextRequest) {
     if (conversation.client_id) {
       const { data: client } = await supabase
         .from("clients")
-        .select("id, name, phone, whatsapp_id, wispro_id, envoicing")
+        .select("id, name, phone, wispro_id, envoicing")
         .eq("id", conversation.client_id)
         .eq("organization_id", context.organizationId)
         .maybeSingle<{
           id: number;
           name: string | null;
           phone: string | null;
-          whatsapp_id: string | null;
           wispro_id: string | null;
           envoicing: string | null;
         }>();
       linkedIdentity = resolveLinkedClientIdentity(client);
       clientName = linkedIdentity.name || client?.name?.trim() || null;
-      phoneId = client?.whatsapp_id?.trim() || client?.phone?.trim() || null;
+      phoneId = client?.phone?.trim() || null;
     }
 
     if (!linkedIdentity.linked || !linkedIdentity.wisproId) {

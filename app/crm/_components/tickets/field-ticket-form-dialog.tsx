@@ -148,7 +148,7 @@ const extractContext = (
   return {
     conversationId: conversation?.id ?? null,
     crmClientId: conversation?.client_id ?? client?.id ?? null,
-    clientName: client?.name || client?.wa_name || null,
+    clientName: client?.name || null,
     clientPhone: conversation?.customer_phone || client?.phone || null,
     addressText: location?.location_address || location?.location_name || "",
     mapsUrl,

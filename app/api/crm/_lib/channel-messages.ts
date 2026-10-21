@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { after } from "next/server";
 import {
-  findClientByWhatsappOrPhone,
+  findClientByPhone,
   insertClientRow,
   normalizeClientPhone,
 } from "@/app/crm/_lib/client-identity";
@@ -225,9 +225,8 @@ export const findOrCreateClientByPhone = async (
     throw new Error("El teléfono no es válido");
   }
 
-  const existing = await findClientByWhatsappOrPhone(supabase, {
+  const existing = await findClientByPhone(supabase, {
     organizationId,
-    whatsappId: normalized,
     phone: normalized,
   });
   if (existing) return existing;
@@ -237,8 +236,6 @@ export const findOrCreateClientByPhone = async (
     organizationId,
     name: displayName,
     phone: normalized,
-    whatsappId: normalized,
-    waName: name?.trim() || null,
     account: "Prospecto",
     plan: null,
     zone: null,

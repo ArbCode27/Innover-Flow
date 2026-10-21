@@ -123,25 +123,9 @@ export const ClientProfileSection = ({
 
       <ProfileField label="Teléfono">
         <p className={`font-mono text-sm ${CRM_SURFACES.textSecondary}`}>
-          {client.phone || client.whatsapp_id || "—"}
+          {client.phone || "—"}
         </p>
       </ProfileField>
-
-      {client.whatsapp_id && client.whatsapp_id !== client.phone ? (
-        <ProfileField label="ID de canal">
-          <p className={`font-mono text-sm ${CRM_SURFACES.textSecondary}`}>
-            {client.whatsapp_id}
-          </p>
-        </ProfileField>
-      ) : null}
-
-      {client.wa_name ? (
-        <ProfileField label="Nombre en el canal">
-          <p className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
-            {client.wa_name}
-          </p>
-        </ProfileField>
-      ) : null}
 
       {locationLabel ? (
         <ProfileField label="Ubicación">

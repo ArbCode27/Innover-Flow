@@ -1469,6 +1469,31 @@ export const fetchInvoicingForWisproClientId = async (
   return { account, contracts, invoicing };
 };
 
+export const getWisproClientById = async (
+  wisproClientId: string,
+): Promise<WisproCustomer> => {
+  const clientId = wisproClientId.trim();
+  if (!clientId) {
+    throw new WisproApiError("wispro_id es requerido", {
+      status: 400,
+      code: "invalid_response",
+    });
+  }
+
+  const payload = await wisproGet(`/clients/${encodeURIComponent(clientId)}`, {});
+  const record = extractDataObject(payload);
+  const customer = normalizeWisproCustomer(record);
+
+  if (!customer) {
+    throw new WisproApiError("No se encontró el cliente en Wispro", {
+      status: 404,
+      code: "invalid_response",
+    });
+  }
+
+  return customer;
+};
+
 const lookupClientsByNationalIdExact = async (
   document: string,
   fallbackDigits: string,

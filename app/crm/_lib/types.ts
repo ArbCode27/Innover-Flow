@@ -127,8 +127,6 @@ export interface Client {
   zone: string | null;
   account: ClientAccountStatus | null;
   wispro_id?: string | null;
-  whatsapp_id?: string | null;
-  wa_name?: string | null;
   color: string | null;
   bg: string | null;
   initials: string | null;
@@ -181,8 +179,6 @@ export interface AssociateWisproInput {
   existingClientsCount?: number;
   existingClientId?: number | null;
   conversationPhone?: string | null;
-  whatsappId?: string | null;
-  waName?: string | null;
   /** Correlation id for server logs (optional). */
   linkId?: string | null;
 }
@@ -339,13 +335,9 @@ export interface CrmData {
 }
 
 export interface CreateClientInput {
-  name: string;
-  phone: string;
-  cedula?: string;
+  wispro_id: string;
   app_enabled?: boolean;
-  plan: string;
-  zone: string;
-  account: ClientAccountStatus;
+  phone?: string;
 }
 
 export interface CreateTicketInput {

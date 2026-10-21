@@ -23,7 +23,9 @@ export const ClientsView = ({ clients, tickets, onCreateClient }: ClientsViewPro
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className={`text-xl font-semibold md:text-2xl ${CRM_SURFACES.textPrimary}`}>Clientes</h2>
-          <p className={`text-sm ${CRM_SURFACES.textMuted}`}>Base de datos de suscriptores</p>
+          <p className={`text-sm ${CRM_SURFACES.textMuted}`}>
+            Suscriptores vinculados a Wispro
+          </p>
         </div>
         <CrmButton type="button" onClick={() => setIsDialogOpen(true)} className="w-full sm:w-auto">
           <Plus className="mr-2 size-4" aria-hidden="true" />

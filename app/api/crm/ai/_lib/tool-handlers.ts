@@ -445,8 +445,6 @@ const tryAssociateLookupMatch = async (
       existingClientId: conversation.client_id ?? ctx.clientId,
       conversationPhone:
         conversation.customer_phone ?? ctx.customerPhone ?? ctx.whatsappId,
-      whatsappId: ctx.whatsappId,
-      waName: ctx.waName,
     });
 
     ctx.clientId = client.id;
