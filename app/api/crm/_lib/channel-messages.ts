@@ -1,19 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { after } from "next/server";
 import {
   findClientByPhone,
   insertClientRow,
   normalizeClientPhone,
 } from "@/app/crm/_lib/client-identity";
-import { buildChatPushPreview } from "@/lib/chat-push-preview";
-import {
-  buildExpoChatPushMessage,
-  collectUnregisteredExpoTokens,
-  sendExpoPushMessages,
-} from "@/lib/expo-push";
+import { enqueueAppPush, notifyAppChatPush } from "@/lib/app-push";
 import { logMessageEvent, previewMessage } from "@/lib/message-event-log";
-
-const LOG_PREFIX = "[APP_CHANNEL]";
 
 export const normalizeChannelPhone = (phone: string) =>
   normalizeClientPhone(phone) || phone.replace(/\D/g, "");
@@ -120,14 +112,14 @@ export const persistOutboundMessage = async (
     .eq("id", input.conversationId)
     .eq("organization_id", input.organizationId);
 
-  enqueueAppChatPush(() =>
-    notifyAppDevices(supabase, {
+  enqueueAppPush(() =>
+    notifyAppChatPush(supabase, {
       organizationId: input.organizationId,
       conversationId: input.conversationId,
       messageId: Number(saved.id),
       type: saved.type || "out",
       senderType: saved.sender_type || input.senderType,
-      channel: readMessageChannel(saved.metadata),
+      channel: "app",
       content: input.content,
       mediaType: input.mediaType ?? null,
       latitude: input.latitude ?? null,
@@ -294,135 +286,4 @@ export const findOrCreateOpenConversation = async (
     throw createError || new Error("No se pudo abrir la conversación");
   }
   return created;
-};
-
-const enqueueAppChatPush = (task: () => Promise<void>) => {
-  const run = () => {
-    void task().catch((error) => {
-      console.warn(`${LOG_PREFIX} push_unhandled`, {
-        error: error instanceof Error ? error.message : "unknown",
-      });
-    });
-  };
-
-  try {
-    after(run);
-  } catch {
-    run();
-  }
-};
-
-const readMessageChannel = (metadata: unknown) => {
-  if (!metadata || typeof metadata !== "object") return "app";
-  const channel = (metadata as Record<string, unknown>).channel;
-  return typeof channel === "string" && channel.trim() ? channel.trim() : "app";
-};
-
-export const notifyAppDevices = async (
-  supabase: SupabaseClient,
-  input: {
-    organizationId: string;
-    conversationId: number;
-    messageId: number;
-    type: string;
-    senderType: string;
-    channel?: string | null;
-    content: string;
-    mediaType?: ChannelMediaType | null;
-    latitude?: number | null;
-    longitude?: number | null;
-  },
-) => {
-  try {
-    if (input.type !== "out") return;
-    if (input.senderType !== "agent" && input.senderType !== "bot") return;
-    const channel = readMessageChannel({ channel: input.channel });
-    if (channel !== "app") return;
-
-    const { data: conversation, error: conversationError } = await supabase
-      .from("conversations")
-      .select("client_id")
-      .eq("id", input.conversationId)
-      .eq("organization_id", input.organizationId)
-      .maybeSingle();
-
-    if (conversationError) {
-      console.warn(`${LOG_PREFIX} push_conversation_lookup_failed`, {
-        conversationId: input.conversationId,
-        error: conversationError.message,
-      });
-      return;
-    }
-
-    const clientId = conversation?.client_id;
-    if (!clientId) return;
-
-    const { data: devices, error } = await supabase
-      .from("app_devices")
-      .select("id, push_token, platform")
-      .eq("organization_id", input.organizationId)
-      .eq("client_id", clientId);
-
-    if (error) {
-      if (error.code !== "PGRST205" && error.code !== "42P01") {
-        console.warn(`${LOG_PREFIX} devices_lookup_failed`, error.message);
-      }
-      return;
-    }
-
-    const tokens = [
-      ...new Set(
-        (devices || [])
-          .map((row) => String(row.push_token || "").trim())
-          .filter(Boolean),
-      ),
-    ];
-    if (!tokens.length) return;
-
-    const body = buildChatPushPreview({
-      content: input.content,
-      mediaType: input.mediaType,
-      latitude: input.latitude,
-      longitude: input.longitude,
-    });
-    const messages = tokens.map((token) =>
-      buildExpoChatPushMessage({
-        token,
-        conversationId: input.conversationId,
-        messageId: input.messageId,
-        body,
-      }),
-    );
-
-    const { tickets } = await sendExpoPushMessages(messages);
-    const staleTokens = collectUnregisteredExpoTokens(tokens, tickets);
-    if (staleTokens.length) {
-      const { error: deleteError } = await supabase
-        .from("app_devices")
-        .delete()
-        .eq("organization_id", input.organizationId)
-        .in("push_token", staleTokens);
-      if (deleteError) {
-        console.warn(`${LOG_PREFIX} stale_token_delete_failed`, deleteError.message);
-      } else {
-        console.log(`${LOG_PREFIX} stale_tokens_deleted`, {
-          conversationId: input.conversationId,
-          count: staleTokens.length,
-        });
-      }
-    }
-
-    console.log(`${LOG_PREFIX} push_sent`, {
-      conversationId: input.conversationId,
-      messageId: input.messageId,
-      devices: tokens.length,
-      stale: staleTokens.length,
-    });
-  } catch (error) {
-    console.warn(`${LOG_PREFIX} push_failed`, {
-      conversationId: input.conversationId,
-      messageId: input.messageId,
-      error: error instanceof Error ? error.message : "unknown",
-    });
-  }
 };

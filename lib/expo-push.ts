@@ -1,12 +1,19 @@
 export const EXPO_PUSH_SEND_URL = "https://exp.host/--/api/v2/push/send";
-export const EXPO_PUSH_BATCH_SIZE = 100;
 export const EXPO_DEVICE_NOT_REGISTERED = "DeviceNotRegistered";
 
 export type ExpoChatPushData = {
   kind: "chat_message";
-  conversationId: string;
-  messageId: string;
+  conversationId: number;
+  messageId: number;
   direction: "out";
+};
+
+export type ExpoTicketPushData = {
+  kind: "field_ticket";
+  ticketId: string;
+  publicId: number | null;
+  title: string | null;
+  conversationId: number;
 };
 
 export type ExpoPushMessage = {
@@ -14,10 +21,10 @@ export type ExpoPushMessage = {
   title: string;
   body: string;
   sound: "default";
-  channelId: "star-chat";
+  channelId: "star-chat" | "star-ticket";
   priority: "high";
   collapseId: string;
-  data: ExpoChatPushData;
+  data: ExpoChatPushData | ExpoTicketPushData;
 };
 
 export type ExpoPushTicket = {
@@ -27,24 +34,55 @@ export type ExpoPushTicket = {
   details?: { error?: string };
 };
 
+const toPushNumber = (value: number | string) => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 export const buildExpoChatPushMessage = (input: {
   token: string;
   conversationId: number | string;
   messageId: number | string;
   body: string;
+}): ExpoPushMessage => {
+  const conversationId = toPushNumber(input.conversationId);
+  return {
+    to: input.token,
+    title: "Star Conectados",
+    body: input.body,
+    sound: "default",
+    channelId: "star-chat",
+    priority: "high",
+    collapseId: String(conversationId),
+    data: {
+      kind: "chat_message",
+      conversationId,
+      messageId: toPushNumber(input.messageId),
+      direction: "out",
+    },
+  };
+};
+
+export const buildExpoTicketPushMessage = (input: {
+  token: string;
+  ticketId: string;
+  publicId: number | null;
+  title: string | null;
+  conversationId: number | string | null;
 }): ExpoPushMessage => ({
   to: input.token,
-  title: "Star Conectados",
-  body: input.body,
+  title: "Visita técnica registrada",
+  body: "Hay un seguimiento de visita en tu cuenta. Ábrelo en Mi ticket.",
   sound: "default",
-  channelId: "star-chat",
+  channelId: "star-ticket",
   priority: "high",
-  collapseId: `chat-${input.conversationId}`,
+  collapseId: input.ticketId,
   data: {
-    kind: "chat_message",
-    conversationId: String(input.conversationId),
-    messageId: String(input.messageId),
-    direction: "out",
+    kind: "field_ticket",
+    ticketId: input.ticketId,
+    publicId: input.publicId,
+    title: input.title,
+    conversationId: toPushNumber(input.conversationId ?? 0),
   },
 });
 
@@ -93,22 +131,48 @@ export const sendExpoPushMessages = async (
   const headers = expoPushHeaders();
   const tickets: ExpoPushTicket[] = [];
 
-  for (let index = 0; index < messages.length; index += EXPO_PUSH_BATCH_SIZE) {
-    const batch = messages.slice(index, index + EXPO_PUSH_BATCH_SIZE);
-    const response = await fetch(EXPO_PUSH_SEND_URL, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(batch),
-    });
-    const payload = await response.json().catch(() => null);
-    tickets.push(...normalizeExpoTickets(payload));
-    if (!response.ok) {
-      console.warn("[EXPO_PUSH] send_failed", {
+  for (const message of messages) {
+    try {
+      const response = await fetch(EXPO_PUSH_SEND_URL, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(message),
+      });
+      const payload = await response.json().catch(() => null);
+      const parsed = normalizeExpoTickets(payload);
+      const ticket = parsed[0] || {
+        status: response.ok ? "ok" : "error",
+        message: response.ok ? undefined : `HTTP ${response.status}`,
+      };
+      tickets.push(ticket);
+
+      if (!response.ok) {
+        console.warn("[EXPO_PUSH] send_failed", {
+          kind: message.data.kind,
+          status: response.status,
+          expoTicketId: ticket.id ?? null,
+          errors:
+            payload && typeof payload === "object"
+              ? (payload as { errors?: unknown }).errors
+              : null,
+        });
+        continue;
+      }
+
+      console.log("[EXPO_PUSH] sent", {
+        kind: message.data.kind,
         status: response.status,
-        errors:
-          payload && typeof payload === "object"
-            ? (payload as { errors?: unknown }).errors
-            : null,
+        expoTicketId: ticket.id ?? null,
+        expoStatus: ticket.status ?? null,
+      });
+    } catch (error) {
+      console.warn("[EXPO_PUSH] send_failed", {
+        kind: message.data.kind,
+        error: error instanceof Error ? error.message : "unknown",
+      });
+      tickets.push({
+        status: "error",
+        message: error instanceof Error ? error.message : "unknown",
       });
     }
   }

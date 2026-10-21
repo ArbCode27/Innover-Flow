@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { enqueueAppPush, notifyAppFieldTicketPush } from "@/lib/app-push";
 import {
   assertVisitWindowRange,
   buildMapsUrl,
@@ -585,6 +586,19 @@ export const createFieldTicket = async (
   const created = mapFieldTicket(data);
   const wisproIssueId = created.wisproIssueId || created.issueId;
   const wisproOrderId = created.wisproOrderId || `ord-${created.id}`;
+  const finishCreatedTicket = (ticket: FieldTicket) => {
+    enqueueAppPush(() =>
+      notifyAppFieldTicketPush(supabase, {
+        organizationId,
+        clientId: ticket.crmClientId,
+        conversationId: ticket.conversationId,
+        ticketId: ticket.id,
+        publicId: ticket.publicId > 0 ? ticket.publicId : null,
+        title: ticket.title?.trim() || null,
+      }),
+    );
+    return ticket;
+  };
   if (
     created.wisproIssueId !== wisproIssueId ||
     created.wisproOrderId !== wisproOrderId
@@ -600,10 +614,10 @@ export const createFieldTicket = async (
       .select(DETAIL_COLUMNS)
       .single();
     if (!patchError && patched) {
-      return withCategoryName(mapFieldTicket(patched), category);
+      return finishCreatedTicket(withCategoryName(mapFieldTicket(patched), category));
     }
   }
-  return withCategoryName(created, category);
+  return finishCreatedTicket(withCategoryName(created, category));
 };
 
 export const updateFieldTicket = async (

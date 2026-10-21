@@ -7,12 +7,15 @@ import {
 } from "./chat-push-preview.ts";
 import {
   buildExpoChatPushMessage,
+  buildExpoTicketPushMessage,
   collectUnregisteredExpoTokens,
   normalizeExpoTickets,
+  sendExpoPushMessages,
 } from "./expo-push.ts";
 
 describe("buildChatPushPreview", () => {
   it("usa copys fijos para media y ubicación", () => {
+    assert.equal(buildChatPushPreview({ mediaType: "image" }), "Te enviaron una imagen");
     assert.equal(buildChatPushPreview({ mediaType: "image" }), CHAT_PUSH_MEDIA_PREVIEW.image);
     assert.equal(buildChatPushPreview({ mediaType: "audio" }), CHAT_PUSH_MEDIA_PREVIEW.audio);
     assert.equal(buildChatPushPreview({ mediaType: "video" }), CHAT_PUSH_MEDIA_PREVIEW.video);
@@ -59,7 +62,7 @@ describe("buildChatPushPreview", () => {
 });
 
 describe("expo push tickets", () => {
-  it("arma el payload que lee Star Conectados", () => {
+  it("arma el payload de chat que lee Star Conectados", () => {
     const message = buildExpoChatPushMessage({
       token: "ExponentPushToken[abc]",
       conversationId: 44,
@@ -69,13 +72,39 @@ describe("expo push tickets", () => {
 
     assert.equal(message.title, "Star Conectados");
     assert.equal(message.channelId, "star-chat");
-    assert.equal(message.collapseId, "chat-44");
+    assert.equal(message.collapseId, "44");
     assert.equal(message.priority, "high");
     assert.deepEqual(message.data, {
       kind: "chat_message",
-      conversationId: "44",
-      messageId: "90",
+      conversationId: 44,
+      messageId: 90,
       direction: "out",
+    });
+  });
+
+  it("arma el payload de ticket de campo que lee Star Conectados", () => {
+    const message = buildExpoTicketPushMessage({
+      token: "ExponentPushToken[abc]",
+      ticketId: "2f1c0a10-9c3a-4b11-8d2e-1a2b3c4d5e6f",
+      publicId: 2046,
+      title: "Caída de fibra",
+      conversationId: 44,
+    });
+
+    assert.equal(message.title, "Visita técnica registrada");
+    assert.equal(
+      message.body,
+      "Hay un seguimiento de visita en tu cuenta. Ábrelo en Mi ticket.",
+    );
+    assert.doesNotMatch(message.body, /[0-9a-f-]{36}/i);
+    assert.equal(message.channelId, "star-ticket");
+    assert.equal(message.collapseId, "2f1c0a10-9c3a-4b11-8d2e-1a2b3c4d5e6f");
+    assert.deepEqual(message.data, {
+      kind: "field_ticket",
+      ticketId: "2f1c0a10-9c3a-4b11-8d2e-1a2b3c4d5e6f",
+      publicId: 2046,
+      title: "Caída de fibra",
+      conversationId: 44,
     });
   });
 
@@ -90,5 +119,45 @@ describe("expo push tickets", () => {
     });
 
     assert.deepEqual(collectUnregisteredExpoTokens(tokens, tickets), ["token-b"]);
+  });
+
+  it("envía un request por token a Expo Push", async () => {
+    const calls: unknown[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: unknown, init?: { body?: unknown }) => {
+      calls.push(JSON.parse(String(init?.body || "{}")));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { status: "ok", id: `expo-${calls.length}` } }),
+      };
+    }) as typeof fetch;
+
+    try {
+      const { tickets } = await sendExpoPushMessages([
+        buildExpoChatPushMessage({
+          token: "ExponentPushToken[one]",
+          conversationId: 1,
+          messageId: 2,
+          body: "Hola",
+        }),
+        buildExpoTicketPushMessage({
+          token: "ExponentPushToken[two]",
+          ticketId: "ticket-1",
+          publicId: 9,
+          title: "Visita",
+          conversationId: 1,
+        }),
+      ]);
+      assert.equal(calls.length, 2);
+      assert.equal((calls[0] as { to: string }).to, "ExponentPushToken[one]");
+      assert.equal((calls[1] as { to: string }).to, "ExponentPushToken[two]");
+      assert.deepEqual(
+        tickets.map((ticket) => ticket.id),
+        ["expo-1", "expo-2"],
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

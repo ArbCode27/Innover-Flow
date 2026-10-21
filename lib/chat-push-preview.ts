@@ -1,7 +1,7 @@
 export const CHAT_PUSH_PREVIEW_MAX_LENGTH = 80;
 
 export const CHAT_PUSH_MEDIA_PREVIEW = {
-  image: "Te enviaron una foto",
+  image: "Te enviaron una imagen",
   audio: "Te enviaron un audio",
   video: "Te enviaron un video",
   document: "Te enviaron un archivo",

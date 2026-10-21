@@ -180,6 +180,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
 CREATE INDEX IF NOT EXISTS messages_conv_idx ON public.messages (conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS messages_wa_idx ON public.messages (wa_message_id);
 CREATE INDEX IF NOT EXISTS messages_org_idx ON public.messages (organization_id);
+ALTER TABLE public.messages REPLICA IDENTITY FULL;
 
 -- -----------------------------------------------------------------------------
 -- 8. TABLA: TICKETS
@@ -276,6 +277,7 @@ CREATE INDEX IF NOT EXISTS field_tickets_conversation_idx
 CREATE INDEX IF NOT EXISTS field_tickets_crm_client_idx
   ON public.field_tickets (crm_client_id)
   WHERE crm_client_id IS NOT NULL;
+ALTER TABLE public.field_tickets REPLICA IDENTITY FULL;
 CREATE INDEX IF NOT EXISTS field_tickets_employee_status_idx
   ON public.field_tickets (employee_id, status)
   WHERE status IN ('open', 'scheduled');
