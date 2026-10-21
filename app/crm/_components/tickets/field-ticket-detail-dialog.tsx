@@ -11,7 +11,7 @@ import {
 import { CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
 import {
   buildMapsUrl,
-  fieldTicketKindLabel,
+  fieldTicketCategoryLabel,
   fieldTicketPriorityLabel,
   fieldTicketStatusLabel,
   type FieldTicket,
@@ -52,7 +52,7 @@ export const FieldTicketDetailDialog = ({
           </div>
           <div>
             <dt className={CRM_SURFACES.textMuted}>Categoría</dt>
-            <dd>{fieldTicketKindLabel(ticket.kind, ticket.title)}</dd>
+            <dd>{fieldTicketCategoryLabel(ticket)}</dd>
           </div>
           <div>
             <dt className={CRM_SURFACES.textMuted}>Prioridad</dt>

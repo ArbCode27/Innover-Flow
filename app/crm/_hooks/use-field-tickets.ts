@@ -2,14 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { FieldTicket, Technician } from "@/lib/field-tickets";
+import { mapFieldTicketRow, type FieldTicket, type Technician } from "@/lib/field-tickets";
+import type { TicketCategory } from "@/lib/ticket-categories";
+import { ensureCrmRealtimeAuth, getSupabaseClient } from "../_lib/supabase";
 
 export type CreatePayload = {
   title: string;
   description?: string | null;
   cause?: string | null;
+  categoryId?: string | null;
   priority: FieldTicket["priority"];
-  kind: FieldTicket["kind"];
+  kind?: FieldTicket["kind"];
   employeeId?: string | null;
   mapsUrl?: string | null;
   latitude?: number | null;
@@ -35,9 +38,10 @@ const parseError = async (response: Response) => {
   return error;
 };
 
-export const useFieldTickets = (enabled: boolean) => {
+export const useFieldTickets = (enabled: boolean, organizationId?: string) => {
   const [tickets, setTickets] = useState<FieldTicket[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [categories, setCategories] = useState<TicketCategory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,9 +49,10 @@ export const useFieldTickets = (enabled: boolean) => {
     if (!enabled) return;
     setIsLoading(true);
     try {
-      const [ticketsRes, techniciansRes] = await Promise.all([
+      const [ticketsRes, techniciansRes, categoriesRes] = await Promise.all([
         fetch("/api/crm/field-tickets"),
         fetch("/api/crm/technicians"),
+        fetch("/api/crm/ticket-categories"),
       ]);
       if (!ticketsRes.ok) throw await parseError(ticketsRes);
       const ticketsPayload = (await ticketsRes.json()) as { data: FieldTicket[] };
@@ -55,6 +60,12 @@ export const useFieldTickets = (enabled: boolean) => {
       if (techniciansRes.ok) {
         const techPayload = (await techniciansRes.json()) as { data: Technician[] };
         setTechnicians(techPayload.data || []);
+      }
+      if (categoriesRes.ok) {
+        const categoriesPayload = (await categoriesRes.json()) as {
+          data: TicketCategory[];
+        };
+        setCategories(categoriesPayload.data || []);
       }
       setError(null);
     } catch (loadError) {
@@ -69,6 +80,60 @@ export const useFieldTickets = (enabled: boolean) => {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!enabled || !organizationId) return;
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+
+    const start = async () => {
+      await ensureCrmRealtimeAuth();
+      if (cancelled) return;
+      const supabase = getSupabaseClient();
+      const channel = supabase
+        .channel(`realtime:field_tickets:${organizationId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "field_tickets",
+            filter: `organization_id=eq.${organizationId}`,
+          },
+          (payload) => {
+            const event = payload.eventType;
+            if (event === "DELETE") {
+              const deletedId = String((payload.old as { id?: string })?.id || "");
+              if (!deletedId) return;
+              setTickets((current) => current.filter((ticket) => ticket.id !== deletedId));
+              return;
+            }
+            const mapped = mapFieldTicketRow(
+              (payload.new || {}) as Record<string, unknown>,
+            );
+            if (!mapped.id) return;
+            setTickets((current) => {
+              const exists = current.some((ticket) => ticket.id === mapped.id);
+              if (!exists) return [mapped, ...current];
+              return current.map((ticket) =>
+                ticket.id === mapped.id ? { ...ticket, ...mapped } : ticket,
+              );
+            });
+          },
+        )
+        .subscribe();
+
+      unsubscribe = () => {
+        void supabase.removeChannel(channel);
+      };
+    };
+
+    void start();
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [enabled, organizationId]);
 
   const getTicket = useCallback(async (id: string) => {
     const response = await fetch(`/api/crm/field-tickets/${id}`);
@@ -179,6 +244,7 @@ export const useFieldTickets = (enabled: boolean) => {
   return {
     tickets,
     technicians,
+    categories,
     isLoading,
     error,
     refresh,

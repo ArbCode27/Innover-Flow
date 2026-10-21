@@ -33,20 +33,30 @@ export const POST = async (request: NextRequest) => {
 
     const supabase = getSupabaseAdmin();
     const now = new Date().toISOString();
-    const { data, error } = await supabase
+    const payload = {
+      organization_id: session.organizationId,
+      client_id: session.clientId,
+      push_token: parsed.push_token,
+      platform: parsed.platform,
+      updated_at: now,
+    };
+    // Tabla real: public.app_devices
+    // UPSERT preferido: UNIQUE (client_id, push_token)
+    // Fallback: UNIQUE (organization_id, push_token) reasigna el token al cliente del login.
+    const first = await supabase
       .from("app_devices")
-      .upsert(
-        {
-          organization_id: session.organizationId,
-          client_id: session.clientId,
-          push_token: parsed.push_token,
-          platform: parsed.platform,
-          updated_at: now,
-        },
-        { onConflict: "organization_id,push_token" },
-      )
-      .select("id, platform")
+      .upsert(payload, { onConflict: "client_id,push_token" })
+      .select("id, client_id, platform, updated_at")
       .single();
+
+    const { data, error } =
+      first.error
+        ? await supabase
+            .from("app_devices")
+            .upsert(payload, { onConflict: "organization_id,push_token" })
+            .select("id, client_id, platform, updated_at")
+            .single()
+        : first;
 
     if (error) throw error;
 

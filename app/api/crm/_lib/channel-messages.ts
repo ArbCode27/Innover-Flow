@@ -1,10 +1,22 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { CRM_COLORS } from "@/app/crm/_lib/constants";
-import { getInitials } from "@/app/crm/_lib/formatters";
+import { after } from "next/server";
+import {
+  findClientByWhatsappOrPhone,
+  insertClientRow,
+  normalizeClientPhone,
+} from "@/app/crm/_lib/client-identity";
+import { buildChatPushPreview } from "@/lib/chat-push-preview";
+import {
+  buildExpoChatPushMessage,
+  collectUnregisteredExpoTokens,
+  sendExpoPushMessages,
+} from "@/lib/expo-push";
+import { logMessageEvent, previewMessage } from "@/lib/message-event-log";
 
 const LOG_PREFIX = "[APP_CHANNEL]";
 
-export const normalizeChannelPhone = (phone: string) => phone.replace(/\D/g, "");
+export const normalizeChannelPhone = (phone: string) =>
+  normalizeClientPhone(phone) || phone.replace(/\D/g, "");
 
 export type ChannelMediaType = "audio" | "image" | "video" | "document" | "location";
 
@@ -40,8 +52,6 @@ export type PersistInboundInput = {
   locationAddress?: string | null;
 };
 
-const defaultColor = CRM_COLORS[0];
-
 export const persistOutboundMessage = async (
   supabase: SupabaseClient,
   input: PersistOutboundInput,
@@ -74,7 +84,31 @@ export const persistOutboundMessage = async (
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    logMessageEvent(
+      "db_insert_failed",
+      {
+        direction: "out",
+        conversationId: input.conversationId,
+        organizationId: input.organizationId,
+        senderType: input.senderType,
+        error: error.message,
+      },
+      "error",
+    );
+    throw error;
+  }
+
+  logMessageEvent("db_insert", {
+    direction: "out",
+    conversationId: input.conversationId,
+    messageId: saved.id,
+    senderType: input.senderType,
+    action:
+      typeof input.metadata?.action === "string" ? input.metadata.action : null,
+    mediaType: input.mediaType ?? null,
+    preview: previewMessage(input.content),
+  });
 
   await supabase
     .from("conversations")
@@ -86,12 +120,20 @@ export const persistOutboundMessage = async (
     .eq("id", input.conversationId)
     .eq("organization_id", input.organizationId);
 
-  void notifyAppDevices(supabase, {
-    organizationId: input.organizationId,
-    conversationId: input.conversationId,
-    preview: input.content.slice(0, 180),
-    direction: "out",
-  });
+  enqueueAppChatPush(() =>
+    notifyAppDevices(supabase, {
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      messageId: Number(saved.id),
+      type: saved.type || "out",
+      senderType: saved.sender_type || input.senderType,
+      channel: readMessageChannel(saved.metadata),
+      content: input.content,
+      mediaType: input.mediaType ?? null,
+      latitude: input.latitude ?? null,
+      longitude: input.longitude ?? null,
+    }),
+  );
 
   return saved;
 };
@@ -128,7 +170,28 @@ export const persistInboundMessage = async (
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    logMessageEvent(
+      "db_insert_failed",
+      {
+        direction: "in",
+        conversationId: input.conversationId,
+        organizationId: input.organizationId,
+        error: error.message,
+      },
+      "error",
+    );
+    throw error;
+  }
+
+  logMessageEvent("db_insert", {
+    direction: "in",
+    conversationId: input.conversationId,
+    messageId: saved.id,
+    senderType: "client",
+    mediaType: input.mediaType ?? null,
+    preview: previewMessage(input.content),
+  });
 
   const { data: conversation } = await supabase
     .from("conversations")
@@ -157,57 +220,29 @@ export const findOrCreateClientByPhone = async (
   phone: string,
   name?: string | null,
 ) => {
-  const normalized = normalizeChannelPhone(phone);
-  if (normalized.length < 8) {
+  const normalized = normalizeClientPhone(phone);
+  if (!normalized) {
     throw new Error("El teléfono no es válido");
   }
 
-  const { data: byPhone, error: byPhoneError } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("organization_id", organizationId)
-    .eq("phone", normalized)
-    .limit(1)
-    .maybeSingle();
-  if (byPhoneError) throw byPhoneError;
-  if (byPhone) return byPhone;
-
-  const { data: byWhatsapp, error: byWhatsappError } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("organization_id", organizationId)
-    .eq("whatsapp_id", normalized)
-    .limit(1)
-    .maybeSingle();
-  if (byWhatsappError) throw byWhatsappError;
-  if (byWhatsapp) return byWhatsapp;
+  const existing = await findClientByWhatsappOrPhone(supabase, {
+    organizationId,
+    whatsappId: normalized,
+    phone: normalized,
+  });
+  if (existing) return existing;
 
   const displayName = name?.trim() || `Cliente ${normalized.slice(-4)}`;
-  const { data: created, error: createError } = await supabase
-    .from("clients")
-    .insert({
-      organization_id: organizationId,
-      name: displayName,
-      phone: normalized,
-      account: "Prospecto",
-      color: defaultColor.color,
-      bg: defaultColor.bg,
-      initials: getInitials(displayName),
-    })
-    .select("*")
-    .single();
-
-  if (!createError && created) return created;
-
-  const { data: raced } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("organization_id", organizationId)
-    .eq("phone", normalized)
-    .limit(1)
-    .maybeSingle();
-  if (raced) return raced;
-  throw createError || new Error("No se pudo crear el cliente");
+  return insertClientRow(supabase, {
+    organizationId,
+    name: displayName,
+    phone: normalized,
+    whatsappId: normalized,
+    waName: name?.trim() || null,
+    account: "Prospecto",
+    plan: null,
+    zone: null,
+  });
 };
 
 export const findOrCreateOpenConversation = async (
@@ -264,78 +299,133 @@ export const findOrCreateOpenConversation = async (
   return created;
 };
 
+const enqueueAppChatPush = (task: () => Promise<void>) => {
+  const run = () => {
+    void task().catch((error) => {
+      console.warn(`${LOG_PREFIX} push_unhandled`, {
+        error: error instanceof Error ? error.message : "unknown",
+      });
+    });
+  };
+
+  try {
+    after(run);
+  } catch {
+    run();
+  }
+};
+
+const readMessageChannel = (metadata: unknown) => {
+  if (!metadata || typeof metadata !== "object") return "app";
+  const channel = (metadata as Record<string, unknown>).channel;
+  return typeof channel === "string" && channel.trim() ? channel.trim() : "app";
+};
+
 export const notifyAppDevices = async (
   supabase: SupabaseClient,
   input: {
     organizationId: string;
     conversationId: number;
-    preview: string;
-    direction: "in" | "out";
+    messageId: number;
+    type: string;
+    senderType: string;
+    channel?: string | null;
+    content: string;
+    mediaType?: ChannelMediaType | null;
+    latitude?: number | null;
+    longitude?: number | null;
   },
 ) => {
-  const { data: conversation } = await supabase
-    .from("conversations")
-    .select("client_id")
-    .eq("id", input.conversationId)
-    .eq("organization_id", input.organizationId)
-    .maybeSingle();
+  try {
+    if (input.type !== "out") return;
+    if (input.senderType !== "agent" && input.senderType !== "bot") return;
+    const channel = readMessageChannel({ channel: input.channel });
+    if (channel !== "app") return;
 
-  const clientId = conversation?.client_id;
-  if (!clientId) return;
+    const { data: conversation, error: conversationError } = await supabase
+      .from("conversations")
+      .select("client_id")
+      .eq("id", input.conversationId)
+      .eq("organization_id", input.organizationId)
+      .maybeSingle();
 
-  const { data: devices, error } = await supabase
-    .from("app_devices")
-    .select("id, push_token, platform")
-    .eq("organization_id", input.organizationId)
-    .eq("client_id", clientId);
-
-  if (error) {
-    if (error.code !== "PGRST205" && error.code !== "42P01") {
-      console.warn(`${LOG_PREFIX} devices_lookup_failed`, error.message);
+    if (conversationError) {
+      console.warn(`${LOG_PREFIX} push_conversation_lookup_failed`, {
+        conversationId: input.conversationId,
+        error: conversationError.message,
+      });
+      return;
     }
-    return;
-  }
 
-  const tokens = (devices || [])
-    .map((row) => String(row.push_token || "").trim())
-    .filter(Boolean);
-  if (!tokens.length) return;
+    const clientId = conversation?.client_id;
+    if (!clientId) return;
 
-  const serverKey = process.env.FCM_SERVER_KEY?.trim();
-  if (!serverKey) {
-    console.log(`${LOG_PREFIX} push_skipped_no_fcm`, {
-      conversationId: input.conversationId,
-      devices: tokens.length,
+    const { data: devices, error } = await supabase
+      .from("app_devices")
+      .select("id, push_token, platform")
+      .eq("organization_id", input.organizationId)
+      .eq("client_id", clientId);
+
+    if (error) {
+      if (error.code !== "PGRST205" && error.code !== "42P01") {
+        console.warn(`${LOG_PREFIX} devices_lookup_failed`, error.message);
+      }
+      return;
+    }
+
+    const tokens = [
+      ...new Set(
+        (devices || [])
+          .map((row) => String(row.push_token || "").trim())
+          .filter(Boolean),
+      ),
+    ];
+    if (!tokens.length) return;
+
+    const body = buildChatPushPreview({
+      content: input.content,
+      mediaType: input.mediaType,
+      latitude: input.latitude,
+      longitude: input.longitude,
     });
-    return;
-  }
+    const messages = tokens.map((token) =>
+      buildExpoChatPushMessage({
+        token,
+        conversationId: input.conversationId,
+        messageId: input.messageId,
+        body,
+      }),
+    );
 
-  await Promise.all(
-    tokens.map(async (token) => {
-      try {
-        await fetch("https://fcm.googleapis.com/fcm/send", {
-          method: "POST",
-          headers: {
-            Authorization: `key=${serverKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            to: token,
-            notification: {
-              title: input.direction === "out" ? "Nuevo mensaje" : "Mensaje enviado",
-              body: input.preview,
-            },
-            data: {
-              conversation_id: String(input.conversationId),
-              organization_id: input.organizationId,
-            },
-          }),
-        });
-      } catch (pushError) {
-        console.warn(`${LOG_PREFIX} push_failed`, {
-          error: pushError instanceof Error ? pushError.message : "unknown",
+    const { tickets } = await sendExpoPushMessages(messages);
+    const staleTokens = collectUnregisteredExpoTokens(tokens, tickets);
+    if (staleTokens.length) {
+      const { error: deleteError } = await supabase
+        .from("app_devices")
+        .delete()
+        .eq("organization_id", input.organizationId)
+        .in("push_token", staleTokens);
+      if (deleteError) {
+        console.warn(`${LOG_PREFIX} stale_token_delete_failed`, deleteError.message);
+      } else {
+        console.log(`${LOG_PREFIX} stale_tokens_deleted`, {
+          conversationId: input.conversationId,
+          count: staleTokens.length,
         });
       }
-    }),
-  );
+    }
+
+    console.log(`${LOG_PREFIX} push_sent`, {
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      devices: tokens.length,
+      stale: staleTokens.length,
+    });
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} push_failed`, {
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+  }
 };

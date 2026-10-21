@@ -1,3 +1,5 @@
+import { parseSupervisorEmployeeIds } from "@/lib/wispro-rules";
+
 /**
  * Cliente HTTP oficial para la API de Wispro Cloud (v1).
  * Todas las llamadas se realizan exclusivamente en el servidor (Route Handlers).
@@ -26,6 +28,12 @@ export interface WisproEmployee {
   name: string;
   phone?: string | null;
   phone_mobile?: string | null;
+  phones?: string[] | null;
+  national_identification_number?: string | null;
+  blocked?: boolean;
+  enabled?: boolean;
+  status?: string | null;
+  is_supervisor?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -258,22 +266,47 @@ export async function getCategories(
 
 /**
  * 4.2 Listar empleados (técnicos)
- * GET /employees
+ * GET /employees?page&per_page=100 — paginar hasta 40.
  */
 export async function getEmployees(
   override?: { apiKey?: string; baseUrl?: string },
 ): Promise<WisproEmployee[]> {
-  const response = await wisproFetch<WisproEmployee>(
-    "/employees",
-    { method: "GET" },
-    override,
+  const all: WisproEmployee[] = [];
+  for (let page = 1; page <= 40; page++) {
+    const response = await wisproFetch<WisproEmployee>(
+      `/employees?page=${page}&per_page=100`,
+      { method: "GET" },
+      override,
+    );
+    all.push(...response.data);
+    if (response.data.length < 100) break;
+  }
+
+  const supervisorIds = new Set(
+    parseSupervisorEmployeeIds().map((id) => id.toLowerCase()),
   );
-  return response.data;
+  return all.map((employee) => ({
+    ...employee,
+    is_supervisor:
+      Boolean(employee.is_supervisor) ||
+      supervisorIds.has(String(employee.id || "").toLowerCase()),
+  }));
 }
+
+/** Field technicians: enabled, not blocked. */
+export const isFieldEmployee = (employee: WisproEmployee): boolean => {
+  if (employee.blocked === true) return false;
+  if (employee.enabled === false) return false;
+  const status = String(employee.status || "").toLowerCase();
+  if (status && ["disabled", "blocked", "inactive"].includes(status)) {
+    return false;
+  }
+  return true;
+};
 
 /**
  * 4.3 Buscar clientes
- * GET /clients
+ * GET /clients?name_unaccent_cont=
  */
 export async function getClients(
   searchQuery?: string,
@@ -281,7 +314,7 @@ export async function getClients(
 ): Promise<WisproClient[]> {
   const params = new URLSearchParams();
   if (searchQuery?.trim()) {
-    params.set("search", searchQuery.trim());
+    params.set("name_unaccent_cont", searchQuery.trim());
   }
   const endpoint = `/clients${params.toString() ? `?${params.toString()}` : ""}`;
   const response = await wisproFetch<WisproClient>(endpoint, { method: "GET" }, override);
@@ -290,7 +323,7 @@ export async function getClients(
 
 /**
  * 4.3 Buscar contratos
- * GET /contracts
+ * GET /contracts?client_id_eq=
  */
 export async function getContracts(
   clientId?: string,
@@ -298,11 +331,42 @@ export async function getContracts(
 ): Promise<WisproContract[]> {
   const params = new URLSearchParams();
   if (clientId) {
-    params.set("client_id", clientId);
+    params.set("client_id_eq", clientId);
   }
   const endpoint = `/contracts${params.toString() ? `?${params.toString()}` : ""}`;
   const response = await wisproFetch<WisproContract>(endpoint, { method: "GET" }, override);
   return response.data;
+}
+
+/**
+ * GET /help_desk/issues
+ */
+export async function getIssues(
+  query: Record<string, string> = {},
+  override?: { apiKey?: string; baseUrl?: string },
+) {
+  const params = new URLSearchParams(query);
+  const endpoint = `/help_desk/issues${params.toString() ? `?${params.toString()}` : ""}`;
+  return wisproFetch(endpoint, { method: "GET" }, override);
+}
+
+/**
+ * PUT /help_desk/issues/{id}?id=&state=&assignable_id=
+ */
+export async function updateIssue(
+  issueId: string,
+  input: { state?: string; assignable_id?: string },
+  override?: { apiKey?: string; baseUrl?: string },
+) {
+  const params = new URLSearchParams();
+  params.set("id", issueId);
+  if (input.state) params.set("state", input.state);
+  if (input.assignable_id) params.set("assignable_id", input.assignable_id);
+  return wisproFetch(
+    `/help_desk/issues/${encodeURIComponent(issueId)}?${params.toString()}`,
+    { method: "PUT" },
+    override,
+  );
 }
 
 /**

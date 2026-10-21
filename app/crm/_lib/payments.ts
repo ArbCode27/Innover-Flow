@@ -37,6 +37,8 @@ export type CrmPayment = {
   cedula: string | null;
   phone_id: string | null;
   amount: number | null;
+  expected_amount?: number | null;
+  plan_amount?: number | null;
   amount_raw: string | null;
   bank: string | null;
   transaction_code: string | null;

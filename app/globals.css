@@ -13,12 +13,12 @@
   --popover-foreground: oklch(0.35 0 0);
   --primary: oklch(0.55 0.15 200);
   --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.7 0.18 120);
-  --secondary-foreground: oklch(1 0 0);
+  --secondary: var(--crm-accent-muted);
+  --secondary-foreground: var(--crm-accent-muted-fg);
   --muted: oklch(0.98 0 0);
   --muted-foreground: oklch(0.35 0 0);
-  --accent: oklch(0.7 0.18 120);
-  --accent-foreground: oklch(1 0 0);
+  --accent: var(--crm-accent-muted);
+  --accent-foreground: var(--crm-accent-muted-fg);
   --destructive: oklch(0.6 0.2 30);
   --destructive-foreground: oklch(1 0 0);
   --border: oklch(0.92 0 0);
@@ -34,8 +34,8 @@
   --sidebar-foreground: oklch(0.35 0 0);
   --sidebar-primary: oklch(0.98 0 0);
   --sidebar-primary-foreground: oklch(0.35 0 0);
-  --sidebar-accent: oklch(0.7 0.18 120);
-  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-accent: var(--crm-accent-muted);
+  --sidebar-accent-foreground: var(--crm-accent-muted-fg);
   --sidebar-border: oklch(0.92 0 0);
   --sidebar-ring: oklch(0.55 0.15 200 / 0.5);
   --crm-scrollbar-track: rgba(226, 232, 240, 0.9);
@@ -70,8 +70,8 @@
   --secondary-foreground: oklch(0.95 0 0);
   --muted: oklch(0.25 0 0);
   --muted-foreground: oklch(0.7 0 0);
-  --accent: oklch(0.7 0.18 120);
-  --accent-foreground: oklch(0.1 0 0);
+  --accent: var(--crm-accent-muted);
+  --accent-foreground: var(--crm-accent-muted-fg);
   --destructive: oklch(0.5 0.2 30);
   --destructive-foreground: oklch(0.95 0 0);
   --border: oklch(0.25 0 0);
@@ -79,7 +79,7 @@
   --ring: oklch(0.6 0.15 200 / 0.5);
   --chart-1: oklch(0.6 0.15 200);
   --chart-2: oklch(0.65 0.15 140);
-  --chart-3: oklch(0.7 0.18 120);
+  --chart-3: oklch(0.65 0.1 190);
   --chart-4: oklch(0.6 0.2 300);
   --chart-5: oklch(0.65 0.2 16);
   --sidebar: oklch(0.15 0 0);

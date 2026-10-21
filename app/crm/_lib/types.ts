@@ -120,7 +120,7 @@ export interface Client {
   id: number;
   organization_id?: string;
   name: string;
-  phone: string;
+  phone: string | null;
   cedula?: string | null;
   app_enabled?: boolean | null;
   plan: string | null;

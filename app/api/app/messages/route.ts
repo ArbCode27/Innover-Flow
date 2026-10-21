@@ -10,6 +10,7 @@ import {
 } from "@/app/api/crm/_lib/channel-messages";
 import { withOptionalOrganizationWispro } from "@/app/api/crm/_lib/wispro-api";
 import { replyToConversationWithAi } from "@/app/api/crm/ai/_lib/reply-to-conversation";
+import { logMessageEvent } from "@/lib/message-event-log";
 import { getAppAuthContext } from "../_lib/app-auth";
 import {
   APP_ERROR_CODES,
@@ -35,22 +36,61 @@ const scheduleAi = (
   mediaType: ChannelMediaType | null,
 ) => {
   const eligible = !mediaType || mediaType === "image" || mediaType === "audio";
-  if (humanMode || !eligible) return;
+  const skipReason = humanMode
+    ? "human_mode"
+    : !eligible
+      ? "media_not_eligible"
+      : null;
+  const willRun = skipReason === null;
+
+  logMessageEvent("ai_schedule", {
+    organizationId,
+    conversationId,
+    messageId,
+    humanMode,
+    mediaType,
+    willRun,
+    skipReason,
+  });
+
+  if (!willRun) return;
+
   after(async () => {
+    logMessageEvent("ai_after_started", {
+      organizationId,
+      conversationId,
+      messageId,
+    });
     const supabase = getSupabaseAdmin();
     try {
-      await withOptionalOrganizationWispro(organizationId, () =>
+      const result = await withOptionalOrganizationWispro(organizationId, () =>
         replyToConversationWithAi(supabase, {
           conversationId,
           triggerMessageId: messageId,
         }),
       );
-    } catch (error) {
-      console.error("[APP_CHANNEL] ai_reply_failed", {
+      logMessageEvent("ai_after_finished", {
+        organizationId,
         conversationId,
         messageId,
-        error: error instanceof Error ? error.message : "unknown",
+        ok: result.ok,
+        skipped: Boolean(result.skipped),
+        reason: result.reason,
+        action: result.action ?? null,
+        replyMessageId: result.messageId ?? null,
       });
+    } catch (error) {
+      logMessageEvent(
+        "ai_after_finished",
+        {
+          organizationId,
+          conversationId,
+          messageId,
+          ok: false,
+          error: error instanceof Error ? error.message : "unknown",
+        },
+        "error",
+      );
     }
   });
 };
@@ -65,13 +105,18 @@ export const GET = async (request: NextRequest) => {
       session.clientId,
       session.phone,
     );
-    const { data: messages, error } = await supabase
+    const afterId = Number(request.nextUrl.searchParams.get("after_id") || 0);
+    let query = supabase
       .from("messages")
       .select("*")
       .eq("organization_id", session.organizationId)
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: true })
       .limit(200);
+    if (Number.isInteger(afterId) && afterId > 0) {
+      query = query.gt("id", afterId);
+    }
+    const { data: messages, error } = await query;
     if (error) throw error;
     return NextResponse.json({
       conversation: {
@@ -101,13 +146,23 @@ export const POST = async (request: NextRequest) => {
     );
 
     const contentType = request.headers.get("content-type") || "";
+    const isMultipart = contentType.includes("multipart/form-data");
+    logMessageEvent("app_post_received", {
+      organizationId: session.organizationId,
+      clientId: session.clientId,
+      conversationId: Number(conversation.id),
+      humanMode: Boolean(conversation.human_mode),
+      conversationStatus: conversation.status ?? null,
+      contentType: isMultipart ? "multipart" : "json",
+    });
+
     let content = "";
     let mediaUrl: string | null = null;
     let mediaType: ChannelMediaType | null = null;
     let mimeType: string | null = null;
     let caption: string | null = null;
 
-    if (contentType.includes("multipart/form-data")) {
+    if (isMultipart) {
       const form = await request.formData();
       const file = form.get("file");
       const kindRaw = String(form.get("media_type") || "image");
@@ -184,6 +239,14 @@ export const POST = async (request: NextRequest) => {
 
     return NextResponse.json({ success: true, message: saved });
   } catch (error) {
+    logMessageEvent(
+      "app_post_failed",
+      {
+        error: error instanceof Error ? error.message : "unknown",
+        code: error instanceof AppApiError ? error.code : null,
+      },
+      "error",
+    );
     return toAppErrorResponse(error, {
       code: APP_ERROR_CODES.MESSAGE_SEND_FAILED,
       error: "No se pudo enviar el mensaje. Intenta de nuevo.",

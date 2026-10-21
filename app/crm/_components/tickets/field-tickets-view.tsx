@@ -15,10 +15,11 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import {
-  fieldTicketKindLabel,
+  fieldTicketCategoryLabel,
   type FieldTicket,
   type Technician,
 } from "@/lib/field-tickets";
+import type { TicketCategory } from "@/lib/ticket-categories";
 import { FieldTicketsTable } from "./field-tickets-table";
 import { FieldTicketFormDialog } from "./field-ticket-form-dialog";
 import { FieldTicketDetailDialog } from "./field-ticket-detail-dialog";
@@ -33,6 +34,7 @@ type StatusTab = "all" | "open" | "scheduled" | "done" | "cancelled";
 interface FieldTicketsViewProps {
   tickets: FieldTicket[];
   technicians: Technician[];
+  categories: TicketCategory[];
   isLoading: boolean;
   error: string | null;
   onRefresh: () => Promise<void>;
@@ -58,7 +60,7 @@ const matchesSearch = (ticket: FieldTicket, term: string) => {
     ticket.clientName,
     ticket.clientPhone,
     String(ticket.publicId),
-    fieldTicketKindLabel(ticket.kind, ticket.title),
+    fieldTicketCategoryLabel(ticket),
     ticket.title,
     ticket.employeeName,
     ticket.addressText,
@@ -72,6 +74,7 @@ const matchesSearch = (ticket: FieldTicket, term: string) => {
 export const FieldTicketsView = ({
   tickets,
   technicians,
+  categories,
   isLoading,
   error,
   onCreate,
@@ -258,6 +261,7 @@ export const FieldTicketsView = ({
         open={isCreateOpen}
         mode="create"
         technicians={technicians}
+        categories={categories}
         conversation={conversation}
         client={client}
         messages={messages}
@@ -272,6 +276,7 @@ export const FieldTicketsView = ({
         open={Boolean(editing)}
         mode="edit"
         technicians={technicians}
+        categories={categories}
         ticket={editing}
         onOpenChange={(open) => {
           if (!open) setEditing(null);

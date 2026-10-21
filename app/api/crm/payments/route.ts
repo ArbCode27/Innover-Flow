@@ -12,14 +12,18 @@ import {
 } from "@/app/api/crm/_lib/crm-payments";
 import {
   createWisproInvoicingPayment,
+  fetchInvoicingForWisproClientId,
+  getPlanPriceById,
   latestInvoiceCacheKeyForPayment,
   listPendingInvoicesForClient,
+  parseCommercialPlanPrice,
   resolveLatestPendingInvoiceDate,
   resolveLatestPendingInvoiceDatesForClients,
+  resolvePreferredContract,
   withOrganizationWispro,
 } from "@/app/api/crm/_lib/wispro-api";
 import { getCrmAuthContext } from "@/app/api/crm/_lib/crm-auth-context";
-import { matchInvoicesToPaymentAmount } from "@/app/api/crm/_lib/wispro-invoice-match";
+import { resolveApprovePayment } from "@/app/api/crm/_lib/wispro-invoice-match";
 import { getCrmSettings } from "@/app/api/crm/_lib/crm-settings";
 import {
   applyPaymentReviewOwnership,
@@ -440,7 +444,11 @@ export async function PATCH(req: NextRequest) {
         strategy: "none",
         invoice_ids: [],
       };
-      let invoiceIds: string[] = [];
+      let decision = resolveApprovePayment({
+        paidAmount: Number(currentPayment.amount),
+        invoices: [],
+        planAmount: null,
+      });
 
       try {
         const pendingInvoices = await withOrganizationWispro(
@@ -453,34 +461,80 @@ export async function PATCH(req: NextRequest) {
         );
         const latestInvoiceDate =
           resolveLatestPendingInvoiceDate(pendingInvoices);
-        const match = matchInvoicesToPaymentAmount(
-          pendingInvoices.map((invoice) => ({
+
+        let planAmount: number | null = null;
+        if (!pendingInvoices.some((invoice) => invoice.balance > 0.01)) {
+          try {
+            const { contracts, invoicing } = await withOrganizationWispro(
+              context.organizationId,
+              () =>
+                fetchInvoicingForWisproClientId(
+                  currentPayment.wispro_client_id!,
+                ),
+            );
+            const preferred = resolvePreferredContract(contracts);
+            planAmount = preferred?.plan_id
+              ? await withOrganizationWispro(context.organizationId, () =>
+                  getPlanPriceById(preferred.plan_id!),
+                )
+              : parseCommercialPlanPrice({ name: invoicing.planName });
+          } catch (planError) {
+            console.warn("[CRM_PAYMENTS] plan_price_soft_failed", {
+              paymentId: currentPayment.id,
+              error:
+                planError instanceof Error
+                  ? planError.message
+                  : "No se pudo leer el precio del plan",
+            });
+          }
+        }
+
+        decision = resolveApprovePayment({
+          paidAmount: Number(currentPayment.amount),
+          invoices: pendingInvoices.map((invoice) => ({
             id: invoice.id,
             balance: invoice.balance,
             amount: invoice.amount,
             issuedAt: invoice.issued_at,
             firstDueDate: invoice.first_due_date,
+            periodTo: invoice.period_to,
             invoiceNumber: invoice.invoice_number,
             state: invoice.state,
           })),
-          Number(currentPayment.amount),
-        );
-        invoiceIds = match.invoiceIds;
-        const matchedById = new Map(
-          pendingInvoices.map((invoice) => [invoice.id, invoice]),
-        );
+          planAmount,
+        });
+
+        if (decision.ignoredInvoiceIds.length) {
+          console.warn("[CRM_PAYMENTS] extra_invoices_ignored", {
+            paymentId: currentPayment.id,
+            keptInvoiceId: decision.invoice?.id ?? null,
+            ignoredInvoiceIds: decision.ignoredInvoiceIds,
+          });
+        }
+
         invoiceMatchMeta = {
           attempted_at: new Date().toISOString(),
-          strategy: match.strategy,
-          invoice_ids: match.invoiceIds,
-          matched_amount: match.matchedAmount,
-          unmatched_amount: match.unmatchedAmount,
+          strategy: decision.strategy,
+          kind: decision.kind,
+          invoice_ids: decision.invoiceIds,
+          paid_amount: decision.paidAmount,
+          post_amount: decision.postAmount,
+          expected_amount: decision.expectedAmount,
+          remaining_amount: decision.remainingAmount,
+          plan_amount: decision.planAmount,
           open_invoices_count: pendingInvoices.length,
           latest_invoice_date: latestInvoiceDate,
-          invoices: match.invoices.map((item) => ({
-            ...item,
-            issued_at: matchedById.get(item.id)?.issued_at ?? null,
-          })),
+          ignored_invoice_ids: decision.ignoredInvoiceIds,
+          invoices: decision.invoice
+            ? [
+                {
+                  id: decision.invoice.id,
+                  balance: decision.invoice.balance,
+                  invoiceNumber: decision.invoice.invoiceNumber,
+                  issued_at: decision.invoice.issuedAt,
+                },
+              ]
+            : [],
         };
       } catch (invoiceError) {
         invoiceMatchMeta = {
@@ -507,6 +561,8 @@ export async function PATCH(req: NextRequest) {
 
       const paymentForApprove = {
         ...currentPayment,
+        expected_amount: decision.expectedAmount,
+        plan_amount: decision.planAmount,
         receipt_metadata: {
           ...(currentPayment.receipt_metadata || {}),
           latest_invoice_date: latestInvoiceDate,
@@ -519,10 +575,10 @@ export async function PATCH(req: NextRequest) {
         () =>
           createWisproInvoicingPayment({
             clientId: currentPayment.wispro_client_id!,
-            amount: Number(currentPayment.amount),
+            amount: decision.postAmount,
             paymentDate: currentPayment.payment_date,
             transactionCode: currentPayment.transaction_code,
-            invoiceIds,
+            invoiceIds: decision.invoiceIds,
             comment: [
               "Pago aprobado desde CRM",
               `Banco: ${currentPayment.bank}`,
@@ -530,9 +586,7 @@ export async function PATCH(req: NextRequest) {
               currentPayment.comment
                 ? `Comentario: ${currentPayment.comment}`
                 : null,
-              invoiceIds.length
-                ? `Facturas: ${invoiceIds.join(", ")}`
-                : "Sin facturas vinculadas (crédito a cuenta)",
+              decision.comment,
             ]
               .filter(Boolean)
               .join(" | "),
@@ -541,6 +595,8 @@ export async function PATCH(req: NextRequest) {
 
       const payment = await approveCrmPayment(supabase, {
         payment: paymentForApprove,
+        expectedAmount: decision.expectedAmount,
+        planAmount: decision.planAmount,
         wisproPayment,
       });
 
@@ -573,6 +629,8 @@ export async function PATCH(req: NextRequest) {
         ok: true,
         payment,
         wisproPayment,
+        approve_kind: decision.kind,
+        remaining_amount: decision.remainingAmount,
         conversation_id: ownership.conversationId,
         assigned: ownership.assigned,
         assigned_agent_id: ownership.agentId,

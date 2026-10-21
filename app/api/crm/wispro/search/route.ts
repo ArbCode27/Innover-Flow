@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   normalizeDocumentDigits,
   searchWisproByCedula,
+  searchWisproByName,
   withOrganizationWispro,
   WisproApiError,
 } from "@/app/api/crm/_lib/wispro-api";
@@ -10,20 +11,33 @@ import { getCrmAuthContext } from "../../_lib/crm-auth-context";
 
 const LOG_PREFIX = "[WISPRO_SEARCH]";
 
-const searchSchema = z.object({
-  cedula: z
-    .string()
-    .trim()
-    .min(1, "Ingresa la cédula o RIF")
-    .transform((value) => normalizeDocumentDigits(value))
-    .pipe(
-      z
-        .string()
-        .min(5, "El documento debe tener al menos 5 dígitos")
-        .max(12, "El documento no puede superar 12 dígitos")
-        .regex(/^\d+$/, "Usa solo números (sin V, J ni guiones)"),
-    ),
-});
+const searchSchema = z
+  .object({
+    cedula: z.string().trim().optional(),
+    name: z.string().trim().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const digits = normalizeDocumentDigits(value.cedula || "");
+    const name = (value.name || "").trim();
+    if (!digits && !name) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Ingresa la cédula, RIF o el nombre",
+      });
+    }
+    if (digits && (digits.length < 5 || digits.length > 12)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "El documento debe tener entre 5 y 12 dígitos",
+      });
+    }
+    if (!digits && name && name.length < 3) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "El nombre debe tener al menos 3 caracteres",
+      });
+    }
+  });
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,9 +51,14 @@ export async function POST(req: NextRequest) {
     }
 
     const context = await getCrmAuthContext(req);
+    const digits = normalizeDocumentDigits(payload.data.cedula || "");
+    const name = (payload.data.name || "").trim();
     const results = await withOrganizationWispro(
       context.organizationId,
-      () => searchWisproByCedula(payload.data.cedula),
+      () =>
+        digits
+          ? searchWisproByCedula(digits)
+          : searchWisproByName(name),
     );
 
     return NextResponse.json({ data: results });

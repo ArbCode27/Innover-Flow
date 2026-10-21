@@ -33,6 +33,8 @@ export type CrmPayment = {
   cedula: string | null;
   phone_id: string | null;
   amount: number | null;
+  expected_amount?: number | null;
+  plan_amount?: number | null;
   amount_raw: string | null;
   bank: string | null;
   transaction_code: string | null;
@@ -708,6 +710,8 @@ export const approveCrmPayment = async (
   supabase: SupabaseClient,
   input: {
     payment: CrmPayment;
+    expectedAmount?: number | null;
+    planAmount?: number | null;
     wisproPayment: {
       id: string;
       state: string | null;
@@ -723,6 +727,8 @@ export const approveCrmPayment = async (
     .update({
       status: "APROBADO",
       error_message: null,
+      expected_amount: input.expectedAmount ?? input.payment.expected_amount ?? null,
+      plan_amount: input.planAmount ?? input.payment.plan_amount ?? null,
       receipt_metadata: {
         ...(input.payment.receipt_metadata || {}),
         wispro_payment: {

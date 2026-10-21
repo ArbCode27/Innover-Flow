@@ -4,9 +4,27 @@ import type {
   WisproInvoicingSummary,
   WisproSearchResult,
 } from "@/app/crm/_lib/types";
+import {
+  buildVeDocumentCandidates,
+  isFullPayment,
+  matchesNameLocally,
+  normalizeDocumentDigits,
+  parseCommercialPlanPrice,
+  resolveDebtFromCurrentAccount,
+  roundMoney,
+} from "@/lib/wispro-rules";
 import { AsyncLocalStorage } from "async_hooks";
 import { getSupabaseAdmin } from "./supabase-admin";
 import { decryptIntegrationSecret } from "./integration-secrets";
+
+export {
+  buildVeDocumentCandidates,
+  DEFAULT_FULL_PAYMENT_TOLERANCE_USD,
+  isFullPayment,
+  normalizeDocumentDigits,
+  parseCommercialPlanPrice,
+  resolveDebtFromCurrentAccount,
+} from "@/lib/wispro-rules";
 
 const LOG_PREFIX = "[WISPRO_API]";
 const DEFAULT_BASE_URL = "https://www.cloud.wispro.co/api/v1";
@@ -46,7 +64,9 @@ const getWisproConfig = () => {
     return organizationConfig;
   }
 
-  const token = process.env.WISPRO_API_TOKEN?.trim();
+  const token =
+    process.env.WISPRO_API_TOKEN?.trim() ||
+    process.env.WISPRO_API_KEY?.trim();
   if (!token) {
     throw new WisproApiError(
       "WISPRO_API_TOKEN no está configurado en el servidor",
@@ -55,7 +75,9 @@ const getWisproConfig = () => {
   }
 
   const baseUrl = (
-    process.env.WISPRO_API_BASE_URL?.trim() || DEFAULT_BASE_URL
+    process.env.WISPRO_API_BASE_URL?.trim() ||
+    process.env.WISPRO_BASE_URL?.trim() ||
+    DEFAULT_BASE_URL
   ).replace(/\/+$/, "");
 
   return { token, baseUrl };
@@ -125,9 +147,6 @@ const parseAmount = (value: unknown): number => {
 
   return 0;
 };
-
-const roundMoney = (value: number) =>
-  Math.round((value + Number.EPSILON) * 100) / 100;
 
 const extractDataRecords = (payload: unknown): unknown[] => {
   if (!payload || typeof payload !== "object") return [];
@@ -564,29 +583,9 @@ const normalizeContractState = (state: string | null | undefined) =>
  */
 export const PROMISE_ELIGIBLE_CONTRACT_STATES = new Set(["disabled"]);
 
-/** USD slack for BCV conversion / rounding when deciding if a payment is complete. */
-export const DEFAULT_FULL_PAYMENT_TOLERANCE_USD = 0.5;
-
 export const isContractSuspendedForPromise = (
   state: string | null | undefined,
 ): boolean => PROMISE_ELIGIBLE_CONTRACT_STATES.has(normalizeContractState(state));
-
-/**
- * True when amount covers debt within tolerance (or there is no debt to cover).
- */
-export const isFullPayment = (
-  amountUsd: number,
-  debtUsd: number,
-  toleranceUsd = DEFAULT_FULL_PAYMENT_TOLERANCE_USD,
-): boolean => {
-  if (!Number.isFinite(amountUsd) || amountUsd <= 0) return false;
-  const debt = Number.isFinite(debtUsd) ? Math.max(0, debtUsd) : 0;
-  const tolerance =
-    Number.isFinite(toleranceUsd) && toleranceUsd >= 0
-      ? toleranceUsd
-      : DEFAULT_FULL_PAYMENT_TOLERANCE_USD;
-  return roundMoney(amountUsd) + roundMoney(tolerance) >= roundMoney(debt);
-};
 
 /**
  * Pick the contract for a payment promise:
@@ -726,21 +725,6 @@ export const buildAccountStatusFromService = (input: {
 };
 
 /**
- * Client-facing debt from current_account.balance_amount (Innover business rule).
- * Wispro typically stores a negative balance when the subscriber owes money;
- * a positive balance is credit (no debt to collect).
- */
-export const resolveDebtFromCurrentAccount = (
-  account: WisproCurrentAccount | null,
-): number => {
-  const balanceAmount = account?.balance_amount ?? 0;
-  if (balanceAmount < 0) {
-    return roundMoney(Math.abs(balanceAmount));
-  }
-  return 0;
-};
-
-/**
  * Map current_account.balance_amount → CRM invoicing summary.
  * Optional contracts enrich suspension detection (Wispro contract.state).
  */
@@ -779,28 +763,42 @@ export const buildInvoicingSummaryFromCurrentAccount = (
   };
 };
 
+export type WisproPlan = {
+  id: string;
+  name: string | null;
+  price: number | null;
+};
+
+const readPlanRow = (payload: unknown): Record<string, unknown> | null =>
+  extractDataObject(payload) ||
+  (() => {
+    const records = extractDataRecords(payload);
+    return records[0] && typeof records[0] === "object"
+      ? (records[0] as Record<string, unknown>)
+      : null;
+  })();
+
 /**
- * Resolve commercial plan name via GET /plans/{id}.
+ * Resolve commercial plan name + price via GET /plans/{id}.
  * Soft-fails to null on upstream errors.
  */
-export const getPlanNameById = async (
-  planId: string,
-): Promise<string | null> => {
+export const getPlanById = async (planId: string): Promise<WisproPlan | null> => {
   const id = planId.trim();
   if (!id) return null;
 
   try {
     const payload = await wisproGet(`/plans/${encodeURIComponent(id)}`, {});
-    const row =
-      extractDataObject(payload) ||
-      (() => {
-        const records = extractDataRecords(payload);
-        return records[0] && typeof records[0] === "object"
-          ? (records[0] as Record<string, unknown>)
-          : null;
-      })();
-    const name = row?.name ? String(row.name).trim() : "";
-    return name || null;
+    const row = readPlanRow(payload);
+    if (!row) return null;
+    const name = row.name ? String(row.name).trim() : "";
+    return {
+      id: String(row.id || id),
+      name: name || null,
+      price: parseCommercialPlanPrice({
+        name,
+        price: row.price ?? row.amount ?? row.cost,
+      }),
+    };
   } catch (error) {
     console.warn(`${LOG_PREFIX} plan_lookup_failed`, {
       planId: id,
@@ -808,6 +806,20 @@ export const getPlanNameById = async (
     });
     return null;
   }
+};
+
+export const getPlanNameById = async (
+  planId: string,
+): Promise<string | null> => {
+  const plan = await getPlanById(planId);
+  return plan?.name ?? null;
+};
+
+export const getPlanPriceById = async (
+  planId: string,
+): Promise<number | null> => {
+  const plan = await getPlanById(planId);
+  return plan?.price ?? null;
 };
 
 /**
@@ -1457,29 +1469,6 @@ export const fetchInvoicingForWisproClientId = async (
   return { account, contracts, invoicing };
 };
 
-/** Venezuelan document letter prefixes commonly stored in Wispro. */
-const VE_DOCUMENT_PREFIXES = ["V", "E", "J", "G"] as const;
-
-/** Digits only (cédula/RIF without letter). Empty if too short/long after strip. */
-export const normalizeDocumentDigits = (raw: string): string =>
-  String(raw || "").replace(/\D/g, "");
-
-/**
- * Exact Wispro `_eq` candidates for a numeric document.
- * Order: bare digits first, then V/E/J/G + digits (no hyphens).
- */
-export const buildVeDocumentCandidates = (digits: string): string[] => {
-  const normalized = normalizeDocumentDigits(digits);
-  if (!normalized) return [];
-
-  const candidates = [
-    normalized,
-    ...VE_DOCUMENT_PREFIXES.map((prefix) => `${prefix}${normalized}`),
-  ];
-
-  return [...new Set(candidates)];
-};
-
 const lookupClientsByNationalIdExact = async (
   document: string,
   fallbackDigits: string,
@@ -1588,6 +1577,67 @@ export const searchWisproByCedula = async (
     withDebt: results.filter((result) => result.invoicing.hasDebt).length,
     suspended: results.filter((result) => result.invoicing.serviceSuspended)
       .length,
+  });
+
+  return results;
+};
+
+const emptyInvoicingForNameSearch = (): WisproInvoicingSummary => ({
+  debt: 0,
+  hasDebt: false,
+  serviceSuspended: false,
+  contractState: null,
+  contractId: null,
+  planName: null,
+  pppProfile: null,
+  accountStatus: "Al día",
+  snapshot: null,
+});
+
+/**
+ * Search Wispro by name: GET /clients?name_unaccent_cont= + local filter.
+ * Invoicing is fetched after the local filter (not on every raw row).
+ */
+export const searchWisproByName = async (
+  name: string,
+): Promise<WisproSearchResult[]> => {
+  const query = name.trim();
+  if (!query) return [];
+
+  const payload = await wisproGet("/clients", {
+    name_unaccent_cont: query,
+    per_page: "25",
+  });
+
+  const customers = extractDataRecords(payload)
+    .map((record) => normalizeWisproCustomer(record))
+    .filter((customer): customer is WisproCustomer => customer !== null)
+    .filter((customer) => matchesNameLocally(customer.name, query));
+
+  if (!customers.length) {
+    console.log(`${LOG_PREFIX} name_search_ok`, { query, clients: 0 });
+    return [];
+  }
+
+  const limited = customers.slice(0, 15);
+  const results = await Promise.all(
+    limited.map(async (customer) => {
+      try {
+        const { invoicing } = await fetchInvoicingForWisproClientId(customer.id);
+        return { customer, invoicing };
+      } catch (error) {
+        console.warn(`${LOG_PREFIX} name_search_invoicing_failed`, {
+          wisproId: customer.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return { customer, invoicing: emptyInvoicingForNameSearch() };
+      }
+    }),
+  );
+
+  console.log(`${LOG_PREFIX} name_search_ok`, {
+    query,
+    clients: results.length,
   });
 
   return results;

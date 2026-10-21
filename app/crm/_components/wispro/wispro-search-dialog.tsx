@@ -61,7 +61,7 @@ export const WisproSearchDialog = ({
   mode = "link",
   currentLink = null,
 }: WisproSearchDialogProps) => {
-  const [cedula, setCedula] = useState("");
+  const [query, setQuery] = useState("");
   const [results, setResults] = useState<WisproSearchResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -75,7 +75,7 @@ export const WisproSearchDialog = ({
 
   useEffect(() => {
     if (!open) {
-      setCedula("");
+      setQuery("");
       setResults([]);
       setError(null);
       setHasSearched(false);
@@ -88,11 +88,14 @@ export const WisproSearchDialog = ({
   const handleSearch = async (event?: FormEvent) => {
     event?.preventDefault();
 
-    const normalized = cedula.trim();
+    const normalized = query.trim();
     if (!normalized) {
-      setError("Ingresa la cédula o RIF (solo números)");
+      setError("Ingresa la cédula, RIF o el nombre");
       return;
     }
+
+    const digits = normalized.replace(/\D/g, "");
+    const isDocument = /^\d+$/.test(normalized.replace(/[\s.-]/g, "")) && digits.length >= 5;
 
     setIsSearching(true);
     setError(null);
@@ -100,12 +103,14 @@ export const WisproSearchDialog = ({
     setHasSearched(false);
 
     try {
-      const searchResults = await wisproService.searchByCedula(normalized);
+      const searchResults = isDocument
+        ? await wisproService.search({ cedula: digits })
+        : await wisproService.search({ name: normalized });
       setResults(searchResults);
       setHasSearched(true);
 
       if (!searchResults.length) {
-        setError("No se encontró ningún cliente con ese documento.");
+        setError("No se encontró ningún cliente con esa búsqueda.");
       }
     } catch (searchError) {
       setError(getErrorMessage(searchError, "Error al consultar Wispro"));
@@ -152,8 +157,8 @@ export const WisproSearchDialog = ({
             </DialogTitle>
             <DialogDescription className={CRM_SURFACES.textMuted}>
               {isRelink
-                ? "Busca por cédula o RIF (solo números). El chat se mantiene; solo se actualiza la ficha Wispro."
-                : "Consulta por cédula o RIF (solo números, sin V ni J) y asocia el resultado a la conversación activa."}
+                ? "Busca por cédula, RIF o nombre. El chat se mantiene; solo se actualiza la ficha Wispro."
+                : "Consulta por cédula/RIF (solo números) o por nombre y asocia el resultado a la conversación activa."}
             </DialogDescription>
           </DialogHeader>
 
@@ -171,19 +176,16 @@ export const WisproSearchDialog = ({
           <form onSubmit={handleSearch} className="space-y-4">
             <div className="space-y-2">
               <label
-                htmlFor="wispro-cedula"
+                htmlFor="wispro-search"
                 className={`text-xs font-medium uppercase tracking-wide ${CRM_SURFACES.textLabel}`}>
-                Número de cédula o RIF
+                Cédula, RIF o nombre
               </label>
               <div className="flex gap-2">
                 <Input
-                  id="wispro-cedula"
-                  value={cedula}
-                  onChange={(event) =>
-                    setCedula(event.target.value.replace(/\D/g, ""))
-                  }
-                  placeholder="Solo números, ej: 299858854"
-                  inputMode="numeric"
+                  id="wispro-search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Ej: 29985885 o María Pérez"
                   autoComplete="off"
                   disabled={isSearching || isAssociating}
                   className={`${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`}
@@ -250,7 +252,7 @@ export const WisproSearchDialog = ({
 
           {hasSearched && !isSearching && !results.length && !error ? (
             <p className={`text-sm ${CRM_SURFACES.textMuted}`}>
-              No se encontraron resultados para esa cédula.
+              No se encontraron resultados para esa búsqueda.
             </p>
           ) : null}
 

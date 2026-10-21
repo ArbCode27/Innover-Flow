@@ -26,6 +26,8 @@ export type FieldTicket = {
   status: FieldTicketStatus;
   priority: FieldTicketPriority;
   kind: FieldTicketKind;
+  categoryId: string | null;
+  categoryName: string | null;
   title: string;
   cause: string | null;
   description: string | null;
@@ -43,6 +45,8 @@ export type FieldTicket = {
   lastTechnicianReportKey: string | null;
   closedAt: string | null;
   resolutionObservation: string | null;
+  wisproIssueId: string | null;
+  wisproOrderId: string | null;
   createdAt: string;
   updatedAt: string;
 };

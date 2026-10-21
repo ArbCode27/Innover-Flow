@@ -1,3 +1,4 @@
+export { mapFieldTicketRow } from "./map-row";
 export {
   FIELD_TICKET_KINDS,
   FIELD_TICKET_OPEN_STATUSES,
@@ -21,10 +22,15 @@ export {
   fieldTicketPriorityLabel,
   fieldTicketStatusLabel,
 } from "./labels";
+export {
+  fieldTicketCategoryLabel,
+  type TicketCategory,
+} from "@/lib/ticket-categories";
 export { digitsOnly, last10Digits, phonesMatchLast10 } from "./phone";
 export {
   assertVisitWindowRange,
   datetimeLocalToIso,
+  defaultVisitWindowLocal,
   toDatetimeLocalValue,
 } from "./datetime-local";
 export { buildMapsUrl, parseMapsUrlCoords } from "./maps-url";

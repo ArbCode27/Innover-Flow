@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { DEFAULT_AI_MODEL } from "@/app/crm/_lib/ai-models";
 import { DEFAULT_BOT_ENGINE, normalizeBotEngine } from "@/app/crm/_lib/bot-engine";
-import { CRM_COLORS } from "@/app/crm/_lib/constants";
-import { createTicketId, getInitials } from "@/app/crm/_lib/formatters";
+import {
+  insertClientRow,
+  isUniqueViolation,
+  normalizeClientPhone,
+} from "@/app/crm/_lib/client-identity";
+import { createTicketId } from "@/app/crm/_lib/formatters";
 import { parseCrmAccentId } from "@/app/crm/_lib/crm-accents";
 import {
   DEFAULT_AFTER_HOURS_PAYMENTS,
@@ -408,10 +412,19 @@ export const POST = async (request: NextRequest) => {
 
     if (input.action === "createClient") {
       const cleanCedula = input.cedula ? extractCedulaDigits(input.cedula) || null : null;
+      const normalizedPhone = normalizeClientPhone(input.phone);
+      if (!normalizedPhone) {
+        return NextResponse.json(
+          { error: "El teléfono no es válido" },
+          { status: 400 },
+        );
+      }
+
       if (cleanCedula) {
         const { data: existingClient } = await supabase
           .from("clients")
           .select("id, name")
+          .eq("organization_id", organizationId)
           .eq("cedula", cleanCedula)
           .maybeSingle();
 
@@ -423,38 +436,31 @@ export const POST = async (request: NextRequest) => {
         }
       }
 
-      const { count } = await supabase
-        .from("clients")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", organizationId);
-      const color = CRM_COLORS[(count || 0) % CRM_COLORS.length];
-      const { data, error } = await supabase
-        .from("clients")
-        .insert({
-          organization_id: organizationId,
+      try {
+        const data = await insertClientRow(supabase, {
+          organizationId,
           name: input.name,
-          phone: input.phone,
+          phone: normalizedPhone,
           cedula: cleanCedula,
-          app_enabled: input.app_enabled ?? true,
-          plan: input.plan,
-          zone: input.zone,
+          appEnabled: input.app_enabled ?? true,
+          plan: input.plan || "Sin asignar",
+          zone: input.zone || "Sin asignar",
           account: input.account,
-          color: color.color,
-          bg: color.bg,
-          initials: getInitials(input.name),
-        })
-        .select("*")
-        .single();
-      if (error) {
-        if (error.code === "23505" || error.message?.includes("unique") || error.message?.includes("cedula")) {
+        });
+        return NextResponse.json({ data });
+      } catch (error) {
+        if (
+          error &&
+          typeof error === "object" &&
+          isUniqueViolation(error as { code?: string; message?: string })
+        ) {
           return NextResponse.json(
-            { error: "Ya existe un cliente registrado con esta cédula" },
+            { error: "Ya existe un cliente con este WhatsApp, teléfono o cédula" },
             { status: 409 },
           );
         }
         throw error;
       }
-      return NextResponse.json({ data });
     }
 
     if (input.action === "createTicket") {

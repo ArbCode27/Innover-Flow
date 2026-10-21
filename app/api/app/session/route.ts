@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/app/api/crm/_lib/supabase-admin";
-import { CRM_COLORS } from "@/app/crm/_lib/constants";
-import {
-  findOrCreateOpenConversation,
-  normalizeChannelPhone,
-} from "@/app/api/crm/_lib/channel-messages";
+import { insertClientRow, normalizeClientPhone } from "@/app/crm/_lib/client-identity";
+import { findOrCreateOpenConversation } from "@/app/api/crm/_lib/channel-messages";
 import { assertAppChannelSecret, createAppSessionToken } from "../_lib/app-session";
 import {
   extractCedulaDigits,
   generateClientAppPassword,
   verifyClientAppPassword,
-  getClientInitials,
 } from "@/lib/client-auth-utils";
 import {
   APP_ERROR_CODES,
@@ -20,6 +16,7 @@ import {
   parseAppSchema,
   toAppErrorResponse,
 } from "../_lib/app-errors";
+import { buildAppRealtimePayload } from "../_lib/realtime-payload";
 
 const sessionRequestSchema = z.object({
   action: z
@@ -81,7 +78,7 @@ export const POST = async (request: NextRequest) => {
       }
 
       const rawPhone = (phone || "").trim();
-      const normalizedPhone = normalizeChannelPhone(rawPhone);
+      const normalizedPhone = normalizeClientPhone(rawPhone);
       if (!normalizedPhone || normalizedPhone.length < 7) {
         throw new AppApiError(
           APP_ERROR_CODES.PHONE_REQUIRED,
@@ -174,32 +171,16 @@ export const POST = async (request: NextRequest) => {
           }
         }
       } else {
-        const { count } = await supabase
-          .from("clients")
-          .select("id", { count: "exact", head: true })
-          .eq("organization_id", targetOrgId);
-
-        const color = CRM_COLORS[(count || 0) % CRM_COLORS.length];
-        const initials = getClientInitials(cleanName);
-
-        const { data: created, error: createError } = await supabase
-          .from("clients")
-          .insert({
-            organization_id: targetOrgId,
-            name: cleanName,
-            phone: normalizedPhone,
-            cedula: cleanCedula,
-            app_enabled: true,
-            account: "Prospecto",
-            color: color.color,
-            bg: color.bg,
-            initials,
-          })
-          .select("*")
-          .single();
-
-        if (createError) throw createError;
-        client = created;
+        client = await insertClientRow(supabase, {
+          organizationId: targetOrgId,
+          name: cleanName,
+          phone: normalizedPhone,
+          cedula: cleanCedula,
+          appEnabled: true,
+          account: "Prospecto",
+          plan: null,
+          zone: null,
+        });
       }
 
       if (!targetOrgId || !targetOrgData) {
@@ -223,6 +204,11 @@ export const POST = async (request: NextRequest) => {
         organizationId: targetOrgId,
         phone: client.phone || normalizedPhone,
       });
+      const realtime = await buildAppRealtimePayload({
+        clientId: Number(client.id),
+        organizationId: targetOrgId,
+        conversationId: Number(conversation.id),
+      });
 
       return NextResponse.json({
         token,
@@ -243,6 +229,7 @@ export const POST = async (request: NextRequest) => {
           status: conversation.status,
           human_mode: conversation.human_mode,
         },
+        realtime,
         generated_password: generatedPassword,
         message: "Usuario registrado exitosamente desde la app",
       });
@@ -360,6 +347,11 @@ export const POST = async (request: NextRequest) => {
       organizationId: String(organization.id),
       phone: clientPhone,
     });
+    const realtime = await buildAppRealtimePayload({
+      clientId: Number(client.id),
+      organizationId: String(organization.id),
+      conversationId: Number(conversation.id),
+    });
 
     return NextResponse.json({
       token,
@@ -380,6 +372,7 @@ export const POST = async (request: NextRequest) => {
         status: conversation.status,
         human_mode: conversation.human_mode,
       },
+      realtime,
     });
   } catch (error) {
     return toAppErrorResponse(error, {

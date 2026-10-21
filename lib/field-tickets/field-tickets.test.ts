@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { toDatetimeLocalValue, datetimeLocalToIso, assertVisitWindowRange } from "./datetime-local.ts";
+import {
+  toDatetimeLocalValue,
+  datetimeLocalToIso,
+  defaultVisitWindowLocal,
+  assertVisitWindowRange,
+} from "./datetime-local.ts";
 import { buildMapsUrl, parseMapsUrlCoords } from "./maps-url.ts";
 import {
   resolveTicketConversationId,
@@ -33,6 +38,8 @@ const ticket = (overrides: Partial<FieldTicket>): FieldTicket => ({
   status: "scheduled",
   priority: "medium",
   kind: "technical",
+  categoryId: null,
+  categoryName: null,
   title: "Sin internet",
   cause: null,
   description: null,
@@ -50,6 +57,8 @@ const ticket = (overrides: Partial<FieldTicket>): FieldTicket => ({
   lastTechnicianReportKey: null,
   closedAt: null,
   resolutionObservation: null,
+  wisproIssueId: "issue",
+  wisproOrderId: "ord-t1",
   createdAt: "2026-09-28T10:00:00.000Z",
   updatedAt: "2026-09-28T10:00:00.000Z",
   ...overrides,
@@ -62,6 +71,20 @@ test("datetime-local: roundtrip keeps local minutes", () => {
   const back = datetimeLocalToIso(local);
   assert.ok(back);
   assert.equal(new Date(back).getTime(), new Date(iso).getTime());
+});
+
+test("datetime-local: default visit window starts in one hour and lasts one hour", () => {
+  const now = new Date("2026-10-20T14:30:45.123Z");
+  const result = defaultVisitWindowLocal(now);
+  const start = new Date(datetimeLocalToIso(result.windowStart)!);
+  const end = new Date(datetimeLocalToIso(result.windowEnd)!);
+  const expectedStart = new Date(now);
+  expectedStart.setSeconds(0, 0);
+  expectedStart.setHours(expectedStart.getHours() + 1);
+  assert.match(result.windowStart, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+  assert.match(result.windowEnd, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+  assert.equal(start.getTime(), expectedStart.getTime());
+  assert.equal(end.getTime() - start.getTime(), 60 * 60 * 1000);
 });
 
 test("datetime-local: empty becomes null and range validates", () => {

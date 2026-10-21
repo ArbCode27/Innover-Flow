@@ -35,7 +35,10 @@ export const CrmShell = () => {
   const [activeView, setActiveView] = useState<CrmView>("dashboard");
   const auth = useCrmAuth();
   const crm = useCrmData(auth.agent);
-  const fieldTickets = useFieldTickets(Boolean(auth.agent));
+  const fieldTickets = useFieldTickets(
+    Boolean(auth.agent),
+    auth.agent?.organization_id,
+  );
   const openTicketConversationIds = useMemo(() => {
     const ids = new Set<number>();
     for (const ticket of fieldTickets.tickets) {
@@ -304,6 +307,7 @@ export const CrmShell = () => {
               <FieldTicketsView
                 tickets={fieldTickets.tickets}
                 technicians={fieldTickets.technicians}
+                categories={fieldTickets.categories}
                 isLoading={fieldTickets.isLoading}
                 error={fieldTickets.error}
                 onRefresh={fieldTickets.refresh}

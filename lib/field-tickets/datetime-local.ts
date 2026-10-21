@@ -15,6 +15,21 @@ export const datetimeLocalToIso = (value: string | null | undefined) => {
   return date.toISOString();
 };
 
+const VISIT_WINDOW_START_OFFSET_HOURS = 1;
+const VISIT_WINDOW_DURATION_HOURS = 1;
+
+export const defaultVisitWindowLocal = (now: Date = new Date()) => {
+  const start = new Date(now);
+  start.setSeconds(0, 0);
+  start.setHours(start.getHours() + VISIT_WINDOW_START_OFFSET_HOURS);
+  const end = new Date(start);
+  end.setHours(end.getHours() + VISIT_WINDOW_DURATION_HOURS);
+  return {
+    windowStart: toDatetimeLocalValue(start.toISOString()),
+    windowEnd: toDatetimeLocalValue(end.toISOString()),
+  };
+};
+
 export const assertVisitWindowRange = (
   startIso: string | null,
   endIso: string | null,

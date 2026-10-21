@@ -11,16 +11,21 @@ import {
   fieldTicketKindLabel,
   fieldTicketPriorityLabel,
   fieldTicketStatusLabel,
+  mapFieldTicketRow,
   type FieldTicket,
-  type FieldTicketKind,
-  type FieldTicketPriority,
   type FieldTicketStatus,
   type Technician,
 } from "@/lib/field-tickets";
 import { createHash } from "node:crypto";
+import { closeLegacyWisproTicket } from "./wispro-legacy-close";
+import { resolveTicketCategory } from "./ticket-categories";
+import {
+  mapTicketCategoryRow,
+  type TicketCategory,
+} from "@/lib/ticket-categories";
 
 const LIST_COLUMNS =
-  "id, organization_id, issue_id, public_id, conversation_id, crm_client_id, employee_id, employee_name, employee_phone, employee_document, status, priority, kind, title, cause, description, client_name, client_phone, maps_url, latitude, longitude, address_text, facade_message_id, window_start, window_end, last_technician_report_at, last_technician_report_key, closed_at, resolution_observation, created_at, updated_at";
+  "id, organization_id, issue_id, public_id, conversation_id, crm_client_id, employee_id, employee_name, employee_phone, employee_document, status, priority, kind, category_id, title, cause, description, client_name, client_phone, maps_url, latitude, longitude, address_text, facade_message_id, window_start, window_end, last_technician_report_at, last_technician_report_key, closed_at, resolution_observation, wispro_issue_id, wispro_order_id, created_at, updated_at";
 
 const DETAIL_COLUMNS = `${LIST_COLUMNS}, facade_media_url`;
 
@@ -62,8 +67,9 @@ export const createFieldTicketSchema = z.object({
   title: z.string().trim().min(1, "El título es obligatorio").max(80),
   description: optionalText(8000),
   cause: optionalText(240),
+  categoryId: z.string().uuid().optional().nullable(),
   priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
-  kind: z.enum(["technical", "installation", "resignation", "feasibility"]),
+  kind: z.enum(["technical", "installation", "resignation", "feasibility"]).optional(),
   employeeId: z.string().trim().min(1).optional().nullable(),
   mapsUrl: optionalText(2000),
   latitude: optionalNumber,
@@ -85,6 +91,7 @@ export const updateFieldTicketSchema = z.object({
   action: z.literal("update"),
   title: z.string().trim().min(1).max(80).optional(),
   cause: optionalText(240),
+  categoryId: z.string().uuid().optional().nullable(),
   description: optionalText(8000),
   priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
   kind: z.enum(["technical", "installation", "resignation", "feasibility"]).optional(),
@@ -134,57 +141,8 @@ export const bulkFieldTicketsSchema = z.discriminatedUnion("action", [
 
 type FieldTicketRow = Record<string, unknown>;
 
-const toNumberOrNull = (value: unknown) => {
-  if (value === null || value === undefined || value === "") return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
-const toIntOrNull = (value: unknown) => {
-  const parsed = toNumberOrNull(value);
-  return parsed == null ? null : Math.trunc(parsed);
-};
-
-export const mapFieldTicket = (row: FieldTicketRow): FieldTicket => ({
-  id: String(row.id),
-  organizationId: String(row.organization_id || ""),
-  issueId: String(row.issue_id),
-  publicId: Number(row.public_id),
-  conversationId: toIntOrNull(row.conversation_id),
-  crmClientId: toIntOrNull(row.crm_client_id),
-  employeeId: row.employee_id ? String(row.employee_id) : null,
-  employeeName: row.employee_name ? String(row.employee_name) : null,
-  employeePhone: row.employee_phone ? String(row.employee_phone) : null,
-  employeeDocument: row.employee_document ? String(row.employee_document) : null,
-  status: row.status as FieldTicketStatus,
-  priority: row.priority as FieldTicketPriority,
-  kind: row.kind as FieldTicketKind,
-  title: String(row.title || ""),
-  cause: row.cause ? String(row.cause) : null,
-  description: row.description ? String(row.description) : null,
-  clientName: row.client_name ? String(row.client_name) : null,
-  clientPhone: row.client_phone ? String(row.client_phone) : null,
-  mapsUrl: row.maps_url ? String(row.maps_url) : null,
-  latitude: toNumberOrNull(row.latitude),
-  longitude: toNumberOrNull(row.longitude),
-  addressText: row.address_text ? String(row.address_text) : null,
-  facadeMediaUrl: row.facade_media_url ? String(row.facade_media_url) : null,
-  facadeMessageId: row.facade_message_id ? String(row.facade_message_id) : null,
-  windowStart: row.window_start ? String(row.window_start) : null,
-  windowEnd: row.window_end ? String(row.window_end) : null,
-  lastTechnicianReportAt: row.last_technician_report_at
-    ? String(row.last_technician_report_at)
-    : null,
-  lastTechnicianReportKey: row.last_technician_report_key
-    ? String(row.last_technician_report_key)
-    : null,
-  closedAt: row.closed_at ? String(row.closed_at) : null,
-  resolutionObservation: row.resolution_observation
-    ? String(row.resolution_observation)
-    : null,
-  createdAt: String(row.created_at),
-  updatedAt: String(row.updated_at),
-});
+export const mapFieldTicket = (row: FieldTicketRow): FieldTicket =>
+  mapFieldTicketRow(row);
 
 export const mapTechnician = (row: FieldTicketRow): Technician => ({
   id: String(row.id),
@@ -195,6 +153,51 @@ export const mapTechnician = (row: FieldTicketRow): Technician => ({
   isSupervisor: Boolean(row.is_supervisor),
   sourceEmployeeId: row.source_employee_id ? String(row.source_employee_id) : null,
 });
+
+const withCategoryName = (
+  ticket: FieldTicket,
+  category: TicketCategory | null | undefined,
+): FieldTicket => ({
+  ...ticket,
+  categoryId: category?.id ?? ticket.categoryId,
+  categoryName: category?.name ?? ticket.categoryName,
+});
+
+const attachCategories = async (
+  supabase: SupabaseClient,
+  organizationId: string,
+  tickets: FieldTicket[],
+): Promise<FieldTicket[]> => {
+  const ids = [
+    ...new Set(
+      tickets
+        .map((ticket) => ticket.categoryId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (!ids.length) return tickets;
+
+  const { data, error } = await supabase
+    .from("ticket_categories")
+    .select("id, organization_id, name, slug, kind, sort_order, is_active")
+    .eq("organization_id", organizationId)
+    .in("id", ids);
+  if (error) throw error;
+
+  const byId = new Map(
+    (data || []).map((row) => {
+      const category = mapTicketCategoryRow(row);
+      return [category.id, category] as const;
+    }),
+  );
+
+  return tickets.map((ticket) =>
+    withCategoryName(
+      ticket,
+      ticket.categoryId ? byId.get(ticket.categoryId) : null,
+    ),
+  );
+};
 
 const resolveWindow = (start?: string | null, end?: string | null) => {
   const windowStart = start || null;
@@ -491,7 +494,11 @@ export const listFieldTickets = async (
     .eq("organization_id", organizationId)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return (data || []).map(mapFieldTicket);
+  return attachCategories(
+    supabase,
+    organizationId,
+    (data || []).map(mapFieldTicket),
+  );
 };
 
 export const getFieldTicket = async (
@@ -509,7 +516,10 @@ export const getFieldTicket = async (
   if (!data) {
     throw new FieldTicketError("not_found", "Ticket no encontrado", 404);
   }
-  return mapFieldTicket(data);
+  const [ticket] = await attachCategories(supabase, organizationId, [
+    mapFieldTicket(data),
+  ]);
+  return ticket;
 };
 
 export const createFieldTicket = async (
@@ -527,6 +537,18 @@ export const createFieldTicket = async (
     organizationId,
     input.employeeId,
   );
+  const category = await resolveTicketCategory(supabase, organizationId, {
+    categoryId: input.categoryId,
+    kind: input.kind,
+  });
+  const kind = category?.kind || input.kind;
+  if (!kind) {
+    throw new FieldTicketError(
+      "invalid_category",
+      "Selecciona una categoría del CRM",
+      400,
+    );
+  }
   const hasWindow = Boolean(window.windowStart || window.windowEnd);
   const status: FieldTicketStatus =
     assignment.employee_id && hasWindow ? "scheduled" : "open";
@@ -540,7 +562,8 @@ export const createFieldTicket = async (
       ...assignment,
       status,
       priority: input.priority,
-      kind: input.kind,
+      kind,
+      category_id: category?.id || null,
       title: input.title,
       cause: input.cause,
       description: input.description,
@@ -559,7 +582,28 @@ export const createFieldTicket = async (
     .single();
 
   if (error) throw error;
-  return mapFieldTicket(data);
+  const created = mapFieldTicket(data);
+  const wisproIssueId = created.wisproIssueId || created.issueId;
+  const wisproOrderId = created.wisproOrderId || `ord-${created.id}`;
+  if (
+    created.wisproIssueId !== wisproIssueId ||
+    created.wisproOrderId !== wisproOrderId
+  ) {
+    const { data: patched, error: patchError } = await supabase
+      .from("field_tickets")
+      .update({
+        wispro_issue_id: wisproIssueId,
+        wispro_order_id: wisproOrderId,
+      })
+      .eq("id", created.id)
+      .eq("organization_id", organizationId)
+      .select(DETAIL_COLUMNS)
+      .single();
+    if (!patchError && patched) {
+      return withCategoryName(mapFieldTicket(patched), category);
+    }
+  }
+  return withCategoryName(created, category);
 };
 
 export const updateFieldTicket = async (
@@ -575,7 +619,18 @@ export const updateFieldTicket = async (
   if (input.cause !== undefined) patch.cause = input.cause;
   if (input.description !== undefined) patch.description = input.description;
   if (input.priority !== undefined) patch.priority = input.priority;
-  if (input.kind !== undefined) patch.kind = input.kind;
+  if (input.categoryId !== undefined || input.kind !== undefined) {
+    const category = await resolveTicketCategory(supabase, organizationId, {
+      categoryId: input.categoryId,
+      kind: input.kind,
+    });
+    if (category) {
+      patch.category_id = category.id;
+      patch.kind = category.kind;
+    } else if (input.kind !== undefined) {
+      patch.kind = input.kind;
+    }
+  }
   if (input.addressText !== undefined) patch.address_text = input.addressText;
   if (input.clientName !== undefined) patch.client_name = input.clientName;
   if (input.clientPhone !== undefined) patch.client_phone = input.clientPhone;
@@ -629,7 +684,10 @@ export const updateFieldTicket = async (
     .select(DETAIL_COLUMNS)
     .single();
   if (error) throw error;
-  return mapFieldTicket(data);
+  const [ticket] = await attachCategories(supabase, organizationId, [
+    mapFieldTicket(data),
+  ]);
+  return ticket;
 };
 
 export const reassignFieldTicket = async (
@@ -712,7 +770,23 @@ export const finalizeFieldTicket = async (
     .select(DETAIL_COLUMNS)
     .single();
   if (error) throw error;
-  return mapFieldTicket(data);
+  const closed = mapFieldTicket(data);
+  try {
+    await closeLegacyWisproTicket({
+      organizationId,
+      wisproIssueId: closed.wisproIssueId,
+      wisproOrderId: closed.wisproOrderId,
+    });
+  } catch (legacyError) {
+    console.warn("[FIELD_TICKETS] legacy_wispro_close_soft_failed", {
+      ticketId: closed.id,
+      error:
+        legacyError instanceof Error
+          ? legacyError.message
+          : String(legacyError),
+    });
+  }
+  return closed;
 };
 
 export const deleteFieldTicket = async (

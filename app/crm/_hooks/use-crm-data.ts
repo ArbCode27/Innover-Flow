@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { crmService } from "../_lib/crm-service";
-import { getSupabaseClient } from "../_lib/supabase";
+import { ensureCrmRealtimeAuth, getSupabaseClient } from "../_lib/supabase";
 import {
   filterConversations,
   getConversationFilterCounts,
@@ -45,6 +45,7 @@ import type {
 } from "../_lib/types";
 import { DEFAULT_BOT_ENGINE } from "../_lib/bot-engine";
 import { DEFAULT_AI_MODEL } from "../_lib/ai-models";
+import { logMessageEvent, previewMessage } from "@/lib/message-event-log";
 
 const emptyData: CrmData = {
   agents: [],
@@ -66,6 +67,23 @@ const emptyData: CrmData = {
     updated_at: null,
     updated_by: null,
   },
+};
+
+const logCrmConversationEvent = (
+  event: "INSERT" | "UPDATE" | "DELETE",
+  conversation: Partial<Conversation> & { id?: number },
+  extra: Record<string, unknown> = {},
+) => {
+  logMessageEvent("crm_realtime_conversation", {
+    event,
+    conversationId: conversation.id ?? null,
+    status: conversation.status ?? null,
+    unread: conversation.unread ?? null,
+    humanMode: conversation.human_mode ?? null,
+    agentId: conversation.agent_id ?? null,
+    preview: previewMessage(conversation.preview),
+    ...extra,
+  });
 };
 
 const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
@@ -124,6 +142,27 @@ export const useCrmData = (agent: Agent | null) => {
   useEffect(() => {
     clientsRef.current = data.clients;
   }, [data.clients]);
+
+  const [realtimeReady, setRealtimeReady] = useState(false);
+  const messagesRealtimeOkRef = useRef(false);
+
+  useEffect(() => {
+    if (!agent) {
+      setRealtimeReady(false);
+      return;
+    }
+    let cancelled = false;
+    void ensureCrmRealtimeAuth().finally(() => {
+      if (!cancelled) setRealtimeReady(true);
+    });
+    const refreshAuth = window.setInterval(() => {
+      void ensureCrmRealtimeAuth();
+    }, 45 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshAuth);
+    };
+  }, [agent]);
 
   const applyClientRealtimeRow = useCallback(
     (incoming: Client, options?: { previous?: Client | null }) => {
@@ -187,10 +226,63 @@ export const useCrmData = (agent: Agent | null) => {
     [agent, applyClientRealtimeRow],
   );
 
-  // ── REALTIME: mensajes nuevos ──────────────────────────
+  // ── REALTIME: mensajes nuevos y estados ──────────────────────────
   useEffect(() => {
-    if (!agent) return;
+    if (!agent || !realtimeReady) return;
     const supabase = getSupabaseClient();
+    const applyMessage = (incoming: Message, incrementUnread: boolean) => {
+      const isOpenConversation =
+        incoming.conversation_id === selectedConversationIdRef.current;
+      const conversationInList = conversationsRef.current.some(
+        (conversation) => conversation.id === incoming.conversation_id,
+      );
+      const appliedToTranscript = isOpenConversation;
+      const appliedToInbox =
+        !isOpenConversation &&
+        incoming.type === "in" &&
+        incrementUnread &&
+        conversationInList;
+
+      logMessageEvent("crm_realtime_message", {
+        event: incrementUnread ? "INSERT" : "UPDATE",
+        messageId: incoming.id,
+        conversationId: incoming.conversation_id,
+        type: incoming.type,
+        senderType: incoming.sender_type,
+        preview: previewMessage(incoming.content),
+        isOpenConversation,
+        conversationInList,
+        appliedToTranscript,
+        appliedToInbox,
+      });
+
+      if (isOpenConversation) {
+        setMessages((current) => {
+          const exists = current.some((m) => m.id === incoming.id);
+          if (exists) {
+            return current.map((message) =>
+              message.id === incoming.id ? { ...message, ...incoming } : message,
+            );
+          }
+          return [...current, incoming];
+        });
+        return;
+      }
+
+      if (incoming.type !== "in" || !incrementUnread) return;
+
+      setData((current) => ({
+        ...current,
+        conversations: current.conversations.map((conversation) =>
+          conversation.id === incoming.conversation_id
+            ? applyInboundMessageToConversation(conversation, incoming, {
+                incrementUnread: true,
+              })
+            : conversation,
+        ),
+      }));
+    };
+
     const channel = supabase
       .channel(`realtime:messages:${agent.organization_id}`)
       .on(
@@ -201,48 +293,40 @@ export const useCrmData = (agent: Agent | null) => {
           table: "messages",
           filter: `organization_id=eq.${agent.organization_id}`,
         },
-        (payload) => {
-          const newMessage = payload.new as Message;
-          const isOpenConversation =
-            newMessage.conversation_id === selectedConversationIdRef.current;
-
-          if (isOpenConversation) {
-            setMessages((current) => {
-              const exists = current.some((m) => m.id === newMessage.id);
-              if (exists) return current;
-              return [...current, newMessage];
-            });
-            return;
-          }
-
-          if (newMessage.type !== "in") return;
-
-          setData((current) => ({
-            ...current,
-            conversations: current.conversations.map((conversation) =>
-              conversation.id === newMessage.conversation_id
-                ? applyInboundMessageToConversation(conversation, newMessage, {
-                    incrementUnread: true,
-                  })
-                : conversation,
-            ),
-          }));
-        },
+        (payload) => applyMessage(payload.new as Message, true),
       )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          console.log("✅ Realtime mensajes conectado");
-        }
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+          filter: `organization_id=eq.${agent.organization_id}`,
+        },
+        (payload) => applyMessage(payload.new as Message, false),
+      )
+      .subscribe((status, err) => {
+        messagesRealtimeOkRef.current = status === "SUBSCRIBED";
+        logMessageEvent(
+          "crm_realtime_status",
+          {
+            channel: "messages",
+            status,
+            error: err?.message ?? null,
+          },
+          status === "CHANNEL_ERROR" || status === "TIMED_OUT" ? "warn" : "info",
+        );
       });
 
     return () => {
+      messagesRealtimeOkRef.current = false;
       supabase.removeChannel(channel);
     };
-  }, [agent]);
+  }, [agent, realtimeReady]);
 
   // ── REALTIME: conversaciones ───────────────────────────
   useEffect(() => {
-    if (!agent) return;
+    if (!agent || !realtimeReady) return;
     const supabase = getSupabaseClient();
     const channel = supabase
       .channel(`realtime:conversations:${agent.organization_id}`)
@@ -256,6 +340,7 @@ export const useCrmData = (agent: Agent | null) => {
         },
         (payload) => {
           const newConv = payload.new as Conversation;
+          logCrmConversationEvent("INSERT", newConv);
           setData((current) => ({
             ...current,
             conversations: [newConv, ...current.conversations],
@@ -275,6 +360,9 @@ export const useCrmData = (agent: Agent | null) => {
           const previous = conversationsRef.current.find(
             (conversation) => conversation.id === updated.id,
           );
+          logCrmConversationEvent("UPDATE", updated, {
+            wasInList: Boolean(previous),
+          });
 
           setData((current) => ({
             ...current,
@@ -301,6 +389,7 @@ export const useCrmData = (agent: Agent | null) => {
         (payload) => {
           const deletedId = (payload.old as { id?: number }).id;
           if (!deletedId) return;
+          logCrmConversationEvent("DELETE", { id: deletedId });
 
           setData((current) => ({
             ...current,
@@ -315,20 +404,26 @@ export const useCrmData = (agent: Agent | null) => {
           }
         },
       )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          console.log("✅ Realtime conversaciones conectado");
-        }
+      .subscribe((status, err) => {
+        logMessageEvent(
+          "crm_realtime_status",
+          {
+            channel: "conversations",
+            status,
+            error: err?.message ?? null,
+          },
+          status === "CHANNEL_ERROR" || status === "TIMED_OUT" ? "warn" : "info",
+        );
       });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [agent, ensureClientInMemory]);
+  }, [agent, realtimeReady, ensureClientInMemory]);
 
   // ── REALTIME: clientes ─────────────────────────────────
   useEffect(() => {
-    if (!agent) return;
+    if (!agent || !realtimeReady) return;
     const supabase = getSupabaseClient();
     const channel = supabase
       .channel(`realtime:clients:${agent.organization_id}`)
@@ -369,7 +464,7 @@ export const useCrmData = (agent: Agent | null) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [agent, applyClientRealtimeRow]);
+  }, [agent, realtimeReady, applyClientRealtimeRow]);
 
   const loadData = useCallback(async (options?: { silent?: boolean }) => {
     if (!agent) return;
@@ -410,7 +505,7 @@ export const useCrmData = (agent: Agent | null) => {
       if (document.visibilityState === "visible") {
         void loadData({ silent: true });
       }
-    }, 10_000);
+    }, 30_000);
     return () => window.clearInterval(interval);
   }, [agent, loadData]);
 
@@ -418,6 +513,7 @@ export const useCrmData = (agent: Agent | null) => {
     if (!agent || !selectedConversationId) return;
     const interval = window.setInterval(async () => {
       if (document.visibilityState !== "visible") return;
+      if (messagesRealtimeOkRef.current) return;
       try {
         const latestMessages = await crmService.loadMessages(
           selectedConversationId,

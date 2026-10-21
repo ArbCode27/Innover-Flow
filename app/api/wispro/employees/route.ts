@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getEmployees, WisproEmployee } from "@/lib/wispro";
+import { getEmployees, isFieldEmployee, WisproEmployee } from "@/lib/wispro";
 import { getCrmAuthContext } from "@/app/api/crm/_lib/crm-auth-context";
 import { getSupabaseAdmin } from "@/app/api/crm/_lib/supabase-admin";
 import { decryptIntegrationSecret } from "@/app/api/crm/_lib/integration-secrets";
@@ -70,9 +70,15 @@ export async function GET(req: NextRequest) {
     const whitelist = getTecnicosWhitelist();
     const isFiltered = !showAll && whitelist.length > 0;
 
+    const fieldEmployees = showAll
+      ? allEmployees
+      : allEmployees.filter(isFieldEmployee);
+
     const filteredEmployees = isFiltered
-      ? allEmployees.filter((emp) => whitelist.includes(String(emp.id).toLowerCase().trim()))
-      : allEmployees;
+      ? fieldEmployees.filter((emp) =>
+          whitelist.includes(String(emp.id).toLowerCase().trim()),
+        )
+      : fieldEmployees;
 
     return NextResponse.json({
       data: filteredEmployees,

@@ -23,6 +23,9 @@ const wisproInvoicingSchema = z.object({
   accountStatus: z.enum(["Al día", "Con deuda", "Suspendido", "Prospecto"]),
   serviceSuspended: z.boolean().optional().default(false),
   contractState: z.string().nullable().optional().default(null),
+  contractId: z.string().nullable().optional(),
+  planName: z.string().nullable().optional(),
+  pppProfile: z.string().nullable().optional(),
   snapshot: z
     .object({
       invoiceIndex: z.number(),

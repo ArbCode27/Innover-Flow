@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { CRM_SURFACES, CRM_TABLE } from "../../_lib/crm-theme";
 import {
   buildMapsUrl,
-  fieldTicketKindLabel,
+  fieldTicketCategoryLabel,
   fieldTicketPriorityLabel,
   isOpenFieldTicketStatus,
   type FieldTicket,
@@ -129,7 +129,7 @@ export const FieldTicketsTable = ({
                       </div>
                     </TableCell>
                     <TableCell className={CRM_SURFACES.textSecondary}>
-                      {fieldTicketKindLabel(ticket.kind, ticket.title)}
+                      {fieldTicketCategoryLabel(ticket)}
                     </TableCell>
                     <TableCell className={CRM_SURFACES.textMuted}>
                       {ticket.employeeName || "Sin asignar"}

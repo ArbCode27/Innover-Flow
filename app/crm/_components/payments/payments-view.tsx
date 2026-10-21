@@ -9,7 +9,7 @@ import type {
   CrmPaymentStatus,
   CrmPaymentStatusCounts,
 } from "../../_lib/payments";
-import { formatPaymentField } from "../../_lib/payments";
+import { formatPaymentAmount, formatPaymentField } from "../../_lib/payments";
 import type { Agent } from "../../_lib/types";
 import { CrmButton } from "../shared/crm-button";
 import { LoadingState } from "../shared/loading-state";
@@ -279,6 +279,8 @@ export const PaymentsView = ({
         ok?: boolean;
         error?: string;
         payment?: CrmPayment;
+        approve_kind?: string;
+        remaining_amount?: number;
         conversation_id?: number | null;
         assigned?: boolean;
         assigned_agent_id?: number | null;
@@ -343,8 +345,14 @@ export const PaymentsView = ({
       }
 
       if (action === "approve") {
+        const remaining =
+          typeof payload.remaining_amount === "number"
+            ? payload.remaining_amount
+            : 0;
         toast.success(
-          `Pago de ${formatPaymentField(nextPayment.client_name)} aprobado`,
+          remaining > 0
+            ? `Pago aprobado. Restante ${formatPaymentAmount(remaining)}`
+            : `Pago de ${formatPaymentField(nextPayment.client_name)} aprobado`,
         );
       } else {
         toast.success(
