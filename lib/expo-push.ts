@@ -123,11 +123,24 @@ const expoPushHeaders = (): Record<string, string> => {
   return headers;
 };
 
+let warnedMissingExpoAccessToken = false;
+
+const warnIfMissingExpoAccessToken = () => {
+  if (warnedMissingExpoAccessToken) return;
+  if (process.env.EXPO_ACCESS_TOKEN?.trim()) return;
+  warnedMissingExpoAccessToken = true;
+  console.warn(
+    "[EXPO_PUSH] EXPO_ACCESS_TOKEN unset — sending without Authorization. " +
+      "Required only if Expo Enhanced Security is enabled. Set it in Vercel Production.",
+  );
+};
+
 export const sendExpoPushMessages = async (
   messages: ExpoPushMessage[],
 ): Promise<{ tickets: ExpoPushTicket[] }> => {
   if (!messages.length) return { tickets: [] };
 
+  warnIfMissingExpoAccessToken();
   const headers = expoPushHeaders();
   const tickets: ExpoPushTicket[] = [];
 

@@ -250,29 +250,8 @@ export const crmService = {
     await mutateCrmData({ action: "clearUnread", conversationId });
   },
 
-  async sendMessage(conversationId: number, content: string, senderType: "agent" | "bot") {
-    const now = new Date().toISOString();
-    const { data, error } = await db()
-      .from("messages")
-      .insert({
-        conversation_id: conversationId,
-        type: "out",
-        content,
-        sender_type: senderType,
-      })
-      .select()
-      .single<Message>();
-
-    throwIfError(error);
-
-    const { error: conversationError } = await db()
-      .from("conversations")
-      .update({ preview: content, updated_at: now })
-      .eq("id", conversationId);
-
-    throwIfError(conversationError);
-    return ensureData(data, "No se pudo guardar el mensaje");
-  },
+  // Outbound app messages must go through POST /api/crm/messages/send
+  // (persistOutboundMessage → Expo Push). Do not insert type=out from the browser.
 
   async addNote(conversationId: number, content: string, organizationId: string) {
     void organizationId;

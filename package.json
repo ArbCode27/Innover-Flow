@@ -10,7 +10,8 @@
     "lint": "next lint",
     "test": "node --test lib/parseReporte.test.ts lib/field-tickets/field-tickets.test.ts lib/scoring.test.ts lib/client-auth-utils.test.ts lib/supabase-realtime-jwt.test.ts lib/message-event-log.test.ts lib/chat-push-preview.test.ts lib/wispro-rules.test.ts",
     "start": "next start",
-    "db:check": "node scripts/check-supabase.mjs"
+    "db:check": "node scripts/check-supabase.mjs",
+    "verify:expo-push": "node scripts/verify-expo-push.mjs"
   },
   "dependencies": {
     "@emoji-mart/data": "^1.2.1",
