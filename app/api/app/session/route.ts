@@ -17,6 +17,8 @@ import {
   toAppErrorResponse,
 } from "../_lib/app-errors";
 import { buildAppRealtimePayload } from "../_lib/realtime-payload";
+import { toSessionClientDto } from "../_lib/app-client-dtos";
+import type { AppClientRow } from "../_lib/load-app-client";
 
 const sessionRequestSchema = z.object({
   action: z
@@ -225,13 +227,7 @@ export const POST = async (request: NextRequest) => {
           name: targetOrgData.name,
           slug: targetOrgData.slug,
         },
-        client: {
-          id: client.id,
-          name: client.name,
-          phone: client.phone,
-          cedula: client.cedula,
-          app_enabled: client.app_enabled,
-        },
+        client: toSessionClientDto(client as AppClientRow),
         conversation: {
           id: conversation.id,
           status: conversation.status,
@@ -368,13 +364,7 @@ export const POST = async (request: NextRequest) => {
         name: organization.name,
         slug: organization.slug,
       },
-      client: {
-        id: client.id,
-        name: client.name,
-        phone: client.phone,
-        cedula: client.cedula,
-        app_enabled: client.app_enabled,
-      },
+      client: toSessionClientDto(client as AppClientRow),
       conversation: {
         id: conversation.id,
         status: conversation.status,
