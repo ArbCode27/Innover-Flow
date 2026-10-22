@@ -210,6 +210,7 @@ export const POST = async (request: NextRequest) => {
       );
 
       const token = await createAppSessionToken({
+        role: "customer",
         clientId: Number(client.id),
         organizationId: targetOrgId,
         phone: client.phone || normalizedPhone,
@@ -222,12 +223,14 @@ export const POST = async (request: NextRequest) => {
 
       return NextResponse.json({
         token,
+        role: "customer",
         organization: {
           id: targetOrgData.id,
           name: targetOrgData.name,
           slug: targetOrgData.slug,
         },
         client: toSessionClientDto(client as AppClientRow),
+        technician: null,
         conversation: {
           id: conversation.id,
           status: conversation.status,
@@ -291,12 +294,108 @@ export const POST = async (request: NextRequest) => {
     if (clientError) throw clientError;
 
     const client = matchedClients?.[0];
+
+    // ------------------------------------------------------------------
+    // Login técnico/supervisor si no hay cliente con esa cédula
+    // ------------------------------------------------------------------
     if (!client) {
-      throw new AppApiError(
-        APP_ERROR_CODES.CLIENT_NOT_FOUND,
-        "No encontramos un cliente con esta cédula. Verifica el número o contacta a soporte.",
-        404,
+      let techQuery = supabase.from("technicians").select("*");
+      if (organization_slug) {
+        const { data: orgBySlug } = await supabase
+          .from("organizations")
+          .select("id")
+          .eq("slug", organization_slug)
+          .maybeSingle();
+        if (orgBySlug) {
+          techQuery = techQuery.eq("organization_id", orgBySlug.id);
+        }
+      }
+
+      const { data: techRows, error: techError } = await techQuery.limit(100);
+      if (techError) throw techError;
+
+      const technician = (techRows || []).find((row) => {
+        const digits = extractCedulaDigits(
+          typeof row.document === "string" ? row.document : "",
+        );
+        return digits === cleanCedula;
+      });
+
+      if (!technician) {
+        throw new AppApiError(
+          APP_ERROR_CODES.CLIENT_NOT_FOUND,
+          "No encontramos una cuenta con esta cédula. Verifica el número o contacta a soporte.",
+          404,
+        );
+      }
+
+      const { data: organization, error: orgError } = await supabase
+        .from("organizations")
+        .select("id, name, slug, status")
+        .eq("id", technician.organization_id)
+        .maybeSingle();
+
+      if (orgError) throw orgError;
+      if (!organization || organization.status !== "active") {
+        throw new AppApiError(
+          APP_ERROR_CODES.ORGANIZATION_INACTIVE,
+          "Tu proveedor no está disponible en este momento. Contacte a soporte.",
+          403,
+        );
+      }
+
+      if (technician.app_enabled === false) {
+        throw new AppApiError(
+          APP_ERROR_CODES.APP_DISABLED,
+          "El acceso a la app está deshabilitado para esta cuenta. Contacte a soporte.",
+          403,
+        );
+      }
+
+      const isPasswordValid = verifyClientAppPassword(
+        cleanPassword,
+        technician.document || cleanCedula,
+        technician.name,
       );
+      if (!isPasswordValid) {
+        throw new AppApiError(
+          APP_ERROR_CODES.WRONG_PASSWORD,
+          "Contraseña incorrecta. Es tu cédula seguida de tus iniciales en mayúsculas (ejemplo: 28123456CP).",
+          401,
+        );
+      }
+
+      const role = technician.is_supervisor ? "supervisor" : "technician";
+      const techPhone =
+        (typeof technician.phone === "string" && technician.phone.trim()) ||
+        "580000000000";
+      const token = await createAppSessionToken({
+        role,
+        organizationId: String(organization.id),
+        phone: techPhone,
+        technicianId: String(technician.id),
+      });
+
+      return NextResponse.json({
+        token,
+        role,
+        organization: {
+          id: organization.id,
+          name: organization.name,
+          slug: organization.slug,
+        },
+        client: null,
+        technician: {
+          id: technician.id,
+          name: technician.name,
+          phone: technician.phone ?? null,
+          document: technician.document ?? null,
+          is_supervisor: Boolean(technician.is_supervisor),
+          app_enabled: technician.app_enabled !== false,
+        },
+        conversation: null,
+        realtime: null,
+      });
     }
 
     // Localizar automáticamente la organización del cliente
@@ -347,6 +446,7 @@ export const POST = async (request: NextRequest) => {
     );
 
     const token = await createAppSessionToken({
+      role: "customer",
       clientId: Number(client.id),
       organizationId: String(organization.id),
       phone: clientPhone,
@@ -359,12 +459,14 @@ export const POST = async (request: NextRequest) => {
 
     return NextResponse.json({
       token,
+      role: "customer",
       organization: {
         id: organization.id,
         name: organization.name,
         slug: organization.slug,
       },
       client: toSessionClientDto(client as AppClientRow),
+      technician: null,
       conversation: {
         id: conversation.id,
         status: conversation.status,

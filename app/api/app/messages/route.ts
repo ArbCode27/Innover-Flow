@@ -11,7 +11,7 @@ import {
 import { withOptionalOrganizationWispro } from "@/app/api/crm/_lib/wispro-api";
 import { replyToConversationWithAi } from "@/app/api/crm/ai/_lib/reply-to-conversation";
 import { logMessageEvent } from "@/lib/message-event-log";
-import { getAppAuthContext } from "../_lib/app-auth";
+import { getAppCustomerAuthContext } from "../_lib/app-auth";
 import {
   APP_ERROR_CODES,
   AppApiError,
@@ -97,7 +97,7 @@ const scheduleAi = (
 
 export const GET = async (request: NextRequest) => {
   try {
-    const session = await getAppAuthContext(request);
+    const session = await getAppCustomerAuthContext(request);
     const supabase = getSupabaseAdmin();
     const conversation = await findOrCreateOpenConversation(
       supabase,
@@ -136,7 +136,7 @@ export const GET = async (request: NextRequest) => {
 
 export const POST = async (request: NextRequest) => {
   try {
-    const session = await getAppAuthContext(request);
+    const session = await getAppCustomerAuthContext(request);
     const supabase = getSupabaseAdmin();
     const conversation = await findOrCreateOpenConversation(
       supabase,

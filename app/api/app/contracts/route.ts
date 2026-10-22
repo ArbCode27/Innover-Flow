@@ -1,22 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/app/api/crm/_lib/supabase-admin";
 import {
+  enrichContractPlanAndPpp,
   listContractsByClientId,
   resolvePreferredContract,
   withOptionalOrganizationWispro,
 } from "@/app/api/crm/_lib/wispro-api";
-import { getAppAuthContext } from "../_lib/app-auth";
+import { getAppCustomerAuthContext } from "../_lib/app-auth";
 import {
   formatCedulaDisplay,
   toAppClientDto,
   toAppContractDto,
+  type AppContractDto,
 } from "../_lib/app-client-dtos";
 import { APP_ERROR_CODES, toAppErrorResponse } from "../_lib/app-errors";
 import { loadAppClient } from "../_lib/load-app-client";
 
+const withClientPlanFallback = (
+  contract: AppContractDto | null,
+  clientPlan: string | null,
+  clientPpp: string | null,
+  clientPlanName: string | null,
+): AppContractDto | null => {
+  if (!contract) return null;
+  if (contract.plan_label || contract.plan_name || contract.ppp_profile) {
+    return contract;
+  }
+  const fallback =
+    clientPlan ||
+    clientPpp ||
+    clientPlanName ||
+    null;
+  if (!fallback) return contract;
+  return {
+    ...contract,
+    plan_name: clientPlanName || contract.plan_name,
+    ppp_profile: clientPpp || contract.ppp_profile,
+    plan_label: fallback,
+  };
+};
+
 export const GET = async (_request: NextRequest) => {
   try {
-    const session = await getAppAuthContext(_request);
+    const session = await getAppCustomerAuthContext(_request);
     const supabase = getSupabaseAdmin();
     const client = await loadAppClient(supabase, {
       clientId: session.clientId,
@@ -32,6 +58,7 @@ export const GET = async (_request: NextRequest) => {
         cedula_display: formatCedulaDisplay(clientDto.cedula),
         zone: clientDto.zone,
         account_status: clientDto.account,
+        plan: clientDto.plan,
         primary: null,
         contracts: [],
       });
@@ -39,14 +66,28 @@ export const GET = async (_request: NextRequest) => {
 
     const contracts = await withOptionalOrganizationWispro(
       session.organizationId,
-      () => listContractsByClientId(clientDto.wispro_id!),
+      async () => {
+        const listed = await listContractsByClientId(clientDto.wispro_id!);
+        const preferred = resolvePreferredContract(listed);
+        const enrichedPreferred = await enrichContractPlanAndPpp(preferred);
+        return listed.map((contract) =>
+          enrichedPreferred && contract.id === enrichedPreferred.id
+            ? enrichedPreferred
+            : contract,
+        );
+      },
     );
     const preferred = resolvePreferredContract(contracts);
     const primaryId = preferred?.id ?? null;
     const mapped = contracts.map((contract) =>
       toAppContractDto(contract, contract.id === primaryId),
     );
-    const primary = mapped.find((item) => item.is_primary) ?? null;
+    const primary = withClientPlanFallback(
+      mapped.find((item) => item.is_primary) ?? null,
+      clientDto.plan,
+      clientDto.ppp_profile,
+      clientDto.plan_name,
+    );
 
     return NextResponse.json({
       wispro_linked: true,
@@ -55,6 +96,7 @@ export const GET = async (_request: NextRequest) => {
       cedula_display: formatCedulaDisplay(clientDto.cedula),
       zone: clientDto.zone,
       account_status: clientDto.account,
+      plan: clientDto.plan,
       primary,
       contracts: mapped,
     });

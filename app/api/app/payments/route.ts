@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/app/api/crm/_lib/supabase-admin";
-import { getAppAuthContext } from "../_lib/app-auth";
+import { getAppCustomerAuthContext } from "../_lib/app-auth";
 import { toAppPaymentDto } from "../_lib/app-client-dtos";
 import { APP_ERROR_CODES, toAppErrorResponse } from "../_lib/app-errors";
 import { loadAppClient } from "../_lib/load-app-client";
@@ -12,7 +12,7 @@ import { loadAppClient } from "../_lib/load-app-client";
  */
 export const GET = async (_request: NextRequest) => {
   try {
-    const session = await getAppAuthContext(_request);
+    const session = await getAppCustomerAuthContext(_request);
     const supabase = getSupabaseAdmin();
 
     await loadAppClient(supabase, {

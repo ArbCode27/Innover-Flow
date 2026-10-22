@@ -31,6 +31,15 @@ export const POST = async (request: NextRequest) => {
       "No se pudo registrar el dispositivo. Revisa los datos.",
     );
 
+    // Push de chat está ligado a clients; técnicos aún no tienen fila en app_devices.
+    if (session.role !== "customer" || !session.clientId) {
+      return NextResponse.json({
+        success: true,
+        skipped: true,
+        reason: "technician_push_not_configured",
+      });
+    }
+
     const supabase = getSupabaseAdmin();
     const now = new Date().toISOString();
     const payload = {

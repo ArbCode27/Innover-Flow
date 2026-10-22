@@ -1,8 +1,14 @@
+export type AppSessionRole = "customer" | "technician" | "supervisor";
+
 export interface AppSessionData {
-  clientId: number;
+  role: AppSessionRole;
   organizationId: string;
   phone: string;
   exp: number;
+  /** Present for customer sessions (legacy tokens always have this). */
+  clientId: number | null;
+  /** Present for technician / supervisor sessions. */
+  technicianId: string | null;
 }
 
 const getSecret = () => {
@@ -38,20 +44,44 @@ const base64UrlToBytes = (base64url: string): Uint8Array => {
 };
 
 export const createAppSessionToken = async (input: {
-  clientId: number;
+  role: AppSessionRole;
   organizationId: string;
   phone: string;
+  clientId?: number | null;
+  technicianId?: string | null;
 }): Promise<string> => {
   const secret = getSecret();
   const encoder = new TextEncoder();
+  const clientId =
+    input.role === "customer" && input.clientId != null
+      ? Number(input.clientId)
+      : null;
+  const technicianId =
+    (input.role === "technician" || input.role === "supervisor") &&
+    input.technicianId
+      ? String(input.technicianId)
+      : null;
+
+  if (input.role === "customer" && (!clientId || clientId <= 0)) {
+    throw new Error("clientId es requerido para sesión de cliente");
+  }
+  if (
+    (input.role === "technician" || input.role === "supervisor") &&
+    !technicianId
+  ) {
+    throw new Error("technicianId es requerido para sesión de técnico");
+  }
+
   const payloadB64 = bytesToBase64Url(
     encoder.encode(
       JSON.stringify({
-        clientId: input.clientId,
+        role: input.role,
         organizationId: input.organizationId,
         phone: input.phone,
+        clientId,
+        technicianId,
         exp: Date.now() + 30 * 24 * 60 * 60 * 1000,
-      }),
+      } satisfies AppSessionData),
     ),
   );
   const key = await crypto.subtle.importKey(
@@ -95,10 +125,53 @@ export const verifyAppSessionToken = async (
     if (!isValid) return null;
     const parsed = JSON.parse(
       new TextDecoder().decode(base64UrlToBytes(payloadB64)),
-    ) as AppSessionData;
-    if (!parsed?.organizationId || !parsed.clientId) return null;
-    if (Date.now() > parsed.exp) return null;
-    return parsed;
+    ) as Partial<AppSessionData> & { clientId?: number | null };
+
+    if (!parsed?.organizationId) return null;
+    if (typeof parsed.exp !== "number" || Date.now() > parsed.exp) return null;
+
+    const legacyClientId =
+      typeof parsed.clientId === "number" && parsed.clientId > 0
+        ? parsed.clientId
+        : null;
+    const technicianId =
+      typeof parsed.technicianId === "string" && parsed.technicianId.trim()
+        ? parsed.technicianId.trim()
+        : null;
+
+    let role = parsed.role;
+    if (!role) {
+      // Tokens emitidos antes del soporte multi-rol.
+      if (legacyClientId) role = "customer";
+      else if (technicianId) role = "technician";
+      else return null;
+    }
+
+    if (role === "customer") {
+      if (!legacyClientId) return null;
+      return {
+        role: "customer",
+        organizationId: String(parsed.organizationId),
+        phone: String(parsed.phone || ""),
+        exp: parsed.exp,
+        clientId: legacyClientId,
+        technicianId: null,
+      };
+    }
+
+    if (role === "technician" || role === "supervisor") {
+      if (!technicianId) return null;
+      return {
+        role,
+        organizationId: String(parsed.organizationId),
+        phone: String(parsed.phone || ""),
+        exp: parsed.exp,
+        clientId: null,
+        technicianId,
+      };
+    }
+
+    return null;
   } catch {
     return null;
   }

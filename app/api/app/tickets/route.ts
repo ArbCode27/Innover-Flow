@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/app/api/crm/_lib/supabase-admin";
 import { listFieldTicketsForClient, toClientAppTicket } from "@/app/api/crm/_lib/field-tickets";
 import { FIELD_TICKET_STATUSES } from "@/lib/field-tickets";
-import { getAppAuthContext } from "../_lib/app-auth";
+import { getAppCustomerAuthContext } from "../_lib/app-auth";
 import { APP_ERROR_CODES, toAppErrorResponse } from "../_lib/app-errors";
 
 const parseStatusFilter = (raw: string | null) => {
@@ -17,7 +17,7 @@ const parseStatusFilter = (raw: string | null) => {
 
 export const GET = async (request: NextRequest) => {
   try {
-    const session = await getAppAuthContext(request);
+    const session = await getAppCustomerAuthContext(request);
     const supabase = getSupabaseAdmin();
     const tickets = await listFieldTicketsForClient(
       supabase,

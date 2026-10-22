@@ -35,6 +35,8 @@ import type { AiRecoveryMessages } from "../../_lib/ai-recovery-messages";
 import type { CrmAccentId, CrmColorMode } from "../../_lib/crm-accents";
 import { OrganizationSettingsSection } from "./organization-settings-section";
 import { IntegrationsSettingsSection } from "./integrations-settings-section";
+import { PaymentMethodsSettingsSection } from "./payment-methods-settings-section";
+import { TechniciansSettingsSection } from "./technicians-settings-section";
 
 interface SettingsViewProps {
   currentAgent: Agent;
@@ -237,7 +239,7 @@ export const SettingsView = ({
             Ajustes del CRM
           </h2>
           <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
-            IA, apariencia, horarios de oficina y pagos fuera de jornada
+            IA, apariencia, datos de pago para la app y horarios de oficina
           </p>
         </div>
       </div>
@@ -250,6 +252,10 @@ export const SettingsView = ({
         />
 
         <IntegrationsSettingsSection organizationRole={organizationRole} />
+
+        <PaymentMethodsSettingsSection organizationRole={organizationRole} />
+
+        <TechniciansSettingsSection organizationRole={organizationRole} />
 
         <AppearanceSettingsSection
           isAdmin={isAdmin}

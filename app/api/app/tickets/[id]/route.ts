@@ -4,14 +4,14 @@ import {
   getFieldTicketForClient,
   toClientAppTicket,
 } from "@/app/api/crm/_lib/field-tickets";
-import { getAppAuthContext } from "../../_lib/app-auth";
+import { getAppCustomerAuthContext } from "../../_lib/app-auth";
 import { APP_ERROR_CODES, toAppErrorResponse } from "../../_lib/app-errors";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 export const GET = async (request: NextRequest, context: RouteContext) => {
   try {
-    const session = await getAppAuthContext(request);
+    const session = await getAppCustomerAuthContext(request);
     const { id } = await context.params;
     const ticket = await getFieldTicketForClient(
       getSupabaseAdmin(),

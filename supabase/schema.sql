@@ -210,6 +210,7 @@ CREATE TABLE IF NOT EXISTS public.technicians (
   phone text,
   document text,
   is_supervisor boolean NOT NULL DEFAULT false,
+  app_enabled boolean NOT NULL DEFAULT true,
   source_employee_id text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
@@ -231,6 +232,20 @@ CREATE INDEX IF NOT EXISTS technicians_document_idx
     regexp_replace(coalesce(document, ''), '[^0-9]', '', 'g')
   )
   WHERE document IS NOT NULL;
+CREATE INDEX IF NOT EXISTS technicians_org_document_digits_idx
+  ON public.technicians (
+    organization_id,
+    regexp_replace(coalesce(document, ''), '[^0-9]', '', 'g')
+  )
+  WHERE document IS NOT NULL
+    AND regexp_replace(coalesce(document, ''), '[^0-9]', '', 'g') <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS technicians_org_document_digits_uidx
+  ON public.technicians (
+    organization_id,
+    regexp_replace(coalesce(document, ''), '[^0-9]', '', 'g')
+  )
+  WHERE document IS NOT NULL
+    AND regexp_replace(coalesce(document, ''), '[^0-9]', '', 'g') <> '';
 
 CREATE TABLE IF NOT EXISTS public.field_tickets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -576,6 +591,36 @@ CREATE TABLE IF NOT EXISTS public.organization_integrations (
 );
 
 -- -----------------------------------------------------------------------------
+-- 16a. TABLA: DATOS DE PAGO PARA LA APP (configurados por admin en CRM)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.organization_payment_methods (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  method_key text NOT NULL
+    CHECK (method_key IN ('pago_movil', 'transferencia', 'deposito', 'deposito_usd')),
+  title text NOT NULL,
+  description text,
+  is_enabled boolean NOT NULL DEFAULT false,
+  sort_order integer NOT NULL DEFAULT 0,
+  currency text NOT NULL DEFAULT 'VES'
+    CHECK (currency IN ('VES', 'USD')),
+  bank_name text,
+  phone text,
+  document text,
+  account_number text,
+  account_type text
+    CHECK (account_type IS NULL OR account_type IN ('corriente', 'ahorro')),
+  holder_name text,
+  notes text,
+  updated_by integer REFERENCES public.agents(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, method_key)
+);
+CREATE INDEX IF NOT EXISTS organization_payment_methods_org_enabled_idx
+  ON public.organization_payment_methods (organization_id, is_enabled, sort_order);
+
+-- -----------------------------------------------------------------------------
 -- 16b. TABLA: DISPOSITIVOS DE LA APP MÓVIL (tokens Expo Push)
 -- POST /api/app/devices hace UPSERT por UNIQUE (organization_id, push_token).
 -- Un cliente (client_id) puede registrar 1..N tokens (Android + iOS).
@@ -820,6 +865,7 @@ DECLARE
   t text;
   all_tables text[] := ARRAY[
     'organizations', 'organization_members', 'organization_integrations',
+    'organization_payment_methods',
     'agents', 'clients', 'conversations', 'messages', 'tickets', 'field_tickets',
     'technicians', 'ticket_categories', 'app_devices', 'labels',
     'quick_replies', 'crm_settings', 'crm_settings_history', 'conversation_history',

@@ -152,6 +152,7 @@ export const mapTechnician = (row: FieldTicketRow): Technician => ({
   phone: row.phone ? String(row.phone) : null,
   document: row.document ? String(row.document) : null,
   isSupervisor: Boolean(row.is_supervisor),
+  appEnabled: row.app_enabled !== false,
   sourceEmployeeId: row.source_employee_id ? String(row.source_employee_id) : null,
 });
 
@@ -251,18 +252,22 @@ export const upsertTechnician = async (
     phone?: string | null;
     document?: string | null;
     isSupervisor?: boolean;
+    appEnabled?: boolean;
     sourceEmployeeId?: string | null;
   },
 ) => {
-  const payload = {
+  const payload: Record<string, unknown> = {
     organization_id: organizationId,
     name: input.name.trim(),
     phone: input.phone || null,
     document: input.document || null,
     is_supervisor: Boolean(input.isSupervisor),
-    source_employee_id: input.sourceEmployeeId || input.id || null,
+    source_employee_id: input.sourceEmployeeId || null,
     updated_at: new Date().toISOString(),
   };
+  if (typeof input.appEnabled === "boolean") {
+    payload.app_enabled = input.appEnabled;
+  }
 
   if (input.id) {
     const { data: byId } = await supabase
@@ -926,6 +931,7 @@ export const identifyTechnician = async (
         phone: match.employee_phone ? String(match.employee_phone) : input.phone || null,
         document: match.employee_document ? String(match.employee_document) : null,
         isSupervisor: false,
+        appEnabled: true,
         sourceEmployeeId: String(match.employee_id),
       };
     }

@@ -62,6 +62,7 @@ export type Technician = {
   phone: string | null;
   document: string | null;
   isSupervisor: boolean;
+  appEnabled: boolean;
   sourceEmployeeId: string | null;
 };
 
