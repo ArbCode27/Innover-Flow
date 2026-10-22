@@ -73,7 +73,9 @@ export const MessageBubble = memo(({
     ? isBot
       ? message.sent_by?.trim() || "Bot IA"
       : message.sent_by?.trim() || "Agente"
-    : "Cliente";
+    : message.sender_type === "technician"
+      ? message.sent_by?.trim() || "Técnico"
+      : "Cliente";
   const status = message.status || "sent";
   const StatusIcon =
     status === "read" ? CheckCheck : status === "failed" ? AlertCircle : Check;

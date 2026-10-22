@@ -27,6 +27,7 @@ export const CONVERSATION_FILTERS: Array<{
   { id: "unread", label: "No leídas" },
   { id: "bot", label: "Bot" },
   { id: "human", label: "Humano" },
+  { id: "field", label: "Campo" },
 ];
 
 export const AGENT_STATUSES: AgentStatus[] = ["online", "busy", "offline"];

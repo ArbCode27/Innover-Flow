@@ -43,6 +43,12 @@ export const matchesConversationMode = (
   if (modeFilter === "unread") return hasUnreadMessages(conversation);
   if (modeFilter === "bot") return !conversation.human_mode;
   if (modeFilter === "human") return conversation.human_mode;
+  if (modeFilter === "field") {
+    return (
+      conversation.channel === "technician_app" ||
+      Boolean(conversation.technician_id)
+    );
+  }
   return true;
 };
 
@@ -80,6 +86,7 @@ export const getConversationFilterCounts = (
   let unread = 0;
   let bot = 0;
   let human = 0;
+  let field = 0;
 
   for (const conversation of conversations) {
     if (!matchesConversationSearch(conversation, clientsById, searchTerm)) {
@@ -96,6 +103,13 @@ export const getConversationFilterCounts = (
       unread += 1;
     }
 
+    if (
+      conversation.channel === "technician_app" ||
+      Boolean(conversation.technician_id)
+    ) {
+      field += 1;
+    }
+
     if (conversation.human_mode) {
       human += 1;
     } else {
@@ -103,7 +117,7 @@ export const getConversationFilterCounts = (
     }
   }
 
-  return { all, unread, bot, human };
+  return { all, unread, bot, human, field };
 };
 
 export const filterConversations = (

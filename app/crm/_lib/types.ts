@@ -54,7 +54,7 @@ export type ConversationStatus = "abierto" | "proceso" | "resuelto";
 
 export type MessageType = "in" | "out" | "note";
 
-export type MessageSenderType = "client" | "agent" | "bot";
+export type MessageSenderType = "client" | "agent" | "bot" | "technician";
 
 export type MessageMediaType =
   | "audio"
@@ -78,7 +78,7 @@ export type CrmView =
   | "agents"
   | "settings";
 
-export type ConversationFilter = "all" | "unread" | "bot" | "human";
+export type ConversationFilter = "all" | "unread" | "bot" | "human" | "field";
 
 export type BotEngine = "ai";
 
@@ -187,6 +187,8 @@ export interface Conversation {
   id: number;
   organization_id: string;
   client_id: number | null;
+  technician_id?: string | null;
+  channel?: "client_app" | "technician_app" | string | null;
   status: ConversationStatus;
   human_mode: boolean;
   bot_engine?: BotEngine | null;

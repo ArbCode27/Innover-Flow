@@ -42,6 +42,9 @@ export type PersistInboundInput = {
   longitude?: number | null;
   locationName?: string | null;
   locationAddress?: string | null;
+  /** Default client. Use technician for canal de campo. */
+  senderType?: "client" | "technician";
+  sentBy?: string | null;
 };
 
 export const persistOutboundMessage = async (
@@ -135,6 +138,10 @@ export const persistInboundMessage = async (
   input: PersistInboundInput,
 ) => {
   const now = new Date().toISOString();
+  const senderType = input.senderType === "technician" ? "technician" : "client";
+  const sentBy =
+    input.sentBy?.trim() ||
+    (senderType === "technician" ? "Técnico" : "Cliente");
   const { data: saved, error } = await supabase
     .from("messages")
     .insert({
@@ -142,8 +149,8 @@ export const persistInboundMessage = async (
       conversation_id: input.conversationId,
       type: "in",
       content: input.content,
-      sender_type: "client",
-      sent_by: "Cliente",
+      sender_type: senderType,
+      sent_by: sentBy,
       status: "delivered",
       created_at: now,
       media_url: input.mediaUrl || null,
@@ -180,7 +187,7 @@ export const persistInboundMessage = async (
     direction: "in",
     conversationId: input.conversationId,
     messageId: saved.id,
-    senderType: "client",
+    senderType,
     mediaType: input.mediaType ?? null,
     preview: previewMessage(input.content),
   });
@@ -258,6 +265,7 @@ export const findOrCreateOpenConversation = async (
     .insert({
       organization_id: organizationId,
       client_id: clientId,
+      channel: "client_app",
       status: "abierto",
       human_mode: false,
       unread: 0,
@@ -284,6 +292,67 @@ export const findOrCreateOpenConversation = async (
       .maybeSingle();
     if (raced) return raced;
     throw createError || new Error("No se pudo abrir la conversación");
+  }
+  return created;
+};
+
+export const findOrCreateTechnicianConversation = async (
+  supabase: SupabaseClient,
+  organizationId: string,
+  technician: {
+    id: string;
+    name: string;
+    phone?: string | null;
+  },
+) => {
+  const { data: existing, error } = await supabase
+    .from("conversations")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("channel", "technician_app")
+    .eq("technician_id", technician.id)
+    .in("status", ["abierto", "proceso"])
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (existing) return existing;
+
+  const now = new Date().toISOString();
+  const { data: created, error: createError } = await supabase
+    .from("conversations")
+    .insert({
+      organization_id: organizationId,
+      client_id: null,
+      technician_id: technician.id,
+      channel: "technician_app",
+      status: "abierto",
+      human_mode: true,
+      unread: 0,
+      preview: null,
+      label_ids: [],
+      agent_id: null,
+      customer_phone: technician.phone || technician.name,
+      last_message_at: now,
+      updated_at: now,
+      created_at: now,
+    })
+    .select("*")
+    .single();
+
+  if (createError || !created) {
+    const { data: raced } = await supabase
+      .from("conversations")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("channel", "technician_app")
+      .eq("technician_id", technician.id)
+      .in("status", ["abierto", "proceso"])
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (raced) return raced;
+    throw createError || new Error("No se pudo abrir el chat de campo");
   }
   return created;
 };

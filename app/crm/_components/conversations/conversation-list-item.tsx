@@ -35,7 +35,9 @@ export const ConversationListItem = memo(({
   onSelect,
 }: ConversationListItemProps) => {
   const displayName =
-    client?.name || conversation.customer_phone || "Número desconocido";
+    conversation.channel === "technician_app" || conversation.technician_id
+      ? `Campo · ${conversation.customer_phone || "Técnico"}`
+      : client?.name || conversation.customer_phone || "Número desconocido";
   const isResolved = conversation.status === "resuelto";
   const isHuman = conversation.human_mode;
   const preview = conversation.preview || "Sin mensajes";
