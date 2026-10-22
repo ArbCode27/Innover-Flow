@@ -20,6 +20,7 @@ import { LabelsView } from "../labels/labels-view";
 import { QuickRepliesView } from "../quick-replies/quick-replies-view";
 import { SettingsView } from "../settings/settings-view";
 import { PaymentsView } from "../payments/payments-view";
+import { TechniciansView } from "../technicians/technicians-view";
 import { FieldTicketsView } from "../tickets/field-tickets-view";
 import { useFieldTickets } from "../../_hooks/use-field-tickets";
 import {
@@ -302,6 +303,10 @@ export const CrmShell = () => {
                 onToggleQuickReplyStatus={crm.toggleQuickReplyStatus}
                 onDeleteQuickReply={crm.deleteQuickReply}
               />
+            ) : null}
+            {activeView === "technicians" &&
+            isViewAllowed("technicians", auth.agent, auth.organizationRole) ? (
+              <TechniciansView organizationRole={auth.organizationRole} />
             ) : null}
             {activeView === "tickets" && isViewAllowed("tickets", auth.agent, auth.organizationRole) ? (
               <FieldTicketsView

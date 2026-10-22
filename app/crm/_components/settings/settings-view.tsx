@@ -36,7 +36,6 @@ import type { CrmAccentId, CrmColorMode } from "../../_lib/crm-accents";
 import { OrganizationSettingsSection } from "./organization-settings-section";
 import { IntegrationsSettingsSection } from "./integrations-settings-section";
 import { PaymentMethodsSettingsSection } from "./payment-methods-settings-section";
-import { TechniciansSettingsSection } from "./technicians-settings-section";
 
 interface SettingsViewProps {
   currentAgent: Agent;
@@ -254,8 +253,6 @@ export const SettingsView = ({
         <IntegrationsSettingsSection organizationRole={organizationRole} />
 
         <PaymentMethodsSettingsSection organizationRole={organizationRole} />
-
-        <TechniciansSettingsSection organizationRole={organizationRole} />
 
         <AppearanceSettingsSection
           isAdmin={isAdmin}

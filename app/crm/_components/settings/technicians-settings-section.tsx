@@ -48,8 +48,11 @@ const toDraft = (technician: Technician): TechnicianDraft => ({
 
 export const TechniciansSettingsSection = ({
   organizationRole,
+  hideIntro = false,
 }: {
   organizationRole: OrganizationRole | null;
+  /** Oculta título/descripción del card cuando la vista padre ya los muestra. */
+  hideIntro?: boolean;
 }) => {
   const canEdit = organizationRole === "owner" || organizationRole === "admin";
   const [technicians, setTechnicians] = useState<Technician[]>([]);
@@ -210,16 +213,23 @@ export const TechniciansSettingsSection = ({
     <Card className={`rounded-2xl border-0 ${CRM_SURFACES.elevated}`}>
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base">
+          {hideIntro ? (
+            <div className="flex items-center gap-2">
               <HardHat className="size-4 text-crm-accent" aria-hidden="true" />
-              Técnicos de campo
-            </CardTitle>
-            <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
-              Registra técnicos y supervisores para asignar tickets y que puedan
-              entrar a la app con cédula + iniciales.
-            </p>
-          </div>
+              <CardTitle className="text-base">Catálogo</CardTitle>
+            </div>
+          ) : (
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <HardHat className="size-4 text-crm-accent" aria-hidden="true" />
+                Técnicos de campo
+              </CardTitle>
+              <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
+                Registra técnicos y supervisores para asignar tickets y que
+                puedan entrar a la app con cédula + iniciales.
+              </p>
+            </div>
+          )}
           {canEdit ? (
             <div className="flex flex-wrap gap-2">
               <CrmButton

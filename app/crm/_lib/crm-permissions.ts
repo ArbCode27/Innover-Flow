@@ -54,6 +54,7 @@ export const getAllowedViews = (
       "clients",
       "payments",
       "tickets",
+      "technicians",
       "labels",
       "agents",
       "settings",
@@ -167,6 +168,11 @@ export const canManageAgents = (
 ): boolean => isCrmAdmin(agent, organizationRole);
 
 export const canManageSettings = (
+  agent?: Pick<Agent, "role"> | null,
+  organizationRole?: OrganizationRole | null,
+): boolean => isCrmAdmin(agent, organizationRole);
+
+export const canManageTechnicians = (
   agent?: Pick<Agent, "role"> | null,
   organizationRole?: OrganizationRole | null,
 ): boolean => isCrmAdmin(agent, organizationRole);

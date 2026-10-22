@@ -14,6 +14,7 @@ export const CRM_NAV_ITEMS: Array<{
   { id: "clients", label: "Clientes" },
   { id: "payments", label: "Pagos" },
   { id: "tickets", label: "Tickets" },
+  { id: "technicians", label: "Técnicos" },
   { id: "labels", label: "Etiquetas" },
   { id: "agents", label: "Agentes" },
   { id: "settings", label: "Ajustes" },

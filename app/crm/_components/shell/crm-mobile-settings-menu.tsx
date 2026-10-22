@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import {
   Bot,
+  HardHat,
   MessageSquareQuote,
   Settings2,
   Tags,
@@ -31,6 +32,7 @@ const SETTINGS_ITEMS: Array<{ id: CrmView; label: string; icon: typeof Users }> 
   { id: "clients", label: "Clientes", icon: Users },
   { id: "payments", label: "Pagos", icon: Wallet },
   { id: "tickets", label: "Tickets", icon: Ticket },
+  { id: "technicians", label: "Técnicos", icon: HardHat },
   { id: "quick-replies", label: "Respuestas rápidas", icon: MessageSquareQuote },
   { id: "labels", label: "Etiquetas", icon: Tags },
   { id: "agents", label: "Agentes", icon: Bot },

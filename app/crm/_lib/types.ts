@@ -74,6 +74,7 @@ export type CrmView =
   | "clients"
   | "payments"
   | "tickets"
+  | "technicians"
   | "labels"
   | "agents"
   | "settings";
