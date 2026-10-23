@@ -453,7 +453,9 @@ export const FieldTicketFormDialog = ({
                     className={cn(
                       "h-10 w-full justify-between font-normal",
                       CRM_SURFACES.input,
-                      !selectedClient.id && CRM_SURFACES.textMuted,
+                      selectedClient.id
+                        ? "text-slate-900 dark:text-slate-100"
+                        : "text-slate-500 dark:text-slate-400",
                     )}>
                     <span className="truncate">
                       {selectedClient.name
@@ -470,11 +472,14 @@ export const FieldTicketFormDialog = ({
                 </PopoverTrigger>
                 <PopoverContent
                   align="start"
-                  className={`w-[var(--radix-popover-trigger-width)] border p-0 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated} ${CRM_SURFACES.textPrimary}`}>
-                  <Command>
-                    <CommandInput placeholder="Nombre, cédula o teléfono..." />
+                  className={`w-[var(--radix-popover-trigger-width)] border p-0 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated}`}>
+                  <Command className="bg-transparent text-slate-900 dark:text-slate-100">
+                    <CommandInput
+                      placeholder="Nombre, cédula o teléfono..."
+                      className="text-slate-900 placeholder:text-slate-500 dark:text-slate-100 dark:placeholder:text-slate-400"
+                    />
                     <CommandList>
-                      <CommandEmpty>
+                      <CommandEmpty className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">
                         {sortedClients.length
                           ? "Sin coincidencias"
                           : "No hay clientes cargados"}
@@ -482,36 +487,41 @@ export const FieldTicketFormDialog = ({
                       <CommandGroup>
                         <CommandItem
                           value="sin-cliente"
-                          className="data-[selected=true]:bg-crm-accent/25 data-[selected=true]:text-crm-accent-foreground"
+                          className="cursor-pointer text-slate-900 data-[selected=true]:bg-slate-900/5 data-[selected=true]:text-slate-900 dark:text-slate-100 dark:data-[selected=true]:bg-white/10 dark:data-[selected=true]:text-slate-100"
                           onSelect={() => handleSelectClient(null)}>
                           <Check
                             className={cn(
-                              "size-4",
-                              selectedClient.id === null ? "opacity-100" : "opacity-0",
+                              "size-4 shrink-0 text-crm-accent",
+                              selectedClient.id === null
+                                ? "opacity-100"
+                                : "opacity-0",
                             )}
                             aria-hidden="true"
                           />
-                          Sin cliente asignado
+                          <span className="font-medium text-slate-900 dark:text-slate-100">
+                            Sin cliente asignado
+                          </span>
                         </CommandItem>
                         {sortedClients.map((item) => (
                           <CommandItem
                             key={item.id}
                             value={clientSearchValue(item)}
-                            className="data-[selected=true]:bg-crm-accent/25 data-[selected=true]:text-crm-accent-foreground"
+                            className="cursor-pointer items-start py-2.5 text-slate-900 data-[selected=true]:bg-slate-900/5 data-[selected=true]:text-slate-900 dark:text-slate-100 dark:data-[selected=true]:bg-white/10 dark:data-[selected=true]:text-slate-100"
                             onSelect={() => handleSelectClient(item)}>
                             <Check
                               className={cn(
-                                "size-4",
+                                "mt-0.5 size-4 shrink-0 text-crm-accent",
                                 selectedClient.id === item.id
                                   ? "opacity-100"
                                   : "opacity-0",
                               )}
                               aria-hidden="true"
                             />
-                            <span className="flex min-w-0 flex-col">
-                              <span className="truncate font-medium">{item.name}</span>
-                              <span
-                                className={`truncate text-xs ${CRM_SURFACES.textMuted}`}>
+                            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                              <span className="truncate font-medium text-slate-900 dark:text-slate-100">
+                                {item.name}
+                              </span>
+                              <span className="truncate text-xs text-slate-500 dark:text-slate-400">
                                 {[item.cedula, item.phone, item.zone]
                                   .filter(Boolean)
                                   .join(" · ") || "Sin datos de contacto"}
