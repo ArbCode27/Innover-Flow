@@ -11,9 +11,17 @@ import {
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Image as ImageIcon, X } from "lucide-react";
+import { Check, ChevronsUpDown, Image as ImageIcon, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import {
   Select,
@@ -57,6 +66,17 @@ const ALLOWED_FACADE_MIME = new Set([
   "image/png",
   "image/webp",
 ]);
+
+type SelectedTicketClient = {
+  id: number | null;
+  name: string | null;
+  phone: string | null;
+};
+
+const clientSearchValue = (client: Client) =>
+  [client.name, client.phone, client.cedula, client.zone, client.plan]
+    .filter(Boolean)
+    .join(" ");
 
 const validateFacadeImage = (file: File) => {
   if (!ALLOWED_FACADE_MIME.has((file.type || "").toLowerCase())) {
@@ -120,6 +140,7 @@ interface FieldTicketFormDialogProps {
   mode: "create" | "edit";
   technicians: Technician[];
   categories?: TicketCategory[];
+  clients?: Client[];
   ticket?: FieldTicket | null;
   conversation?: Conversation | null;
   client?: Client | null;
@@ -164,6 +185,7 @@ export const FieldTicketFormDialog = ({
   mode,
   technicians,
   categories: categoriesProp = [],
+  clients = [],
   ticket,
   conversation,
   client,
@@ -184,8 +206,21 @@ export const FieldTicketFormDialog = ({
       ),
     [messages],
   );
+  const sortedClients = useMemo(
+    () =>
+      [...clients].sort((left, right) =>
+        left.name.localeCompare(right.name, "es", { sensitivity: "base" }),
+      ),
+    [clients],
+  );
 
   const [categories, setCategories] = useState<TicketCategory[]>(categoriesProp);
+  const [selectedClient, setSelectedClient] = useState<SelectedTicketClient>({
+    id: null,
+    name: null,
+    phone: null,
+  });
+  const [isClientPickerOpen, setIsClientPickerOpen] = useState(false);
 
   useEffect(() => {
     setCategories(categoriesProp);
@@ -234,7 +269,10 @@ export const FieldTicketFormDialog = ({
   });
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setIsClientPickerOpen(false);
+      return;
+    }
     if (mode === "edit" && ticket) {
       form.reset({
         title: ticket.title,
@@ -253,6 +291,11 @@ export const FieldTicketFormDialog = ({
         windowEnd: toDatetimeLocalValue(ticket.windowEnd),
         facadeMediaUrl: ticket.facadeMediaUrl || "",
       });
+      setSelectedClient({
+        id: ticket.crmClientId,
+        name: ticket.clientName,
+        phone: ticket.clientPhone,
+      });
       return;
     }
     form.reset({
@@ -268,7 +311,21 @@ export const FieldTicketFormDialog = ({
       ...defaultVisitWindowLocal(),
       facadeMediaUrl: chatContext.facadeMediaUrl || "",
     });
+    setSelectedClient({
+      id: chatContext.crmClientId,
+      name: chatContext.clientName,
+      phone: chatContext.clientPhone,
+    });
   }, [open, mode, ticket, chatContext, form, categories]);
+
+  const handleSelectClient = (next: Client | null) => {
+    setSelectedClient(
+      next
+        ? { id: next.id, name: next.name, phone: next.phone }
+        : { id: null, name: null, phone: null },
+    );
+    setIsClientPickerOpen(false);
+  };
 
   const handleSubmit = form.handleSubmit(async (values) => {
     const coords = parseMapsUrlCoords(values.mapsUrl);
@@ -296,14 +353,17 @@ export const FieldTicketFormDialog = ({
       await onSubmitUpdate(ticket.id, {
         ...payload,
         status: values.status,
+        crmClientId: selectedClient.id,
+        clientName: selectedClient.name,
+        clientPhone: selectedClient.phone,
       });
     } else {
       await onSubmitCreate({
         ...payload,
         conversationId: chatContext.conversationId,
-        crmClientId: chatContext.crmClientId,
-        clientName: chatContext.clientName,
-        clientPhone: chatContext.clientPhone,
+        crmClientId: selectedClient.id,
+        clientName: selectedClient.name,
+        clientPhone: selectedClient.phone,
       });
     }
     onOpenChange(false);
@@ -379,6 +439,111 @@ export const FieldTicketFormDialog = ({
             </DialogTitle>
           </DialogHeader>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="field-ticket-client">Cliente</Label>
+              <Popover open={isClientPickerOpen} onOpenChange={setIsClientPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="field-ticket-client"
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={isClientPickerOpen}
+                    aria-label="Buscar y asignar cliente"
+                    className={cn(
+                      "h-10 w-full justify-between font-normal",
+                      CRM_SURFACES.input,
+                      !selectedClient.id && CRM_SURFACES.textMuted,
+                    )}>
+                    <span className="truncate">
+                      {selectedClient.name
+                        ? `${selectedClient.name}${
+                            selectedClient.phone ? ` · ${selectedClient.phone}` : ""
+                          }`
+                        : "Buscar cliente por nombre, cédula o teléfono"}
+                    </span>
+                    <ChevronsUpDown
+                      className="ml-2 size-4 shrink-0 opacity-50"
+                      aria-hidden="true"
+                    />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  className={`w-[var(--radix-popover-trigger-width)] border p-0 ${CRM_SURFACES.border} ${CRM_SURFACES.elevated} ${CRM_SURFACES.textPrimary}`}>
+                  <Command>
+                    <CommandInput placeholder="Nombre, cédula o teléfono..." />
+                    <CommandList>
+                      <CommandEmpty>
+                        {sortedClients.length
+                          ? "Sin coincidencias"
+                          : "No hay clientes cargados"}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="sin-cliente"
+                          className="data-[selected=true]:bg-crm-accent/25 data-[selected=true]:text-crm-accent-foreground"
+                          onSelect={() => handleSelectClient(null)}>
+                          <Check
+                            className={cn(
+                              "size-4",
+                              selectedClient.id === null ? "opacity-100" : "opacity-0",
+                            )}
+                            aria-hidden="true"
+                          />
+                          Sin cliente asignado
+                        </CommandItem>
+                        {sortedClients.map((item) => (
+                          <CommandItem
+                            key={item.id}
+                            value={clientSearchValue(item)}
+                            className="data-[selected=true]:bg-crm-accent/25 data-[selected=true]:text-crm-accent-foreground"
+                            onSelect={() => handleSelectClient(item)}>
+                            <Check
+                              className={cn(
+                                "size-4",
+                                selectedClient.id === item.id
+                                  ? "opacity-100"
+                                  : "opacity-0",
+                              )}
+                              aria-hidden="true"
+                            />
+                            <span className="flex min-w-0 flex-col">
+                              <span className="truncate font-medium">{item.name}</span>
+                              <span
+                                className={`truncate text-xs ${CRM_SURFACES.textMuted}`}>
+                                {[item.cedula, item.phone, item.zone]
+                                  .filter(Boolean)
+                                  .join(" · ") || "Sin datos de contacto"}
+                              </span>
+                            </span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {selectedClient.id ? (
+                <div className="flex items-center justify-between gap-2">
+                  <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                    Ticket vinculado al cliente #{selectedClient.id}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => handleSelectClient(null)}>
+                    Quitar
+                  </Button>
+                </div>
+              ) : (
+                <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                  Opcional. Asigna el ticket a un cliente del CRM para seguimiento.
+                </p>
+              )}
+            </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="field-ticket-title">Título / motivo</Label>
               <Input

@@ -106,6 +106,7 @@ export const updateFieldTicketSchema = z.object({
   status: z.enum(["open", "scheduled", "done", "cancelled"]).optional(),
   facadeMediaUrl: optionalText(2000),
   facadeMessageId: optionalText(200),
+  crmClientId: z.number().int().positive().optional().nullable(),
   clientName: optionalText(160),
   clientPhone: optionalText(30),
 });
@@ -528,6 +529,41 @@ export const getFieldTicket = async (
   return ticket;
 };
 
+const resolveCrmClient = async (
+  supabase: SupabaseClient,
+  organizationId: string,
+  crmClientId: number | null | undefined,
+  fallbackName: string | null | undefined,
+  fallbackPhone: string | null | undefined,
+) => {
+  if (!crmClientId) {
+    return {
+      crm_client_id: null as number | null,
+      client_name: fallbackName || null,
+      client_phone: fallbackPhone || null,
+    };
+  }
+  const { data, error } = await supabase
+    .from("clients")
+    .select("id, name, phone")
+    .eq("organization_id", organizationId)
+    .eq("id", crmClientId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    throw new FieldTicketError(
+      "invalid_client",
+      "El cliente seleccionado no existe en esta organización",
+      400,
+    );
+  }
+  return {
+    crm_client_id: Number(data.id),
+    client_name: fallbackName || (data.name ? String(data.name) : null),
+    client_phone: fallbackPhone || (data.phone ? String(data.phone) : null),
+  };
+};
+
 export const createFieldTicket = async (
   supabase: SupabaseClient,
   organizationId: string,
@@ -555,6 +591,13 @@ export const createFieldTicket = async (
       400,
     );
   }
+  const clientLink = await resolveCrmClient(
+    supabase,
+    organizationId,
+    input.crmClientId,
+    input.clientName,
+    input.clientPhone,
+  );
   const hasWindow = Boolean(window.windowStart || window.windowEnd);
   const status: FieldTicketStatus =
     assignment.employee_id && hasWindow ? "scheduled" : "open";
@@ -564,7 +607,7 @@ export const createFieldTicket = async (
     .insert({
       organization_id: organizationId,
       conversation_id: input.conversationId || null,
-      crm_client_id: input.crmClientId || null,
+      crm_client_id: clientLink.crm_client_id,
       ...assignment,
       status,
       priority: input.priority,
@@ -573,8 +616,8 @@ export const createFieldTicket = async (
       title: input.title,
       cause: input.cause,
       description: input.description,
-      client_name: input.clientName,
-      client_phone: input.clientPhone,
+      client_name: clientLink.client_name,
+      client_phone: clientLink.client_phone,
       maps_url: geo.mapsUrl,
       latitude: geo.latitude,
       longitude: geo.longitude,
@@ -651,8 +694,28 @@ export const updateFieldTicket = async (
     }
   }
   if (input.addressText !== undefined) patch.address_text = input.addressText;
-  if (input.clientName !== undefined) patch.client_name = input.clientName;
-  if (input.clientPhone !== undefined) patch.client_phone = input.clientPhone;
+  if (
+    input.crmClientId !== undefined ||
+    input.clientName !== undefined ||
+    input.clientPhone !== undefined
+  ) {
+    const clientLink = await resolveCrmClient(
+      supabase,
+      organizationId,
+      input.crmClientId !== undefined ? input.crmClientId : current.crmClientId,
+      input.clientName !== undefined ? input.clientName : current.clientName,
+      input.clientPhone !== undefined ? input.clientPhone : current.clientPhone,
+    );
+    if (input.crmClientId !== undefined) {
+      patch.crm_client_id = clientLink.crm_client_id;
+    }
+    if (input.clientName !== undefined || input.crmClientId !== undefined) {
+      patch.client_name = clientLink.client_name;
+    }
+    if (input.clientPhone !== undefined || input.crmClientId !== undefined) {
+      patch.client_phone = clientLink.client_phone;
+    }
+  }
   if (input.facadeMediaUrl !== undefined) patch.facade_media_url = input.facadeMediaUrl;
   if (input.facadeMessageId !== undefined) patch.facade_message_id = input.facadeMessageId;
   if (input.status !== undefined) patch.status = input.status;

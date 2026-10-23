@@ -25,7 +25,7 @@ import { FieldTicketFormDialog } from "./field-ticket-form-dialog";
 import { FieldTicketDetailDialog } from "./field-ticket-detail-dialog";
 import { FieldTicketFinalizeDialog } from "./field-ticket-finalize-dialog";
 import { FieldTicketReassignDialog } from "./field-ticket-reassign-dialog";
-import type { Client, Conversation, Message } from "../../_lib/types";
+import type { Client } from "../../_lib/types";
 import type { CreatePayload } from "../../_hooks/use-field-tickets";
 import { LoadingState } from "../shared/loading-state";
 
@@ -49,9 +49,7 @@ interface FieldTicketsViewProps {
   onUploadFacade: (file: File) => Promise<string>;
   onOpenChat: (conversationId: number) => void;
   resolveConversationId: (ticket: FieldTicket) => number | null;
-  conversation?: Conversation | null;
-  client?: Client | null;
-  messages?: Message[];
+  clients?: Client[];
 }
 
 const matchesSearch = (ticket: FieldTicket, term: string) => {
@@ -88,9 +86,7 @@ export const FieldTicketsView = ({
   onUploadFacade,
   onOpenChat,
   resolveConversationId,
-  conversation,
-  client,
-  messages,
+  clients = [],
 }: FieldTicketsViewProps) => {
   const [statusTab, setStatusTab] = useState<StatusTab>("scheduled");
   const [search, setSearch] = useState("");
@@ -262,9 +258,7 @@ export const FieldTicketsView = ({
         mode="create"
         technicians={technicians}
         categories={categories}
-        conversation={conversation}
-        client={client}
-        messages={messages}
+        clients={clients}
         onOpenChange={setIsCreateOpen}
         onUploadFacade={onUploadFacade}
         onSubmitCreate={async (payload) => {
@@ -277,6 +271,7 @@ export const FieldTicketsView = ({
         mode="edit"
         technicians={technicians}
         categories={categories}
+        clients={clients}
         ticket={editing}
         onOpenChange={(open) => {
           if (!open) setEditing(null);

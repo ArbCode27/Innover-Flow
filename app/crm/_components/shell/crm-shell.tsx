@@ -329,9 +329,7 @@ export const CrmShell = () => {
                 resolveConversationId={(ticket) =>
                   resolveTicketConversationId(ticket, crm.conversations)
                 }
-                conversation={crm.selectedConversation}
-                client={crm.selectedClient}
-                messages={crm.messages}
+                clients={crm.clients}
               />
             ) : null}
             {activeView === "labels" && isViewAllowed("labels", auth.agent, auth.organizationRole) ? (

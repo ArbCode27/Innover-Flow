@@ -57,6 +57,7 @@ interface ConversationPanelProps {
   tickets: Ticket[];
   fieldTickets?: FieldTicket[];
   technicians?: Technician[];
+  clients?: Client[];
   isMessagesLoading: boolean;
   isSendingMessage: boolean;
   isResolvingConversation?: boolean;
@@ -96,6 +97,7 @@ export const ConversationPanel = ({
   tickets,
   fieldTickets = [],
   technicians = [],
+  clients = [],
   isMessagesLoading,
   isSendingMessage,
   isResolvingConversation = false,
@@ -339,6 +341,7 @@ export const ConversationPanel = ({
           open={isFieldTicketOpen}
           mode="create"
           technicians={technicians}
+          clients={clients}
           conversation={conversation}
           client={client}
           messages={messages}

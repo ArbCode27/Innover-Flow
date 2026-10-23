@@ -203,6 +203,7 @@ export const MyConversationsView = ({
           tickets={selectedTickets}
           fieldTickets={fieldTickets}
           technicians={technicians}
+          clients={Array.from(clientsById.values())}
           isMessagesLoading={isMessagesLoading}
           isSendingMessage={isSendingMessage}
           isResolvingConversation={isResolvingConversation}
