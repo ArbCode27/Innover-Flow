@@ -44,6 +44,7 @@ export const GET = async (request: NextRequest) => {
       .select("*")
       .eq("organization_id", session.organizationId)
       .eq("conversation_id", conversation.id)
+      .neq("type", "note")
       .order("created_at", { ascending: true })
       .limit(200);
     if (Number.isInteger(afterId) && afterId > 0) {

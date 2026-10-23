@@ -60,6 +60,8 @@ export const subscribeAppRealtime = (input: {
       },
       (payload) => {
         const row = payload.new as Record<string, unknown>;
+        // Internal CRM notes must never surface in the mobile chat UI.
+        if (row.type === "note") return;
         emitAppRealtimeMessage(input.conversationId, "INSERT", row);
         input.onMessage(row, "INSERT");
       },
@@ -74,6 +76,7 @@ export const subscribeAppRealtime = (input: {
       },
       (payload) => {
         const row = payload.new as Record<string, unknown>;
+        if (row.type === "note") return;
         emitAppRealtimeMessage(input.conversationId, "UPDATE", row);
         input.onMessage(row, "UPDATE");
       },

@@ -16,7 +16,7 @@ import {
   parseAppSchema,
   toAppErrorResponse,
 } from "../_lib/app-errors";
-import { buildAppRealtimePayload } from "../_lib/realtime-payload";
+import { requireAppRealtimePayload } from "../_lib/realtime-payload";
 import { toSessionClientDto } from "../_lib/app-client-dtos";
 import type { AppClientRow } from "../_lib/load-app-client";
 
@@ -215,7 +215,7 @@ export const POST = async (request: NextRequest) => {
         organizationId: targetOrgId,
         phone: client.phone || normalizedPhone,
       });
-      const realtime = await buildAppRealtimePayload({
+      const realtime = await requireAppRealtimePayload({
         clientId: Number(client.id),
         organizationId: targetOrgId,
         conversationId: Number(conversation.id),
@@ -451,7 +451,7 @@ export const POST = async (request: NextRequest) => {
       organizationId: String(organization.id),
       phone: clientPhone,
     });
-    const realtime = await buildAppRealtimePayload({
+    const realtime = await requireAppRealtimePayload({
       clientId: Number(client.id),
       organizationId: String(organization.id),
       conversationId: Number(conversation.id),

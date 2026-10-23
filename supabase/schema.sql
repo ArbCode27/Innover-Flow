@@ -982,6 +982,8 @@ USING (
 
 -- -----------------------------------------------------------------------------
 -- 20. HABILITAR SUPABASE REALTIME
+-- App móvil + CRM: messages/conversations deben estar en la publication.
+-- Migración equivalente: 20261023140000_app_realtime_publication.sql
 -- -----------------------------------------------------------------------------
 DO $$
 BEGIN

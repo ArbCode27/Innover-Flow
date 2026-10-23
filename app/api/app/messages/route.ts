@@ -19,6 +19,7 @@ import {
   parseAppSchema,
   toAppErrorResponse,
 } from "../_lib/app-errors";
+import { buildAppRealtimePayload } from "../_lib/realtime-payload";
 
 const textSchema = z.object({
   content: z
@@ -111,6 +112,7 @@ export const GET = async (request: NextRequest) => {
       .select("*")
       .eq("organization_id", session.organizationId)
       .eq("conversation_id", conversation.id)
+      .neq("type", "note")
       .order("created_at", { ascending: true })
       .limit(200);
     if (Number.isInteger(afterId) && afterId > 0) {
@@ -118,13 +120,22 @@ export const GET = async (request: NextRequest) => {
     }
     const { data: messages, error } = await query;
     if (error) throw error;
+
+    const realtime = await buildAppRealtimePayload({
+      clientId: session.clientId,
+      organizationId: session.organizationId,
+      conversationId: Number(conversation.id),
+    });
+
     return NextResponse.json({
       conversation: {
         id: conversation.id,
         status: conversation.status,
         human_mode: conversation.human_mode,
+        channel: "client_app",
       },
       messages: messages || [],
+      realtime,
     });
   } catch (error) {
     return toAppErrorResponse(error, {
