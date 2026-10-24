@@ -7,6 +7,31 @@ export const PAYMENT_METHOD_KEYS = [
 
 export type PaymentMethodKey = (typeof PAYMENT_METHOD_KEYS)[number];
 
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethodKey, string> = {
+  pago_movil: "Pago Móvil",
+  transferencia: "Transferencia",
+  deposito: "Depósito",
+  deposito_usd: "Depósito USD",
+};
+
+export type PaymentMethodUiStatus = "active" | "incomplete" | "hidden";
+
+export const PAYMENT_METHOD_UI_STATUS_LABELS: Record<
+  PaymentMethodUiStatus,
+  string
+> = {
+  active: "Activo",
+  incomplete: "Incompleto",
+  hidden: "Oculto",
+};
+
+/** Pago móvil uses phone; bank transfer / deposit use account number. */
+export const methodUsesPhone = (methodKey: PaymentMethodKey) =>
+  methodKey === "pago_movil";
+
+export const methodUsesAccount = (methodKey: PaymentMethodKey) =>
+  !methodUsesPhone(methodKey);
+
 export const PAYMENT_CURRENCIES = ["VES", "USD"] as const;
 export type PaymentCurrency = (typeof PAYMENT_CURRENCIES)[number];
 
@@ -170,3 +195,45 @@ export const methodHasDestinationData = (
       String(method.account_number || "").trim() ||
       String(method.holder_name || "").trim(),
   );
+
+export const getPaymentMethodUiStatus = (
+  method: Pick<
+    OrganizationPaymentMethod,
+    | "is_enabled"
+    | "bank_name"
+    | "phone"
+    | "document"
+    | "account_number"
+    | "holder_name"
+  >,
+): PaymentMethodUiStatus => {
+  if (!method.is_enabled) return "hidden";
+  if (!methodHasDestinationData(method)) return "incomplete";
+  return "active";
+};
+
+/** Short destination line for table cells. */
+export const paymentMethodDestinationSummary = (
+  method: Pick<
+    OrganizationPaymentMethod,
+    "method_key" | "bank_name" | "phone" | "account_number" | "holder_name"
+  >,
+) => {
+  const parts: string[] = [];
+  const bank = String(method.bank_name || "").trim();
+  const holder = String(method.holder_name || "").trim();
+  if (bank) parts.push(bank);
+  if (methodUsesPhone(method.method_key)) {
+    const phone = String(method.phone || "").trim();
+    if (phone) parts.push(phone);
+  } else {
+    const account = String(method.account_number || "").trim();
+    if (account) {
+      parts.push(
+        account.length > 8 ? `…${account.slice(-6)}` : account,
+      );
+    }
+  }
+  if (!parts.length && holder) parts.push(holder);
+  return parts.length ? parts.join(" · ") : "Sin datos de destino";
+};

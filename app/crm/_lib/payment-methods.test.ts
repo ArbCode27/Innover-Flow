@@ -3,8 +3,11 @@ import { describe, it } from "node:test";
 import {
   buildPaymentInstructionFields,
   emptyPaymentMethodDraft,
+  getPaymentMethodUiStatus,
   mergePaymentMethodCatalog,
   methodHasDestinationData,
+  methodUsesPhone,
+  paymentMethodDestinationSummary,
 } from "./payment-methods.ts";
 
 describe("payment-methods", () => {
@@ -42,6 +45,35 @@ describe("payment-methods", () => {
         account_number: "0102",
       }),
       true,
+    );
+  });
+
+  it("maps ui status and destination summary by method type", () => {
+    assert.equal(methodUsesPhone("pago_movil"), true);
+    assert.equal(methodUsesPhone("transferencia"), false);
+
+    const empty = emptyPaymentMethodDraft("org-1", "pago_movil");
+    assert.equal(getPaymentMethodUiStatus(empty), "hidden");
+    assert.equal(
+      getPaymentMethodUiStatus({ ...empty, is_enabled: true }),
+      "incomplete",
+    );
+    assert.equal(
+      getPaymentMethodUiStatus({
+        ...empty,
+        is_enabled: true,
+        phone: "04121234567",
+      }),
+      "active",
+    );
+
+    assert.match(
+      paymentMethodDestinationSummary({
+        ...empty,
+        bank_name: "Banplus",
+        phone: "04121234567",
+      }),
+      /Banplus/,
     );
   });
 });
