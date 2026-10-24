@@ -12,7 +12,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { CRM_SURFACES, CRM_TABLE } from "../../_lib/crm-theme";
+import {
+  fieldTicketPriorityBadgeClass,
+  fieldTicketPriorityRowClass,
+} from "../../_lib/field-ticket-priority-styles";
 import {
   buildMapsUrl,
   fieldTicketCategoryLabel,
@@ -36,13 +41,6 @@ interface FieldTicketsTableProps {
   onReassign: (ticket: FieldTicket) => void;
   onDelete: (ticket: FieldTicket) => void;
 }
-
-const PRIORITY_CLASS: Record<string, string> = {
-  low: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
-  medium: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200",
-  high: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
-  urgent: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200",
-};
 
 export const FieldTicketsTable = ({
   tickets,
@@ -106,7 +104,14 @@ export const FieldTicketsTable = ({
                 });
                 const open = isOpenFieldTicketStatus(ticket.status);
                 return (
-                  <TableRow key={ticket.id} className={`${CRM_SURFACES.border} ${CRM_SURFACES.hover}`}>
+                  <TableRow
+                    key={ticket.id}
+                    className={cn(
+                      CRM_SURFACES.border,
+                      fieldTicketPriorityRowClass(ticket.priority),
+                    )}
+                    data-priority={ticket.priority}
+                  >
                     <TableCell>
                       <Checkbox
                         checked={selectedIds.includes(ticket.id)}
@@ -118,7 +123,7 @@ export const FieldTicketsTable = ({
                       #{ticket.publicId}
                     </TableCell>
                     <TableCell>
-                      <Badge className={PRIORITY_CLASS[ticket.priority] || ""}>
+                      <Badge className={fieldTicketPriorityBadgeClass(ticket.priority)}>
                         {fieldTicketPriorityLabel(ticket.priority)}
                       </Badge>
                     </TableCell>
