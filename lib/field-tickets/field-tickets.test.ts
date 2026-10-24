@@ -22,6 +22,7 @@ import {
   looksLikeCloseIntent,
 } from "./technician-intent.ts";
 import { last10Digits, phonesMatchLast10 } from "./phone.ts";
+import { sortFieldTicketsByPriorityThenSchedule } from "./sort.ts";
 import type { FieldTicket } from "./types.ts";
 
 const ticket = (overrides: Partial<FieldTicket>): FieldTicket => ({
@@ -243,4 +244,67 @@ test("technician interceptors: observation, audio, completo, confirmation copy",
   );
   assert.equal(last10Digits("58414-1234567"), "4141234567");
   assert.equal(phonesMatchLast10("04141234567", "584141234567"), true);
+});
+
+test("sort: priority high→low, then earlier windowStart within same priority", () => {
+  const sorted = sortFieldTicketsByPriorityThenSchedule([
+    ticket({
+      id: "low-late",
+      publicId: 1,
+      priority: "low",
+      windowStart: "2026-10-24T16:00:00.000Z",
+    }),
+    ticket({
+      id: "high-second",
+      publicId: 2,
+      priority: "high",
+      windowStart: "2026-10-24T15:00:00.000Z",
+    }),
+    ticket({
+      id: "high-first",
+      publicId: 3,
+      priority: "high",
+      windowStart: "2026-10-24T14:00:00.000Z",
+    }),
+    ticket({
+      id: "urgent",
+      publicId: 4,
+      priority: "urgent",
+      windowStart: "2026-10-24T18:00:00.000Z",
+    }),
+    ticket({
+      id: "medium",
+      publicId: 5,
+      priority: "medium",
+      windowStart: "2026-10-24T12:00:00.000Z",
+    }),
+  ]);
+
+  assert.deepEqual(
+    sorted.map((item) => item.id),
+    ["urgent", "high-first", "high-second", "medium", "low-late"],
+  );
+});
+
+test("sort: missing windowStart falls back to createdAt ascending", () => {
+  const sorted = sortFieldTicketsByPriorityThenSchedule([
+    ticket({
+      id: "b",
+      publicId: 20,
+      priority: "high",
+      windowStart: null,
+      createdAt: "2026-10-24T11:00:00.000Z",
+    }),
+    ticket({
+      id: "a",
+      publicId: 10,
+      priority: "high",
+      windowStart: null,
+      createdAt: "2026-10-24T09:00:00.000Z",
+    }),
+  ]);
+  assert.deepEqual(
+    sorted.map((item) => item.id),
+    ["a", "b"],
+  );
 });

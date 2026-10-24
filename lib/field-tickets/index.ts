@@ -54,3 +54,9 @@ export {
   observationLooksSufficient,
   shouldSkipDetailFastPath,
 } from "./technician-intent";
+export {
+  FIELD_TICKET_PRIORITY_RANK,
+  compareFieldTicketsByPriorityThenSchedule,
+  fieldTicketScheduleTime,
+  sortFieldTicketsByPriorityThenSchedule,
+} from "./sort";

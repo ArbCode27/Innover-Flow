@@ -16,6 +16,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import {
   fieldTicketCategoryLabel,
+  sortFieldTicketsByPriorityThenSchedule,
   type FieldTicket,
   type Technician,
 } from "@/lib/field-tickets";
@@ -92,7 +93,6 @@ export const FieldTicketsView = ({
   const [search, setSearch] = useState("");
   const [priority, setPriority] = useState("all");
   const [technicianId, setTechnicianId] = useState("all");
-  const [createdSort, setCreatedSort] = useState<"asc" | "desc">("desc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editing, setEditing] = useState<FieldTicket | null>(null);
@@ -112,12 +112,8 @@ export const FieldTicketsView = ({
       }
       return matchesSearch(ticket, term);
     });
-    next.sort((left, right) => {
-      const delta = Date.parse(left.createdAt) - Date.parse(right.createdAt);
-      return createdSort === "asc" ? delta : -delta;
-    });
-    return next;
-  }, [tickets, statusTab, search, priority, technicianId, createdSort]);
+    return sortFieldTicketsByPriorityThenSchedule(next);
+  }, [tickets, statusTab, search, priority, technicianId]);
 
   const handleOpenChat = (ticket: FieldTicket) => {
     const conversationId = resolveConversationId(ticket);
@@ -238,10 +234,6 @@ export const FieldTicketsView = ({
         <FieldTicketsTable
           tickets={filtered}
           selectedIds={selectedIds}
-          createdSort={createdSort}
-          onToggleCreatedSort={() =>
-            setCreatedSort((current) => (current === "desc" ? "asc" : "desc"))
-          }
           onToggleSelect={handleToggleSelect}
           onToggleSelectAll={handleToggleSelectAll}
           onOpenChat={handleOpenChat}

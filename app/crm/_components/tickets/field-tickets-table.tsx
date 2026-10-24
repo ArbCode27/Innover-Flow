@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, MapPin, MessageCircle, Pencil, Trash2, UserPlus, CheckCircle2, Eye } from "lucide-react";
+import { MapPin, MessageCircle, Pencil, Trash2, UserPlus, CheckCircle2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -30,8 +30,6 @@ import { formatCrmDate } from "../../_lib/formatters";
 interface FieldTicketsTableProps {
   tickets: FieldTicket[];
   selectedIds: string[];
-  createdSort: "asc" | "desc";
-  onToggleCreatedSort: () => void;
   onToggleSelect: (id: string) => void;
   onToggleSelectAll: () => void;
   onOpenChat: (ticket: FieldTicket) => void;
@@ -45,8 +43,6 @@ interface FieldTicketsTableProps {
 export const FieldTicketsTable = ({
   tickets,
   selectedIds,
-  createdSort,
-  onToggleCreatedSort,
   onToggleSelect,
   onToggleSelectAll,
   onOpenChat,
@@ -77,20 +73,7 @@ export const FieldTicketsTable = ({
               <TableHead className={CRM_SURFACES.textMuted}>Categoría</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Técnico</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Ubicación</TableHead>
-              <TableHead className={CRM_SURFACES.textMuted}>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1"
-                  onClick={onToggleCreatedSort}
-                  aria-label="Ordenar por fecha de creación">
-                  Creado
-                  {createdSort === "desc" ? (
-                    <ArrowDown className="size-3" aria-hidden="true" />
-                  ) : (
-                    <ArrowUp className="size-3" aria-hidden="true" />
-                  )}
-                </button>
-              </TableHead>
+              <TableHead className={CRM_SURFACES.textMuted}>Creado</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Acciones</TableHead>
             </TableRow>
           </TableHeader>
