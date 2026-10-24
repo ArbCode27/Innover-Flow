@@ -72,7 +72,7 @@ export const PaymentMethodsSettingsSection = ({
     return methods.find((item) => item.method_key === editingKey) || null;
   }, [editingKey, methods]);
 
-  const persistMethod = async (draft: {
+  type PersistDraft = {
     method_key: PaymentMethodKey;
     title: string;
     description: string | null;
@@ -85,8 +85,40 @@ export const PaymentMethodsSettingsSection = ({
     account_number: string | null;
     account_type: OrganizationPaymentMethod["account_type"];
     holder_name: string | null;
+    email: string | null;
+    link_url: string | null;
+    binance_pay_id: string | null;
+    binance_uid: string | null;
+    wallet_address: string | null;
+    crypto_network: string | null;
     notes: string | null;
-  }) => {
+  };
+
+  const toPersistDraft = (
+    method: OrganizationPaymentMethod,
+  ): PersistDraft => ({
+    method_key: method.method_key,
+    title: method.title,
+    description: method.description,
+    is_enabled: method.is_enabled,
+    sort_order: method.sort_order,
+    currency: method.currency,
+    bank_name: method.bank_name,
+    phone: method.phone,
+    document: method.document,
+    account_number: method.account_number,
+    account_type: method.account_type,
+    holder_name: method.holder_name,
+    email: method.email,
+    link_url: method.link_url,
+    binance_pay_id: method.binance_pay_id,
+    binance_uid: method.binance_uid,
+    wallet_address: method.wallet_address,
+    crypto_network: method.crypto_network,
+    notes: method.notes,
+  });
+
+  const persistMethod = async (draft: PersistDraft) => {
     const response = await fetch("/api/crm/payment-methods", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -128,36 +160,8 @@ export const PaymentMethodsSettingsSection = ({
     setBusyKey(methodKey);
     try {
       const [savedA, savedB] = await Promise.all([
-        persistMethod({
-          method_key: nextA.method_key,
-          title: nextA.title,
-          description: nextA.description,
-          is_enabled: nextA.is_enabled,
-          sort_order: nextA.sort_order,
-          currency: nextA.currency,
-          bank_name: nextA.bank_name,
-          phone: nextA.phone,
-          document: nextA.document,
-          account_number: nextA.account_number,
-          account_type: nextA.account_type,
-          holder_name: nextA.holder_name,
-          notes: nextA.notes,
-        }),
-        persistMethod({
-          method_key: nextB.method_key,
-          title: nextB.title,
-          description: nextB.description,
-          is_enabled: nextB.is_enabled,
-          sort_order: nextB.sort_order,
-          currency: nextB.currency,
-          bank_name: nextB.bank_name,
-          phone: nextB.phone,
-          document: nextB.document,
-          account_number: nextB.account_number,
-          account_type: nextB.account_type,
-          holder_name: nextB.holder_name,
-          notes: nextB.notes,
-        }),
+        persistMethod(toPersistDraft(nextA)),
+        persistMethod(toPersistDraft(nextB)),
       ]);
       setMethods((current) =>
         current.map((item) => {
@@ -190,21 +194,7 @@ export const PaymentMethodsSettingsSection = ({
     setDialogOpen(true);
   };
 
-  const handleDialogSubmit = async (payload: {
-    method_key: PaymentMethodKey;
-    title: string;
-    description: string | null;
-    is_enabled: boolean;
-    sort_order: number;
-    currency: OrganizationPaymentMethod["currency"];
-    bank_name: string | null;
-    phone: string | null;
-    document: string | null;
-    account_number: string | null;
-    account_type: OrganizationPaymentMethod["account_type"];
-    holder_name: string | null;
-    notes: string | null;
-  }) => {
+  const handleDialogSubmit = async (payload: PersistDraft) => {
     setIsSaving(true);
     try {
       const saved = await persistMethod(payload);

@@ -43,6 +43,12 @@ export const paymentMethodUpsertSchema = z.object({
     .optional()
     .transform((value) => value ?? null),
   holder_name: nullableTrimmed,
+  email: nullableTrimmed,
+  link_url: nullableTrimmed,
+  binance_pay_id: nullableTrimmed,
+  binance_uid: nullableTrimmed,
+  wallet_address: nullableTrimmed,
+  crypto_network: nullableTrimmed,
   notes: nullableTrimmed,
 });
 
@@ -84,6 +90,25 @@ const mapRow = (
     holder_name:
       typeof row.holder_name === "string"
         ? row.holder_name.trim() || null
+        : null,
+    email: typeof row.email === "string" ? row.email.trim() || null : null,
+    link_url:
+      typeof row.link_url === "string" ? row.link_url.trim() || null : null,
+    binance_pay_id:
+      typeof row.binance_pay_id === "string"
+        ? row.binance_pay_id.trim() || null
+        : null,
+    binance_uid:
+      typeof row.binance_uid === "string"
+        ? row.binance_uid.trim() || null
+        : null,
+    wallet_address:
+      typeof row.wallet_address === "string"
+        ? row.wallet_address.trim() || null
+        : null,
+    crypto_network:
+      typeof row.crypto_network === "string"
+        ? row.crypto_network.trim() || null
         : null,
     notes: typeof row.notes === "string" ? row.notes.trim() || null : null,
     updated_by:
@@ -147,7 +172,7 @@ export const upsertOrganizationPaymentMethod = async (
     if (!methodHasDestinationData(draft)) {
       throw Object.assign(
         new Error(
-          "Activa el método solo cuando tengas al menos un dato de destino (banco, teléfono o cuenta).",
+          "Activa el método solo cuando tengas al menos un dato de destino válido para ese tipo.",
         ),
         { status: 400, code: "PAYMENT_METHOD_INCOMPLETE" },
       );
@@ -168,6 +193,12 @@ export const upsertOrganizationPaymentMethod = async (
     account_number: input.payload.account_number,
     account_type: input.payload.account_type,
     holder_name: input.payload.holder_name,
+    email: input.payload.email,
+    link_url: input.payload.link_url,
+    binance_pay_id: input.payload.binance_pay_id,
+    binance_uid: input.payload.binance_uid,
+    wallet_address: input.payload.wallet_address,
+    crypto_network: input.payload.crypto_network,
     notes: input.payload.notes,
     updated_by: input.agentId,
     updated_at: new Date().toISOString(),

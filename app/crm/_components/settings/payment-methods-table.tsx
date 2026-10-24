@@ -3,7 +3,9 @@
 import {
   ArrowDown,
   ArrowUp,
+  Bitcoin,
   CreditCard,
+  Globe,
   Pencil,
   Smartphone,
 } from "lucide-react";
@@ -19,7 +21,6 @@ import {
 import { cn } from "@/lib/utils";
 import {
   getPaymentMethodUiStatus,
-  methodUsesPhone,
   PAYMENT_METHOD_LABELS,
   PAYMENT_METHOD_UI_STATUS_LABELS,
   paymentMethodDestinationSummary,
@@ -77,8 +78,16 @@ export const PaymentMethodsTable = ({
             {ordered.length ? (
               ordered.map((method, index) => {
                 const status = getPaymentMethodUiStatus(method);
-                const isPhone = methodUsesPhone(method.method_key);
                 const busy = busyKey === method.method_key;
+                const MethodIcon =
+                  method.method_key === "pago_movil"
+                    ? Smartphone
+                    : method.method_key === "binance"
+                      ? Bitcoin
+                      : method.method_key === "zelle" ||
+                          method.method_key === "paypal"
+                        ? Globe
+                        : CreditCard;
 
                 return (
                   <TableRow
@@ -87,17 +96,10 @@ export const PaymentMethodsTable = ({
                   >
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {isPhone ? (
-                          <Smartphone
-                            className="size-4 shrink-0 text-crm-accent"
-                            aria-hidden="true"
-                          />
-                        ) : (
-                          <CreditCard
-                            className="size-4 shrink-0 text-crm-accent"
-                            aria-hidden="true"
-                          />
-                        )}
+                        <MethodIcon
+                          className="size-4 shrink-0 text-crm-accent"
+                          aria-hidden="true"
+                        />
                         <div className="min-w-0">
                           <div
                             className={`truncate text-sm font-medium ${CRM_SURFACES.textPrimary}`}

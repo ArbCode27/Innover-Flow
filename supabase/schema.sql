@@ -610,7 +610,7 @@ CREATE TABLE IF NOT EXISTS public.organization_payment_methods (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   method_key text NOT NULL
-    CHECK (method_key IN ('pago_movil', 'transferencia', 'deposito', 'deposito_usd')),
+    CHECK (method_key IN ('pago_movil', 'transferencia', 'zelle', 'binance', 'paypal')),
   title text NOT NULL,
   description text,
   is_enabled boolean NOT NULL DEFAULT false,
@@ -624,6 +624,12 @@ CREATE TABLE IF NOT EXISTS public.organization_payment_methods (
   account_type text
     CHECK (account_type IS NULL OR account_type IN ('corriente', 'ahorro')),
   holder_name text,
+  email text,
+  link_url text,
+  binance_pay_id text,
+  binance_uid text,
+  wallet_address text,
+  crypto_network text,
   notes text,
   updated_by integer REFERENCES public.agents(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
