@@ -4,6 +4,7 @@ export const MESSAGE_PREVIEW_MAX_LENGTH = 80;
 export const MESSAGE_EVENT_NAMES = [
   "app_post_received",
   "app_post_failed",
+  "app_media_upload_failed",
   "db_insert",
   "db_insert_failed",
   "ai_schedule",

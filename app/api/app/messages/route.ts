@@ -191,7 +191,24 @@ export const POST = async (request: NextRequest) => {
             file,
             kind,
           });
-        } catch {
+        } catch (uploadError) {
+          logMessageEvent(
+            "app_media_upload_failed",
+            {
+              organizationId: session.organizationId,
+              clientId: session.clientId,
+              conversationId: Number(conversation.id),
+              mediaType: kind,
+              mimeType: file.type || null,
+              fileName: file.name || null,
+              size: file.size,
+              error:
+                uploadError instanceof Error
+                  ? uploadError.message.slice(0, 200)
+                  : "unknown_error",
+            },
+            "error",
+          );
           throw new AppApiError(
             APP_ERROR_CODES.MEDIA_UPLOAD_FAILED,
             "No se pudo subir el archivo. Intenta con otro o más tarde.",
