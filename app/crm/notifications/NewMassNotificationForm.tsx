@@ -1,13 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { z } from "zod";
-import {
-  useForm,
-  SubmitHandler,
-  Controller,
-} from "react-hook-form";
+import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-
+import { toast } from "sonner";
 import {
   Dialog,
   DialogTrigger,
@@ -20,30 +17,25 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "@/components/ui/sonner";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 
-/* ---------- esquema de validación ---------- */
+/* ---------- Esquema de validación ---------- */
 const schema = z.object({
   zones: z.array(z.string()).min(1, "Selecciona al menos una zona"),
-  title: z.string().min(3, "El título es obligatorio"),
-  body: z.string().min(5, "El cuerpo es obligatorio"),
+  title: z.string().trim().min(3, "El título debe tener al menos 3 caracteres"),
+  body: z.string().trim().min(5, "El cuerpo del mensaje debe tener al menos 5 caracteres"),
 });
 
 type FormValues = z.infer<typeof schema>;
 
 interface Props {
   zoneOptions: { label: string; value: string }[];
+  organizationId?: string;
 }
 
-export const NewMassNotificationForm = ({ zoneOptions }: Props) => {
+export const NewMassNotificationForm = ({ zoneOptions, organizationId }: Props) => {
+  const [open, setOpen] = useState(false);
+
   const {
     register,
     handleSubmit,
@@ -56,13 +48,32 @@ export const NewMassNotificationForm = ({ zoneOptions }: Props) => {
     defaultValues: { zones: [], title: "", body: "" },
   });
 
+  const selectedZones = watch("zones") || [];
+
+  const handleToggleZone = (zoneValue: string) => {
+    const isSelected = selectedZones.includes(zoneValue);
+    const updated = isSelected
+      ? selectedZones.filter((z) => z !== zoneValue)
+      : [...selectedZones, zoneValue];
+    setValue("zones", updated, { shouldValidate: true });
+  };
+
+  const handleSelectAllZones = () => {
+    const all = zoneOptions.map((opt) => opt.value);
+    setValue("zones", all, { shouldValidate: true });
+  };
+
+  const handleClearZones = () => {
+    setValue("zones", [], { shouldValidate: true });
+  };
+
   const onSubmit: SubmitHandler<FormValues> = async (data) => {
     try {
       const res = await fetch("/api/notifications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          organizationId: process.env.NEXT_PUBLIC_ORG_ID,
+          organizationId,
           zones: data.zones,
           title: data.title,
           body: data.body,
@@ -71,12 +82,16 @@ export const NewMassNotificationForm = ({ zoneOptions }: Props) => {
 
       const result = await res.json();
 
-      if (!res.ok) throw new Error(result.error ?? "Error inesperado");
+      if (!res.ok) {
+        throw new Error(result.error ?? "Error inesperado");
+      }
 
       toast.success("✅ Notificación enviada", {
         description: result.message,
       });
+
       reset();
+      setOpen(false);
     } catch (e) {
       toast.error("❌ Error al enviar", {
         description: (e as Error).message,
@@ -85,7 +100,7 @@ export const NewMassNotificationForm = ({ zoneOptions }: Props) => {
   };
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button>Crear notificación masiva</Button>
       </DialogTrigger>
@@ -99,63 +114,103 @@ export const NewMassNotificationForm = ({ zoneOptions }: Props) => {
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Zonas (multiselect) */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Zona(s)</label>
-            <Select
-              value={watch("zones") as string[]}
-              onValueChange={(value) =>
-                setValue("zones", value as string[], { shouldValidate: true })
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Selecciona zona(s)" />
-              </SelectTrigger>
-              <SelectContent>
-                {zoneOptions.map((opt) => (
-                  <SelectItem
-                    key={opt.value}
-                    value={opt.value}
-                    className="flex items-center gap-2"
-                  >
-                    <Checkbox
-                      checked={watch("zones")?.includes(opt.value)}
-                      className="pointer-events-none"
-                    />
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Zonas (multiselect con checkboxes) */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">
+                Zona(s) destino {selectedZones.length > 0 && `(${selectedZones.length})`}
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSelectAllZones}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Todas
+                </button>
+                <span className="text-xs text-muted-foreground">•</span>
+                <button
+                  type="button"
+                  onClick={handleClearZones}
+                  className="text-xs text-muted-foreground hover:underline"
+                >
+                  Ninguna
+                </button>
+              </div>
+            </div>
+
+            <div className="max-h-44 overflow-y-auto rounded-md border p-2 space-y-1 bg-background">
+              {zoneOptions.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-3 text-center">
+                  No hay zonas registradas para clientes de esta organización.
+                </p>
+              ) : (
+                zoneOptions.map((opt) => {
+                  const isChecked = selectedZones.includes(opt.value);
+                  return (
+                    <label
+                      key={opt.value}
+                      className="flex items-center gap-2.5 rounded px-2 py-1.5 text-sm hover:bg-accent cursor-pointer select-none transition-colors"
+                    >
+                      <Checkbox
+                        checked={isChecked}
+                        onCheckedChange={() => handleToggleZone(opt.value)}
+                      />
+                      <span className="text-sm">{opt.label}</span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+
             {errors.zones && (
-              <p className="text-sm text-red-600">{errors.zones.message}</p>
+              <p className="text-xs text-red-600 dark:text-red-400">
+                {errors.zones.message}
+              </p>
             )}
           </div>
 
           {/* Título */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Título</label>
-            <Input placeholder="Ej.: Oferta 20 % OFF" {...register("title")} />
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Título</label>
+            <Input
+              placeholder="Ej.: Mantenimiento programado"
+              disabled={isSubmitting}
+              {...register("title")}
+            />
             {errors.title && (
-              <p className="text-sm text-red-600">{errors.title.message}</p>
+              <p className="text-xs text-red-600 dark:text-red-400">
+                {errors.title.message}
+              </p>
             )}
           </div>
 
           {/* Mensaje */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Mensaje</label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Mensaje</label>
             <Textarea
-              placeholder="Escribe el contenido de la notificación"
+              placeholder="Escribe el contenido de la notificación push"
               rows={4}
+              disabled={isSubmitting}
               {...register("body")}
             />
             {errors.body && (
-              <p className="text-sm text-red-600">{errors.body.message}</p>
+              <p className="text-xs text-red-600 dark:text-red-400">
+                {errors.body.message}
+              </p>
             )}
           </div>
 
-          <DialogFooter>
-            <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
+          <DialogFooter className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => setOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Enviando…" : "Enviar notificación"}
             </Button>
           </DialogFooter>

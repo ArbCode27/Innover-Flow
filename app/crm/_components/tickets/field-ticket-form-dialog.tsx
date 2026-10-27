@@ -312,9 +312,9 @@ export const FieldTicketFormDialog = ({
       facadeMediaUrl: chatContext.facadeMediaUrl || "",
     });
     setSelectedClient({
-      id: chatContext.crmClientId,
-      name: chatContext.clientName,
-      phone: chatContext.clientPhone,
+      id: chatContext.crmClientId ?? null,
+      name: chatContext.clientName ?? null,
+      phone: chatContext.clientPhone ?? null,
     });
   }, [open, mode, ticket, chatContext, form, categories]);
 

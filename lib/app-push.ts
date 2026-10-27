@@ -30,11 +30,11 @@ export const enqueueAppPush = (task: () => Promise<void>) => {
 const readMessageChannel = (channel?: string | null) =>
   typeof channel === "string" && channel.trim() ? channel.trim() : "app";
 
-const loadAppDeviceTokens = async (
+export const loadAppDeviceTokens = async (
   supabase: SupabaseClient,
   organizationId: string,
   clientId: number,
-) => {
+): Promise<string[]> => {
   const { data: devices, error } = await supabase
     .from("app_devices")
     .select("id, push_token, platform")
@@ -83,7 +83,7 @@ const pruneUnregisteredAppDevices = async (
   return staleTokens.length;
 };
 
-const sendToClientDevices = async (
+export const sendToClientDevices = async (
   supabase: SupabaseClient,
   input: {
     organizationId: string;
@@ -91,7 +91,7 @@ const sendToClientDevices = async (
     messages: ExpoPushMessage[];
     logContext: Record<string, unknown>;
   },
-) => {
+): Promise<void> => {
   if (!input.messages.length) {
     console.log(`${LOG_PREFIX} no_devices`, {
       clientId: input.clientId,

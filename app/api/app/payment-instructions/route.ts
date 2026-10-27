@@ -48,7 +48,9 @@ export const GET = async (request: NextRequest) => {
     }
 
     if (methodParam) {
-      const match = getPaymentMethodByKey(methods, methodParam);
+      const match = isPaymentMethodKey(methodParam)
+        ? getPaymentMethodByKey(methods, methodParam)
+        : null;
       return NextResponse.json({
         methods: match ? [toAppPaymentMethodDto(match)] : [],
       });
