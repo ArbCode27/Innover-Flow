@@ -123,10 +123,15 @@ export interface ClientOnu {
   client_id?: number;
   onu_external_id: string;
   sn: string;
+  olt_id?: string | null;
   board?: number | null;
   port?: number | null;
+  onu_number?: number | null;
   rx_signal?: number | null;
   status?: string | null;
+  zone?: string | null;
+  status_changed_at?: string | null;
+  signal_changed_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 }

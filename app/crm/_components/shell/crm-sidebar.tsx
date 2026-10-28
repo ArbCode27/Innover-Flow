@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import {
+  Activity,
   Bot,
   Building2,
   Check,
@@ -82,7 +83,7 @@ const icons = {
   payments: Wallet,
   tickets: Ticket,
   technicians: HardHat,
-  notifications: Radio,
+  notifications: Activity,
   labels: Tags,
   agents: Bot,
   settings: Settings2,

@@ -16,15 +16,25 @@ export type ExpoTicketPushData = {
   conversationId: number;
 };
 
+export type ExpoIncidentPushData = {
+  kind: "pon_incident";
+  board: number;
+  port: number;
+  incidentType: "massive_outage" | "altered_power" | "mixed" | "resolved";
+  affectedCount: number;
+  losCount: number;
+  alteredCount: number;
+};
+
 export type ExpoPushMessage = {
   to: string;
   title: string;
   body: string;
   sound: "default";
-  channelId: "star-chat" | "star-ticket";
+  channelId: "star-chat" | "star-ticket" | "star-incident" | "default";
   priority: "high";
   collapseId: string;
-  data: ExpoChatPushData | ExpoTicketPushData;
+  data: ExpoChatPushData | ExpoTicketPushData | ExpoIncidentPushData;
 };
 
 export type ExpoPushTicket = {
@@ -83,6 +93,35 @@ export const buildExpoTicketPushMessage = (input: {
     publicId: input.publicId,
     title: input.title,
     conversationId: toPushNumber(input.conversationId ?? 0),
+  },
+});
+
+export const buildExpoIncidentPushMessage = (input: {
+  token: string;
+  title: string;
+  body: string;
+  board: number;
+  port: number;
+  incidentType: "massive_outage" | "altered_power" | "mixed" | "resolved";
+  affectedCount: number;
+  losCount: number;
+  alteredCount: number;
+}): ExpoPushMessage => ({
+  to: input.token,
+  title: input.title,
+  body: input.body,
+  sound: "default",
+  channelId: "star-incident",
+  priority: "high",
+  collapseId: `pon-${input.board}-${input.port}`,
+  data: {
+    kind: "pon_incident",
+    board: input.board,
+    port: input.port,
+    incidentType: input.incidentType,
+    affectedCount: input.affectedCount,
+    losCount: input.losCount,
+    alteredCount: input.alteredCount,
   },
 });
 

@@ -40,14 +40,27 @@ interface Props {
   targetOptions?: BoardPortTarget[];
   organizationId?: string;
   onSuccess?: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  defaultBoard?: number;
+  defaultPort?: number;
+  trigger?: React.ReactNode;
 }
 
 export const NewMassNotificationForm = ({
   targetOptions = [],
   organizationId,
   onSuccess,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  defaultBoard,
+  defaultPort,
+  trigger,
 }: Props) => {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = isControlled ? controlledOnOpenChange! : setInternalOpen;
 
   const {
     register,
@@ -59,11 +72,17 @@ export const NewMassNotificationForm = ({
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      board: targetOptions[0]?.board ?? 1,
-      port: targetOptions[0]?.port ?? 1,
+      board: defaultBoard ?? targetOptions[0]?.board ?? 1,
+      port: defaultPort ?? targetOptions[0]?.port ?? 1,
       title: "",
       body: "",
     },
+  });
+
+  // Si cambian defaultBoard o defaultPort externamente, sincronizarlos
+  useState(() => {
+    if (defaultBoard !== undefined) setValue("board", defaultBoard);
+    if (defaultPort !== undefined) setValue("port", defaultPort);
   });
 
   const selectedBoard = watch("board");
@@ -110,12 +129,16 @@ export const NewMassNotificationForm = ({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className="flex items-center gap-2">
-          <Radio className="size-4" />
-          Crear notificación masiva
-        </Button>
-      </DialogTrigger>
+      {trigger ? (
+        <DialogTrigger asChild>{trigger}</DialogTrigger>
+      ) : !isControlled ? (
+        <DialogTrigger asChild>
+          <Button className="flex items-center gap-2">
+            <Radio className="size-4" />
+            Crear notificación masiva
+          </Button>
+        </DialogTrigger>
+      ) : null}
 
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>

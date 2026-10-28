@@ -2,10 +2,10 @@
 
 import { useMemo } from "react";
 import {
+  Activity,
   Bot,
   HardHat,
   MessageSquareQuote,
-  Radio,
   Settings2,
   Tags,
   Ticket,
@@ -34,7 +34,7 @@ const SETTINGS_ITEMS: Array<{ id: CrmView; label: string; icon: typeof Users }> 
   { id: "payments", label: "Pagos", icon: Wallet },
   { id: "tickets", label: "Tickets", icon: Ticket },
   { id: "technicians", label: "Técnicos", icon: HardHat },
-  { id: "notifications", label: "Notificaciones", icon: Radio },
+  { id: "notifications", label: "Monitoreo", icon: Activity },
   { id: "quick-replies", label: "Respuestas rápidas", icon: MessageSquareQuote },
   { id: "labels", label: "Etiquetas", icon: Tags },
   { id: "agents", label: "Agentes", icon: Bot },

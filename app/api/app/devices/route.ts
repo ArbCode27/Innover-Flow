@@ -31,43 +31,50 @@ export const POST = async (request: NextRequest) => {
       "No se pudo registrar el dispositivo. Revisa los datos.",
     );
 
-    // Push de chat está ligado a clients; técnicos aún no tienen fila en app_devices.
-    if (session.role !== "customer" || !session.clientId) {
+    // Si es sesión de cliente
+    const isCustomer = session.role === "customer" && Boolean(session.clientId);
+    // Si es sesión de técnico o supervisor (gerente técnico)
+    const isStaff = (session.role === "technician" || session.role === "supervisor") && Boolean(session.technicianId);
+
+    if (!isCustomer && !isStaff) {
       return NextResponse.json({
         success: true,
         skipped: true,
-        reason: "technician_push_not_configured",
+        reason: "session_identity_not_eligible_for_push",
       });
     }
 
     const supabase = getSupabaseAdmin();
     const now = new Date().toISOString();
-    const payload = {
+
+    const payload: Record<string, unknown> = {
       organization_id: session.organizationId,
-      client_id: session.clientId,
       push_token: parsed.push_token,
       platform: parsed.platform,
+      role: session.role,
       updated_at: now,
     };
-    // Tabla real: public.app_devices
-    // UPSERT preferido: UNIQUE (client_id, push_token)
-    // Fallback: UNIQUE (organization_id, push_token) reasigna el token al cliente del login.
-    const first = await supabase
+
+    if (isCustomer) {
+      payload.client_id = session.clientId;
+    } else if (isStaff) {
+      payload.technician_id = session.technicianId;
+    }
+
+    // UPSERT por (organization_id, push_token)
+    const { data, error } = await supabase
       .from("app_devices")
-      .upsert(payload, { onConflict: "client_id,push_token" })
-      .select("id, client_id, platform, updated_at")
+      .upsert(payload, { onConflict: "organization_id,push_token" })
+      .select("id, client_id, technician_id, role, platform, updated_at")
       .single();
 
-    const { data, error } =
-      first.error
-        ? await supabase
-            .from("app_devices")
-            .upsert(payload, { onConflict: "organization_id,push_token" })
-            .select("id, client_id, platform, updated_at")
-            .single()
-        : first;
-
-    if (error) throw error;
+    if (error) {
+      // Fallback si la migración aún no ha eliminado NOT NULL de client_id y es staff
+      if (!isCustomer && error.message.includes("client_id")) {
+        console.warn("[APP_DEVICES] Requiere aplicar migración 20261027110000 para staff push");
+      }
+      throw error;
+    }
 
     return NextResponse.json({ success: true, device: data });
   } catch (error) {

@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { OnuStatusCard } from "@/components/OnuStatusCard";
 
 interface ClientProfileSectionProps {
   client: Client;
@@ -336,111 +337,17 @@ export const ClientProfileSection = ({
       </ProfileField>
 
       {/* ================= DATOS DE RED / SMART OLT ================= */}
-      <div className="pt-2 border-t border-border/40 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <Radio className="size-3.5 text-emerald-500" />
-            <span className={`text-[11px] font-semibold uppercase tracking-wide ${CRM_SURFACES.textLabel}`}>
-              Datos OLT (Smart OLT)
-            </span>
-          </div>
-          {currentOnu?.sn ? (
-            <button
-              type="button"
-              onClick={handleRefreshLiveOnu}
-              disabled={isRefreshingOnu}
-              title="Refrescar estado y potencia en Smart OLT"
-              className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 disabled:opacity-50 transition-colors">
-              <RefreshCw className={cn("size-3", isRefreshingOnu && "animate-spin")} />
-              <span>{isRefreshingOnu ? "Refrescando..." : "Refrescar"}</span>
-            </button>
-          ) : null}
-        </div>
-
-        {currentOnu ? (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <ProfileField label="Board (Tarjeta)">
-                <p className={`font-mono text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>
-                  {currentOnu.board != null ? `Tarjeta ${currentOnu.board}` : "—"}
-                </p>
-              </ProfileField>
-
-              <ProfileField label="Port (Puerto PON)">
-                <p className={`font-mono text-sm font-semibold ${CRM_SURFACES.textPrimary}`}>
-                  {currentOnu.port != null ? `Puerto ${currentOnu.port}` : "—"}
-                </p>
-              </ProfileField>
-
-              <ProfileField label="Estado OLT">
-                <div className="pt-0.5">
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold border",
-                      currentOnu.status?.toLowerCase() === "online"
-                        ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                        : currentOnu.status?.toLowerCase() === "los" || currentOnu.status?.toLowerCase() === "offline"
-                          ? "border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-400"
-                          : "border-amber-500/30 bg-amber-500/15 text-amber-600 dark:text-amber-400",
-                    )}>
-                    {currentOnu.status || "Desconocido"}
-                  </span>
-                </div>
-              </ProfileField>
-
-              <ProfileField label="Potencia RX">
-                <p
-                  className={cn(
-                    "font-mono text-sm font-bold",
-                    currentOnu.rx_signal != null
-                      ? currentOnu.rx_signal < -27
-                        ? "text-red-600 dark:text-red-400"
-                        : currentOnu.rx_signal < -24
-                          ? "text-amber-600 dark:text-amber-400"
-                          : "text-emerald-600 dark:text-emerald-400"
-                      : CRM_SURFACES.textPrimary,
-                  )}>
-                  {currentOnu.rx_signal != null ? `${currentOnu.rx_signal} dBm` : "—"}
-                </p>
-              </ProfileField>
-            </div>
-
-            <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground border-t border-border/20">
-              <span className="font-mono truncate" title={currentOnu.sn}>
-                SN: {currentOnu.sn}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchSn(currentOnu.sn);
-                  setIsLinkModalOpen(true);
-                }}
-                className="text-muted-foreground hover:text-foreground text-[11px] underline">
-                Cambiar ONU
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-border/70 p-3 text-center space-y-2">
-            <p className="text-xs text-muted-foreground">
-              Sin ONU vinculada en Smart OLT
-            </p>
-            <CrmButton
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="w-full text-xs h-7"
-              onClick={() => {
-                setSearchSn("");
-                setFoundOnu(null);
-                setSearchError(null);
-                setIsLinkModalOpen(true);
-              }}>
-              <Plus className="size-3 mr-1" />
-              Vincular ONU
-            </CrmButton>
-          </div>
-        )}
+      <div className="pt-2 border-t border-border/40">
+        <OnuStatusCard
+          clientId={client.id}
+          initialOnu={currentOnu}
+          onOpenLinkModal={() => {
+            setSearchSn(currentOnu?.sn || "");
+            setFoundOnu(null);
+            setSearchError(null);
+            setIsLinkModalOpen(true);
+          }}
+        />
       </div>
 
       {client.wispro_id && onCreatePaymentPromise ? (
