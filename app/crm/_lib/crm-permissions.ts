@@ -55,6 +55,7 @@ export const getAllowedViews = (
       "payments",
       "tickets",
       "technicians",
+      "notifications",
       "labels",
       "agents",
       "settings",
@@ -84,6 +85,7 @@ export const getAllowedViews = (
       "tickets",
       "payments",
       "clients",
+      "notifications",
       "quick-replies",
     ];
   }
@@ -95,6 +97,7 @@ export const getAllowedViews = (
     "history",
     "tickets",
     "clients",
+    "notifications",
     "quick-replies",
   ];
 };

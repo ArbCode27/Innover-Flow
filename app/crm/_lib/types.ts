@@ -75,6 +75,7 @@ export type CrmView =
   | "payments"
   | "tickets"
   | "technicians"
+  | "notifications"
   | "labels"
   | "agents"
   | "settings";
@@ -337,10 +338,26 @@ export interface CrmData {
   settings: CrmSettings;
 }
 
+export interface CreateClientOnuInput {
+  unique_external_id: string;
+  sn: string;
+  board?: number | null;
+  port?: number | null;
+  rx_signal?: number | null;
+  status?: string | null;
+}
+
 export interface CreateClientInput {
   wispro_id: string;
   app_enabled?: boolean;
   phone?: string;
+  onu?: CreateClientOnuInput | null;
+}
+
+export interface BoardPortTarget {
+  board: number;
+  port: number;
+  clientCount: number;
 }
 
 export interface CreateTicketInput {

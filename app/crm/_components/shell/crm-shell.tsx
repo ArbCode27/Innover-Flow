@@ -28,6 +28,7 @@ import {
   resolveTicketConversationId,
 } from "@/lib/field-tickets";
 import { DashboardView } from "../dashboard/dashboard-view";
+import { NotificationsView } from "../notifications/notifications-view";
 import { CrmAppearanceHydrator } from "./crm-appearance-hydrator";
 import { CrmMobileNav, CrmSidebar } from "./crm-sidebar";
 import { parseCrmAccentId, type CrmAccentId, type CrmColorMode } from "../../_lib/crm-accents";
@@ -331,6 +332,10 @@ export const CrmShell = () => {
                 }
                 clients={crm.clients}
               />
+            ) : null}
+            {activeView === "notifications" &&
+            isViewAllowed("notifications", auth.agent, auth.organizationRole) ? (
+              <NotificationsView organizationId={auth.agent.organization_id} />
             ) : null}
             {activeView === "labels" && isViewAllowed("labels", auth.agent, auth.organizationRole) ? (
               <LabelsView

@@ -67,6 +67,17 @@ const actionSchema = z.discriminatedUnion("action", [
     wispro_id: z.string().trim().min(1).max(80),
     app_enabled: z.boolean().optional(),
     phone: z.string().trim().max(30).optional().nullable(),
+    onu: z
+      .object({
+        unique_external_id: z.string().trim().min(1),
+        sn: z.string().trim().min(1),
+        board: z.coerce.number().int().nullable().optional(),
+        port: z.coerce.number().int().nullable().optional(),
+        rx_signal: z.coerce.number().nullable().optional(),
+        status: z.string().nullable().optional(),
+      })
+      .optional()
+      .nullable(),
   }),
   z.object({
     action: z.literal("createTicket"),
@@ -480,6 +491,23 @@ export const POST = async (request: NextRequest) => {
           wisproId: fields.wisproId,
           envoicing: fields.envoicing,
         });
+
+        if (input.onu && data?.id) {
+          try {
+            await supabase.from("client_onus").insert({
+              client_id: data.id,
+              onu_external_id: input.onu.unique_external_id,
+              sn: input.onu.sn.trim().toUpperCase(),
+              board: input.onu.board ?? null,
+              port: input.onu.port ?? null,
+              rx_signal: input.onu.rx_signal ?? null,
+              status: input.onu.status ?? null,
+            });
+          } catch (onuErr) {
+            console.warn("[CRM_DATA] createClient: Error al vincular ONU en client_onus:", onuErr);
+          }
+        }
+
         return NextResponse.json({ data });
       } catch (error) {
         if (error instanceof WisproApiError) {
