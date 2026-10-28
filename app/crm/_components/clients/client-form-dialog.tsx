@@ -296,7 +296,7 @@ export const ClientFormDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={handleDialogChange}>
-      <DialogContent className={`${CRM_DIALOG} max-w-xl`}>
+      <DialogContent className={`${CRM_DIALOG} w-full sm:max-w-xl md:max-w-2xl max-h-[92vh] overflow-y-auto p-5 sm:p-6`}>
         {/* ================= PASO 1: BÚSQUEDA Y FICHA DE WISPRO ================= */}
         {modalStep === "wispro" ? (
           <form onSubmit={selected ? handleProceedToSmartOlt : handleSearch}>
@@ -521,54 +521,66 @@ export const ClientFormDialog = ({
           </form>
         ) : (
           /* ================= PASO 2: BÚSQUEDA Y VINCULACIÓN EN SMART OLT ================= */
-          <div className="space-y-5">
+          <div className="space-y-4">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Wifi className="size-5 text-emerald-500" aria-hidden="true" />
                 Vincular equipo Smart OLT (ONU)
               </DialogTitle>
               <DialogDescription className={CRM_SURFACES.textMuted}>
-                {selectedFields ? (
-                  <>
-                    Cliente: <strong className="text-foreground">{selectedFields.name}</strong> (Cédula: {selectedFields.cedula}).
-                    Ingresa el Número de Serie (SN) de su ONU para vincular los datos de red (Board, Port, Señal).
-                  </>
-                ) : (
-                  "Ingresa el SN de la ONU para consultar en Smart OLT."
-                )}
+                Consulta el estado de red de la ONU en Smart OLT usando su Número de Serie (SN).
               </DialogDescription>
             </DialogHeader>
 
-            <form onSubmit={handleSearchOnuSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="smartolt-sn-input">Número de Serie (SN) de la ONU</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="smartolt-sn-input"
-                    value={onuSn}
-                    onChange={(event) => setOnuSn(event.target.value.toUpperCase())}
-                    placeholder="Ej. HWTC12345678"
-                    autoComplete="off"
-                    disabled={isSearchingOnu || isSubmitting}
-                    className={`font-mono uppercase ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}
-                  />
-                  <CrmButton
-                    type="submit"
-                    disabled={isSearchingOnu || isSubmitting}
-                    aria-label="Buscar en Smart OLT">
-                    <Search className="size-4" aria-hidden="true" />
-                    Buscar
-                  </CrmButton>
+            {/* Banner resumen del cliente */}
+            {selectedFields ? (
+              <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">Cliente Wispro:</span>
+                  <p className="font-semibold text-foreground text-sm">
+                    {selectedFields.name}
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Se consultará el endpoint <code>get_onus_details_by_sn</code> de Smart OLT.
-                </p>
+                <div className="text-right">
+                  <span className="text-muted-foreground block text-[11px]">Cédula:</span>
+                  <p className="font-mono font-medium text-foreground">
+                    V-{selectedFields.cedula}
+                  </p>
+                </div>
               </div>
+            ) : null}
+
+            <form onSubmit={handleSearchOnuSubmit} className="space-y-2">
+              <Label htmlFor="smartolt-sn-input" className="text-xs font-medium">
+                Número de Serie (SN) de la ONU
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id="smartolt-sn-input"
+                  value={onuSn}
+                  onChange={(event) => setOnuSn(event.target.value.toUpperCase())}
+                  placeholder="Ej. HWTC12345678"
+                  autoComplete="off"
+                  disabled={isSearchingOnu || isSubmitting}
+                  className={`font-mono uppercase ${CRM_SURFACES.border} ${CRM_SURFACES.input}`}
+                />
+                <CrmButton
+                  type="submit"
+                  disabled={isSearchingOnu || isSubmitting}
+                  aria-label="Buscar en Smart OLT"
+                  className="shrink-0">
+                  <Search className="size-4 mr-1" aria-hidden="true" />
+                  Buscar
+                </CrmButton>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Se consultará el endpoint <code>get_onus_details_by_sn</code> de Smart OLT.
+              </p>
 
               {isSearchingOnu ? <LoadingState label="Consultando Smart OLT..." /> : null}
 
               {onuSearchError ? (
-                <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-400">
+                <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-2.5 text-xs text-red-600 dark:text-red-400">
                   {onuSearchError}
                 </div>
               ) : null}
@@ -576,7 +588,7 @@ export const ClientFormDialog = ({
 
             {/* Ficha de la ONU encontrada en Smart OLT */}
             {foundOnu ? (
-              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3">
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Server className="size-4 text-emerald-600 dark:text-emerald-400" />
@@ -595,27 +607,27 @@ export const ClientFormDialog = ({
                   </Badge>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
                   <div className="rounded border bg-background/60 p-2">
-                    <span className="block text-muted-foreground">Board (Tarjeta)</span>
+                    <span className="block text-[11px] text-muted-foreground">Board</span>
                     <strong className="text-sm font-semibold text-foreground">
                       {foundOnu.board}
                     </strong>
                   </div>
                   <div className="rounded border bg-background/60 p-2">
-                    <span className="block text-muted-foreground">Port (Puerto PON)</span>
+                    <span className="block text-[11px] text-muted-foreground">Port PON</span>
                     <strong className="text-sm font-semibold text-foreground">
                       {foundOnu.port}
                     </strong>
                   </div>
                   <div className="rounded border bg-background/60 p-2">
-                    <span className="block text-muted-foreground">Potencia RX</span>
+                    <span className="block text-[11px] text-muted-foreground">Potencia RX</span>
                     <strong className="text-sm font-semibold text-foreground">
                       {foundOnu.signal ? `${foundOnu.signal} dBm` : "N/D"}
                     </strong>
                   </div>
                   <div className="rounded border bg-background/60 p-2">
-                    <span className="block text-muted-foreground">OLT ID</span>
+                    <span className="block text-[11px] text-muted-foreground">OLT ID</span>
                     <strong className="text-sm font-semibold text-foreground">
                       {foundOnu.olt_id || "1"}
                     </strong>
@@ -623,7 +635,7 @@ export const ClientFormDialog = ({
                 </div>
 
                 {foundOnu.name || foundOnu.zone ? (
-                  <p className="text-xs text-muted-foreground pt-1">
+                  <p className="text-xs text-muted-foreground pt-0.5">
                     Registrado en Smart OLT: <strong>{foundOnu.name}</strong>
                     {foundOnu.zone ? ` (${foundOnu.zone})` : null}
                   </p>
@@ -631,40 +643,47 @@ export const ClientFormDialog = ({
               </div>
             ) : null}
 
-            <DialogFooter className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+            {/* Footer con botones adaptables y sin desbordes */}
+            <div className="mt-6 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 border-t border-border/40 pt-4">
               <CrmButton
                 type="button"
                 variant="secondary"
                 onClick={() => setModalStep("wispro")}
-                disabled={isSubmitting}>
-                <ArrowLeft className="size-4" aria-hidden="true" />
+                disabled={isSubmitting}
+                className="w-full sm:w-auto">
+                <ArrowLeft className="size-4 mr-1" aria-hidden="true" />
                 Volver a Wispro
               </CrmButton>
 
-              <div className="flex flex-col sm:flex-row items-center gap-2">
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2">
                 <CrmButton
                   type="button"
                   variant="ghost"
                   onClick={() => handleFinalSubmit(false)}
-                  disabled={isSubmitting}>
+                  disabled={isSubmitting}
+                  className="w-full sm:w-auto text-muted-foreground hover:text-foreground">
                   Omitir Smart OLT
                 </CrmButton>
 
                 <CrmButton
                   type="button"
-                  onClick={() => handleFinalSubmit(true)}
-                  disabled={isSubmitting || !foundOnu}>
+                  variant={foundOnu ? "success" : "secondary"}
+                  onClick={() => handleFinalSubmit(Boolean(foundOnu))}
+                  disabled={isSubmitting}
+                  className="w-full sm:w-auto">
                   {isSubmitting ? (
                     "Guardando..."
-                  ) : (
+                  ) : foundOnu ? (
                     <>
                       <CheckCircle2 className="size-4 mr-1.5" />
                       Registrar con esta ONU
                     </>
+                  ) : (
+                    "Registrar sin ONU"
                   )}
                 </CrmButton>
               </div>
-            </DialogFooter>
+            </div>
           </div>
         )}
       </DialogContent>

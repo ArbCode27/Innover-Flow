@@ -80,6 +80,18 @@ const actionSchema = z.discriminatedUnion("action", [
       .nullable(),
   }),
   z.object({
+    action: z.literal("associateClientOnu"),
+    clientId: z.number().int().positive(),
+    onu: z.object({
+      unique_external_id: z.string().trim().min(1),
+      sn: z.string().trim().min(1),
+      board: z.coerce.number().int().nullable().optional(),
+      port: z.coerce.number().int().nullable().optional(),
+      rx_signal: z.coerce.number().nullable().optional(),
+      status: z.string().nullable().optional(),
+    }),
+  }),
+  z.object({
     action: z.literal("createTicket"),
     clientId: z.number().int().positive(),
     type: z.string().trim().min(1).max(120),
@@ -191,7 +203,20 @@ export const GET = async (request: NextRequest) => {
         .eq("id", clientId)
         .maybeSingle();
       if (error) throw error;
-      return NextResponse.json({ data });
+      if (!data) return NextResponse.json({ data: null });
+
+      const { data: onu } = await supabase
+        .from("client_onus")
+        .select("*")
+        .eq("client_id", clientId)
+        .maybeSingle();
+
+      return NextResponse.json({
+        data: {
+          ...data,
+          onu: onu ?? null,
+        },
+      });
     }
 
     const { data: memberships, error: membershipsError } = await supabase
@@ -233,6 +258,32 @@ export const GET = async (request: NextRequest) => {
     ].find((result) => result.error);
     if (failed?.error) throw failed.error;
 
+    // Obtener ONUs asociadas a los clientes de la organización
+    const clientIds = (clients.data || []).map((row) => row.id);
+    const onusByClientId = new Map<number, unknown>();
+    if (clientIds.length > 0) {
+      try {
+        const { data: onusData } = await supabase
+          .from("client_onus")
+          .select("*")
+          .in("client_id", clientIds);
+        if (onusData) {
+          for (const item of onusData) {
+            if (item.client_id && !onusByClientId.has(Number(item.client_id))) {
+              onusByClientId.set(Number(item.client_id), item);
+            }
+          }
+        }
+      } catch (onuLookupErr) {
+        console.warn("[CRM_DATA] Error cargando client_onus:", onuLookupErr);
+      }
+    }
+
+    const clientRows = (clients.data || []).map((row) => ({
+      ...row,
+      onu: onusByClientId.get(Number(row.id)) ?? null,
+    }));
+
     const conversationRows = (conversations.data || []).map((row) => ({
       ...row,
       label_ids: row.label_ids || [],
@@ -249,7 +300,7 @@ export const GET = async (request: NextRequest) => {
     return NextResponse.json({
       data: {
         labels: labels.data || [],
-        clients: clients.data || [],
+        clients: clientRows,
         tickets: tickets.data || [],
         conversations: visibleConversations,
         agents: (agents.data || []).map((row) => ({
@@ -528,6 +579,35 @@ export const POST = async (request: NextRequest) => {
         }
         throw error;
       }
+    }
+
+    if (input.action === "associateClientOnu") {
+      const parsedSignal =
+        input.onu.rx_signal != null ? Number(input.onu.rx_signal) : null;
+
+      const { data: savedOnu, error: onuErr } = await supabase
+        .from("client_onus")
+        .upsert(
+          {
+            client_id: input.clientId,
+            onu_external_id: input.onu.unique_external_id,
+            sn: input.onu.sn.trim().toUpperCase(),
+            board: input.onu.board ?? null,
+            port: input.onu.port ?? null,
+            rx_signal: Number.isNaN(parsedSignal) ? null : parsedSignal,
+            status: input.onu.status ?? null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "onu_external_id" },
+        )
+        .select()
+        .single();
+
+      if (onuErr) {
+        return NextResponse.json({ error: onuErr.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ data: savedOnu });
     }
 
     if (input.action === "createTicket") {

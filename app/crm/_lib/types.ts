@@ -118,6 +118,19 @@ export interface Agent {
   updated_at: string | null;
 }
 
+export interface ClientOnu {
+  id?: number;
+  client_id?: number;
+  onu_external_id: string;
+  sn: string;
+  board?: number | null;
+  port?: number | null;
+  rx_signal?: number | null;
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 export interface Client {
   id: number;
   organization_id?: string;
@@ -134,6 +147,7 @@ export interface Client {
   initials: string | null;
   envoicing?: string | null;
   created_at: string | null;
+  onu?: ClientOnu | null;
 }
 
 export interface WisproInvoicingSummary {
