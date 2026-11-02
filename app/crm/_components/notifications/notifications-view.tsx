@@ -98,17 +98,24 @@ export const NotificationsView = ({
       const res = await fetch("/api/crm/monitoring/test-alert", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ board: 1, port: 1 }),
+        body: JSON.stringify({
+          affectedClients,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(
-          data.message || data.error || "No se pudo enviar la alerta",
+          data.message || data.error || "No se pudo enviar la alerta a gerentes",
         );
       }
-      toast.success("Alerta enviada a la app móvil de gerentes", {
-        description: data.message,
-      });
+      toast.success(
+        affectedClients.length > 0
+          ? "Incidencias notificadas a gerentes"
+          : "Reporte de red enviado a gerentes",
+        {
+          description: data.message,
+        },
+      );
     } catch (err) {
       toast.error("Alerta a gerentes", {
         description: err instanceof Error ? err.message : String(err),
@@ -156,9 +163,11 @@ export const NotificationsView = ({
   useEffect(() => {
     void ensureCrmRealtimeAuth();
     const supabase = getSupabaseClient();
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+    const channelName = `monitoring-client-onus-${Date.now()}`;
     const channel = supabase
-      .channel("monitoring-client-onus-live")
+      .channel(channelName)
       .on(
         "postgres_changes",
         {
@@ -167,13 +176,17 @@ export const NotificationsView = ({
           table: "client_onus",
         },
         () => {
-          // Actualización silenciosa ante cualquier cambio de estado o señal
-          void fetchMonitoringData(true);
+          // Actualización silenciosa debounced ante ráfagas de cambios de estado o señal
+          if (debounceTimer) clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            void fetchMonitoringData(true);
+          }, 1500);
         },
       )
       .subscribe();
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       void supabase.removeChannel(channel);
     };
   }, [fetchMonitoringData]);
@@ -274,18 +287,33 @@ export const NotificationsView = ({
           <CrmButton
             type="button"
             variant="secondary"
-            className="flex items-center gap-1.5 text-xs h-9"
+            className={cn(
+              "flex items-center gap-1.5 text-xs h-9 transition-colors",
+              affectedClients.length > 0 &&
+                "border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300",
+            )}
             onClick={handleTestPushAlert}
             disabled={isSendingTestAlert}
-            title="Envía una notificación de prueba al teléfono de los gerentes">
+            title={
+              affectedClients.length > 0
+                ? `Notifica a gerentes sobre ${affectedClients.length} cliente(s) desconectado(s)`
+                : "Notifica a gerentes el estado de red operativa"
+            }>
             <BellRing
               className={cn(
-                "size-3.5 text-amber-500",
+                "size-3.5",
+                affectedClients.length > 0
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-emerald-500",
                 isSendingTestAlert && "animate-bounce",
               )}
             />
             <span>
-              {isSendingTestAlert ? "Enviando..." : "Probar push gerentes"}
+              {isSendingTestAlert
+                ? "Notificando..."
+                : affectedClients.length > 0
+                  ? `Notificar gerentes (${affectedClients.length})`
+                  : "Notificar a gerentes"}
             </span>
           </CrmButton>
 

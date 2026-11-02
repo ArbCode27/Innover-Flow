@@ -242,7 +242,7 @@ export const GET = async (request: NextRequest) => {
       supabase.from("conversations").select("*").eq("organization_id", context.organizationId).order("updated_at", { ascending: false }),
       supabase
         .from("agents")
-        .select("*")
+        .select("id, organization_id, name, email, role, department, status, initials, avatar_color, avatar_bg, max_conversations, ui_accent, ui_mode, created_at, updated_at")
         .in("id", memberIds.length ? memberIds : [-1])
         .order("created_at"),
       supabase.from("quick_replies").select("*").eq("organization_id", context.organizationId).order("title"),
@@ -265,7 +265,7 @@ export const GET = async (request: NextRequest) => {
       try {
         const { data: onusData } = await supabase
           .from("client_onus")
-          .select("*")
+          .select("id, client_id, onu_external_id, sn, board, port, rx_signal, status, olt_id, onu_number, zone, status_changed_at, signal_changed_at, updated_at")
           .in("client_id", clientIds);
         if (onusData) {
           for (const item of onusData) {

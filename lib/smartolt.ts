@@ -57,6 +57,8 @@ export const resolveSmartOltBaseUrl = (): string | null => {
   return null;
 };
 
+const REQUEST_TIMEOUT_MS = 10_000;
+
 /**
  * Consulta la información de una ONU en SmartOLT utilizando el Número de Serie (SN).
  * Consume el endpoint GET /api/onu/get_onus_details_by_sn/<sn>
@@ -86,7 +88,7 @@ export const getOnuBySN = async (sn: string): Promise<SmartOltOnuDetail | null> 
         "X-Token": apiKey,
         "Content-Type": "application/json",
       },
-      // Evita cachear respuestas dinámicas de la OLT
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       cache: "no-store",
     });
 
@@ -141,6 +143,7 @@ export const getOnuFullStatusInfo = async (
         "X-Token": apiKey,
         "Content-Type": "application/json",
       },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       cache: "no-store",
     });
 

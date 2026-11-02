@@ -174,6 +174,9 @@ const warnIfMissingExpoAccessToken = () => {
   );
 };
 
+const EXPO_CHUNK_SIZE = 100;
+const EXPO_REQUEST_TIMEOUT_MS = 15_000;
+
 export const sendExpoPushMessages = async (
   messages: ExpoPushMessage[],
 ): Promise<{ tickets: ExpoPushTicket[] }> => {
@@ -183,49 +186,47 @@ export const sendExpoPushMessages = async (
   const headers = expoPushHeaders();
   const tickets: ExpoPushTicket[] = [];
 
-  for (const message of messages) {
+  for (let i = 0; i < messages.length; i += EXPO_CHUNK_SIZE) {
+    const chunk = messages.slice(i, i + EXPO_CHUNK_SIZE);
     try {
       const response = await fetch(EXPO_PUSH_SEND_URL, {
         method: "POST",
         headers,
-        body: JSON.stringify(message),
+        body: JSON.stringify(chunk),
+        signal: AbortSignal.timeout(EXPO_REQUEST_TIMEOUT_MS),
       });
       const payload = await response.json().catch(() => null);
       const parsed = normalizeExpoTickets(payload);
-      const ticket = parsed[0] || {
-        status: response.ok ? "ok" : "error",
-        message: response.ok ? undefined : `HTTP ${response.status}`,
-      };
-      tickets.push(ticket);
 
       if (!response.ok) {
-        console.warn("[EXPO_PUSH] send_failed", {
-          kind: message.data.kind,
+        console.warn("[EXPO_PUSH] batch_send_failed", {
+          chunkSize: chunk.length,
           status: response.status,
-          expoTicketId: ticket.id ?? null,
           errors:
             payload && typeof payload === "object"
               ? (payload as { errors?: unknown }).errors
               : null,
         });
-        continue;
       }
 
-      console.log("[EXPO_PUSH] sent", {
-        kind: message.data.kind,
-        status: response.status,
-        expoTicketId: ticket.id ?? null,
-        expoStatus: ticket.status ?? null,
-      });
+      for (let j = 0; j < chunk.length; j++) {
+        const ticket = parsed[j] || {
+          status: response.ok ? "ok" : "error",
+          message: response.ok ? undefined : `HTTP ${response.status}`,
+        };
+        tickets.push(ticket);
+      }
     } catch (error) {
-      console.warn("[EXPO_PUSH] send_failed", {
-        kind: message.data.kind,
+      console.warn("[EXPO_PUSH] chunk_send_error", {
+        chunkSize: chunk.length,
         error: error instanceof Error ? error.message : "unknown",
       });
-      tickets.push({
-        status: "error",
-        message: error instanceof Error ? error.message : "unknown",
-      });
+      for (let j = 0; j < chunk.length; j++) {
+        tickets.push({
+          status: "error",
+          message: error instanceof Error ? error.message : "unknown",
+        });
+      }
     }
   }
 

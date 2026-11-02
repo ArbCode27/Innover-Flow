@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
     // 2. Obtener ONUs asociadas a estos clientes
     const { data: onus, error: onusErr } = await supabase
       .from("client_onus")
-      .select("*")
+      .select("id, client_id, board, port, rx_signal, status, status_changed_at, signal_changed_at, zone, sn, onu_external_id, updated_at, created_at")
       .in("client_id", clientIds);
 
     if (onusErr) throw onusErr;

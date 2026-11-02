@@ -5,17 +5,31 @@ import { getCrmAuthContext } from "@/app/api/crm/_lib/crm-auth-context";
 import { loadAppDeviceTokens, sendToClientDevices } from "@/lib/app-push";
 import { buildExpoChatPushMessage } from "@/lib/expo-push";
 
+const groupSchema = z.object({
+  board: z.coerce.number().int({ message: "El board (tarjeta) debe ser un entero" }).min(0),
+  port: z.coerce.number().int({ message: "El port (puerto PON) debe ser un entero" }).min(0),
+  status: z
+    .enum(["all", "los", "online", "power_fail", "offline", "altered_power"])
+    .optional()
+    .default("all"),
+});
+
 const requestSchema = z.object({
   organizationId: z.string().optional(),
-  board: z.coerce.number().int({ message: "El board (tarjeta/slot) es obligatorio" }),
-  port: z.coerce.number().int({ message: "El port (puerto PON) es obligatorio" }),
   title: z.string().trim().min(1, "El título es obligatorio"),
   body: z.string().trim().min(1, "El mensaje es obligatorio"),
+  groups: z.array(groupSchema).min(1).optional(),
+  // Retrocompatibilidad con payload simple previo
+  board: z.coerce.number().int().optional(),
+  port: z.coerce.number().int().optional(),
+  status: z.string().optional(),
 });
+
+export type MassNotificationGroup = z.infer<typeof groupSchema>;
 
 /**
  * POST /api/notifications
- * Body: { organizationId?: string, board: number, port: number, title: string, body: string }
+ * Envío de difusión masiva push segmentada por múltiples grupos (Board, Port, Status).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -24,12 +38,12 @@ export async function POST(req: NextRequest) {
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: parsed.error.issues[0]?.message ?? "Datos inválidos" },
+        { error: parsed.error.issues[0]?.message ?? "Datos de segmentación inválidos" },
         { status: 400 },
       );
     }
 
-    const { board, port, title, body } = parsed.data;
+    const { title, body } = parsed.data;
 
     let organizationId = parsed.data.organizationId;
     try {
@@ -44,35 +58,96 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const supabase = getSupabaseAdmin();
-
-    // 1️⃣ Buscar ONUs registradas en el board y port indicados
-    const { data: onus, error: onuErr } = await supabase
-      .from("client_onus")
-      .select("client_id")
-      .eq("board", board)
-      .eq("port", port);
-
-    if (onuErr) {
-      return NextResponse.json({ error: onuErr.message }, { status: 500 });
+    // Normalizar grupos a procesar
+    const targetGroups: MassNotificationGroup[] = [];
+    if (parsed.data.groups && parsed.data.groups.length > 0) {
+      targetGroups.push(...parsed.data.groups);
+    } else if (parsed.data.board != null && parsed.data.port != null) {
+      targetGroups.push({
+        board: parsed.data.board,
+        port: parsed.data.port,
+        status: (parsed.data.status as MassNotificationGroup["status"]) || "all",
+      });
+    } else {
+      return NextResponse.json(
+        { error: "Debe especificar al menos un grupo con Tarjeta y Puerto." },
+        { status: 400 },
+      );
     }
 
-    const clientIds = Array.from(
-      new Set((onus || []).map((row) => row.client_id).filter(Boolean)),
+    const supabase = getSupabaseAdmin();
+
+    // 1️⃣ Buscar ONUs y filtrar según criterios de cada grupo
+    const matchingClientIds = new Set<number>();
+
+    await Promise.all(
+      targetGroups.map(async (group) => {
+        const { data: onus, error: onuErr } = await supabase
+          .from("client_onus")
+          .select("client_id, status, rx_signal")
+          .eq("board", group.board)
+          .eq("port", group.port);
+
+        if (onuErr) {
+          console.warn(
+            `[MASS_NOTIFICATIONS] Error consultando client_onus B${group.board}:P${group.port}:`,
+            onuErr.message,
+          );
+          return;
+        }
+
+        for (const onu of onus || []) {
+          if (!onu.client_id) continue;
+          const statusLower = (onu.status || "").toLowerCase().trim();
+          const rxSignal = onu.rx_signal != null ? Number(onu.rx_signal) : null;
+
+          let matches = false;
+          switch (group.status) {
+            case "all":
+              matches = true;
+              break;
+            case "los":
+              matches = statusLower === "los" || statusLower.includes("loss");
+              break;
+            case "online":
+              matches = statusLower === "online" && (rxSignal === null || rxSignal > -29.0);
+              break;
+            case "power_fail":
+              matches = statusLower === "power fail" || statusLower.includes("power");
+              break;
+            case "offline":
+              matches = statusLower === "offline";
+              break;
+            case "altered_power":
+              matches = rxSignal !== null && rxSignal <= -29.0;
+              break;
+            default:
+              matches = true;
+          }
+
+          if (matches) {
+            matchingClientIds.add(Number(onu.client_id));
+          }
+        }
+      }),
     );
+
+    const clientIds = Array.from(matchingClientIds);
 
     if (!clientIds.length) {
       return NextResponse.json(
         {
-          message: `No se encontraron ONUs registradas en Board ${board}, Port ${port}.`,
+          message:
+            "No se encontraron ONUs de clientes que coincidan con los grupos y estados seleccionados.",
           totalClients: 0,
           deliveredClients: 0,
+          groupsCount: targetGroups.length,
         },
         { status: 200 },
       );
     }
 
-    // 2️⃣ Filtrar clientes de la organización actual
+    // 2️⃣ Filtrar clientes que pertenezcan a la organización autenticada
     const { data: clients, error: clientErr } = await supabase
       .from("clients")
       .select("id")
@@ -86,9 +161,11 @@ export async function POST(req: NextRequest) {
     if (!clients?.length) {
       return NextResponse.json(
         {
-          message: `No hay clientes de esta organización vinculados al Board ${board}, Port ${port}.`,
+          message:
+            "No hay clientes de esta organización vinculados a los grupos y estados seleccionados.",
           totalClients: 0,
           deliveredClients: 0,
+          groupsCount: targetGroups.length,
         },
         { status: 200 },
       );
@@ -123,7 +200,12 @@ export async function POST(req: NextRequest) {
             organizationId,
             clientId: Number(clientId),
             messages,
-            logContext: { kind: "mass_notification", board, port },
+            logContext: {
+              kind: "mass_notification",
+              groupsCount: targetGroups.length,
+              boards: Array.from(new Set(targetGroups.map((g) => g.board))),
+              ports: Array.from(new Set(targetGroups.map((g) => g.port))),
+            },
           });
 
           deliveredClients += 1;
@@ -131,15 +213,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const targetSummary =
+      targetGroups.length === 1
+        ? `Tarjeta ${targetGroups[0].board}, Puerto ${targetGroups[0].port}`
+        : `${targetGroups.length} grupos de red`;
+
     return NextResponse.json(
       {
-        message: `Notificación enviada a clientes en Board ${board}, Port ${port} (${deliveredClients} de ${clients.length} clientes con dispositivos vinculados).`,
+        message: `Notificación masiva enviada a clientes en ${targetSummary} (${deliveredClients} de ${clients.length} clientes con app vinculada).`,
         totalClients: clients.length,
         deliveredClients,
+        groupsCount: targetGroups.length,
       },
       { status: 200 },
     );
   } catch (error) {
+    console.error("[MASS_NOTIFICATIONS] Error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Error interno del servidor" },
       { status: 500 },
