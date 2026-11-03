@@ -1,10 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/app/api/crm/_lib/supabase-admin";
 import {
-  buildExpoIncidentPushMessage,
+  buildExpoNetworkAlertPushMessage,
   collectUnregisteredExpoTokens,
   sendExpoPushMessages,
   type ExpoPushMessage,
+  type NetworkAlertClientItem,
 } from "@/lib/expo-push";
 
 const LOG_PREFIX = "[INCIDENT_ALERTS]";
@@ -124,13 +125,14 @@ export const evaluateAndAlertPortIncidents = async ({
   const supabase = getSupabaseAdmin();
 
   try {
-    // 1. Obtener los IDs de clientes de la organización
+    // 1. Obtener los IDs y nombres de clientes de la organización
     const { data: orgClients, error: clientsErr } = await supabase
       .from("clients")
-      .select("id")
+      .select("id, name")
       .eq("organization_id", organizationId);
 
     if (clientsErr) throw clientsErr;
+    const clientMap = new Map((orgClients || []).map((c) => [c.id, c.name]));
     const clientIds = (orgClients || []).map((c) => c.id);
 
     if (!clientIds.length) {
@@ -161,6 +163,7 @@ export const evaluateAndAlertPortIncidents = async ({
     // 3. Contabilizar anomalías
     let losCount = 0;
     let alteredPowerCount = 0;
+    const affectedClientsList: NetworkAlertClientItem[] = [];
 
     for (const onu of onus || []) {
       const statusLower = (onu.status || "").toLowerCase().trim();
@@ -178,8 +181,22 @@ export const evaluateAndAlertPortIncidents = async ({
 
       if (isLos) {
         losCount += 1;
+        affectedClientsList.push({
+          name: onu.client_id ? clientMap.get(onu.client_id) || "Cliente sin registrar" : "Cliente sin registrar",
+          board,
+          port,
+          incidentType: "LOS",
+          rxSignal,
+        });
       } else if (isAlteredPower) {
         alteredPowerCount += 1;
+        affectedClientsList.push({
+          name: onu.client_id ? clientMap.get(onu.client_id) || "Cliente sin registrar" : "Cliente sin registrar",
+          board,
+          port,
+          incidentType: "Potencia alterada",
+          rxSignal,
+        });
       }
     }
 
@@ -230,28 +247,12 @@ export const evaluateAndAlertPortIncidents = async ({
         recipientsCount = tokens.length;
 
         if (tokens.length > 0) {
-          let pushTitle = `🚨 ALERTA PON: Tarjeta ${board} / Puerto ${port}`;
-          let pushBody = "";
-
-          if (incidentType === "massive_outage") {
-            pushBody = `⚠️ Caída masiva: ${losCount} clientes sin conexión (LOS/Offline). Posible corte de fibra o falla en splitter.`;
-          } else if (incidentType === "altered_power") {
-            pushBody = `⚡ Atenuación crítica: ${alteredPowerCount} clientes con potencia alterada (≤ -29 dBm). Alta degradación e intermitencia.`;
-          } else {
-            pushBody = `⚠️ Incidencia múltiple: ${totalAffected} clientes afectados (${losCount} caídos, ${alteredPowerCount} con potencia alterada ≤ -29 dBm).`;
-          }
-
           const messages: ExpoPushMessage[] = tokens.map((token) =>
-            buildExpoIncidentPushMessage({
+            buildExpoNetworkAlertPushMessage({
               token,
-              title: pushTitle,
-              body: pushBody,
-              board,
-              port,
-              incidentType,
-              affectedCount: totalAffected,
-              losCount,
-              alteredCount: alteredPowerCount,
+              clients: affectedClientsList,
+              fallbackBoard: board,
+              fallbackPort: port,
             }),
           );
 
@@ -341,16 +342,12 @@ export const evaluateAndAlertPortIncidents = async ({
       const tokens = await loadManagerDeviceTokens(supabase, organizationId);
       if (tokens.length > 0) {
         const resolutionMessages: ExpoPushMessage[] = tokens.map((token) =>
-          buildExpoIncidentPushMessage({
+          buildExpoNetworkAlertPushMessage({
             token,
-            title: `✅ Puerto Normalizado: PON ${board}/${port}`,
-            body: `La incidencia en Tarjeta ${board}, Puerto PON ${port} se ha normalizado. Los clientes han restablecido conexión.`,
-            board,
-            port,
-            incidentType: "resolved",
-            affectedCount: totalAffected,
-            losCount,
-            alteredCount: alteredPowerCount,
+            clients: [],
+            fallbackBoard: board,
+            fallbackPort: port,
+            forcedSeverity: "normal",
           }),
         );
         void sendExpoPushMessages(resolutionMessages).catch((e) =>

@@ -3,7 +3,7 @@ import { getCrmAuthContext } from "@/app/api/crm/_lib/crm-auth-context";
 import { getSupabaseAdmin } from "@/app/api/crm/_lib/supabase-admin";
 import { loadManagerDeviceTokens } from "@/lib/network-incident-alerts";
 import {
-  buildExpoIncidentPushMessage,
+  buildExpoNetworkAlertPushMessage,
   sendExpoPushMessages,
   type ExpoPushMessage,
 } from "@/lib/expo-push";
@@ -14,7 +14,8 @@ export const dynamic = "force-dynamic";
 /**
  * POST /api/crm/monitoring/test-alert
  * Notifica a los dispositivos móviles (Expo) de los gerentes y supervisores
- * sobre los clientes desconectados actualmente según la tabla de incidencias.
+ * sobre los clientes desconectados actualmente según la tabla de incidencias de red,
+ * con tipografía limpia, sin ALL CAPS, y canales nativos Android/iOS.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -95,65 +96,21 @@ export async function POST(req: NextRequest) {
     }
 
     const totalAffected = affectedList.length;
-    let title: string;
-    let alertBody: string;
-    let incidentType: "massive_outage" | "altered_power" | "mixed" | "resolved" = "massive_outage";
-    let representativeBoard = 1;
-    let representativePort = 1;
 
-    let losCount = 0;
-    let alteredCount = 0;
-
-    if (totalAffected > 0) {
-      losCount = affectedList.filter(
-        (c) => c.incidentType === "LOS" || c.incidentType === "Offline" || c.incidentType === "Power fail",
-      ).length;
-      alteredCount = affectedList.filter((c) => c.incidentType === "Potencia alterada").length;
-
-      incidentType = losCount > 0 && alteredCount > 0 ? "mixed" : losCount > 0 ? "massive_outage" : "altered_power";
-      representativeBoard = affectedList[0]?.board || 1;
-      representativePort = affectedList[0]?.port || 1;
-
-      // Agrupación de puertos afectados para el reporte
-      const uniquePorts = Array.from(
-        new Set(affectedList.map((c) => `Tarjeta ${c.board} / P${c.port}`)),
-      );
-
-      // Resumen de clientes (primeros 3 nombres)
-      const previewClients = affectedList
-        .slice(0, 3)
-        .map((c) => `• ${c.name} (${c.incidentType} - T${c.board}:P${c.port})`)
-        .join("\n");
-
-      const remaining = totalAffected - 3;
-      const extraText = remaining > 0 ? `\n...y ${remaining} cliente(s) más.` : "";
-
-      title = `🚨 ALERTA RED: ${totalAffected} Cliente(s) Desconectado(s)`;
-      alertBody = `Incidencia detectada en ${uniquePorts.slice(0, 2).join(", ")}${uniquePorts.length > 2 ? ` (+${uniquePorts.length - 2} puertos)` : ""}:\n${previewClients}${extraText}`;
-    } else {
-      title = "✅ RED OPERATIVA: Sin Clientes Desconectados";
-      alertBody = "Monitoreo en tiempo real: Todos los clientes y puertos PON se encuentran en línea y con potencia óptica normal.";
-      incidentType = "resolved";
-    }
-
+    // Generar mensajes push con formato tipográfico optimizado
     const messages: ExpoPushMessage[] = tokens.map((token) =>
-      buildExpoIncidentPushMessage({
+      buildExpoNetworkAlertPushMessage({
         token,
-        title,
-        body: alertBody,
-        board: representativeBoard,
-        port: representativePort,
-        incidentType,
-        affectedCount: totalAffected,
-        losCount,
-        alteredCount,
+        clients: affectedList,
+        fallbackBoard: 1,
+        fallbackPort: 1,
       }),
     );
 
     const tickets = await sendExpoPushMessages(messages);
 
     const feedbackMessage = totalAffected > 0
-      ? `Alerta enviada a ${tokens.length} dispositivo(s) de gerentes informando sobre ${totalAffected} cliente(s) desconectado(s).`
+      ? `Alerta enviada a ${tokens.length} dispositivo(s) de gerentes informando sobre ${totalAffected} cliente(s) afectado(s).`
       : `Reporte de red 100% operativa enviado a ${tokens.length} dispositivo(s) de gerentes.`;
 
     return NextResponse.json({
@@ -161,6 +118,7 @@ export async function POST(req: NextRequest) {
       recipientsCount: tokens.length,
       affectedCount: totalAffected,
       message: feedbackMessage,
+      payloadSample: messages[0] || null,
       tickets,
     });
   } catch (error) {
