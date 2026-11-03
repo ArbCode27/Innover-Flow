@@ -43,10 +43,11 @@ export const getAllowedViews = (
     return ["conversations", "my-conversations"];
   }
 
-  // 1. Administradores: Acceso total a todas las herramientas
+  // 1. Administradores / Gerentes: Acceso total a todas las herramientas incluyendo el centro de incidencias
   if (isCrmAdmin(agent, organizationRole)) {
     return [
       "dashboard",
+      "incidents",
       "conversations",
       "my-conversations",
       "history",
@@ -151,7 +152,7 @@ export const getMobilePrimaryNavItems = (
   organizationRole?: OrganizationRole | null,
 ): CrmView[] => {
   if (isCrmAdmin(agent, organizationRole)) {
-    return ["dashboard", "conversations", "my-conversations", "history"];
+    return ["dashboard", "incidents", "conversations", "my-conversations"];
   }
 
   const dept = agent?.department || "soporte";

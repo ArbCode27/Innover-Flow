@@ -44,7 +44,7 @@ export const loadManagerDeviceTokens = async (
   organizationId: string,
 ): Promise<string[]> => {
   try {
-    // 1. Obtener IDs de técnicos con rol de supervisor
+    // 1. Obtener IDs de técnicos con rol de supervisor y agentes con rol de administrador
     const { data: supervisors } = await supabase
       .from("technicians")
       .select("id")
@@ -53,10 +53,18 @@ export const loadManagerDeviceTokens = async (
 
     const supervisorIds = (supervisors || []).map((s) => s.id);
 
+    const { data: adminAgents } = await supabase
+      .from("agents")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("role", "admin");
+
+    const adminAgentIds = (adminAgents || []).map((a) => a.id);
+
     // 2. Consultar app_devices filtrando por supervisores o roles gerenciales
     let query = supabase
       .from("app_devices")
-      .select("push_token, role, technician_id")
+      .select("push_token, role, technician_id, agent_id")
       .eq("organization_id", organizationId);
 
     const { data: devices, error } = await query;
@@ -73,9 +81,10 @@ export const loadManagerDeviceTokens = async (
 
       const isSupervisorRole = d.role === "supervisor" || d.role === "manager" || d.role === "admin";
       const isSupervisorTech = d.technician_id && supervisorIds.includes(d.technician_id);
+      const isAdminAgent = d.agent_id && adminAgentIds.includes(d.agent_id);
 
-      // Si coincide con rol supervisor o técnico supervisor, agregar
-      if (isSupervisorRole || isSupervisorTech) {
+      // Si coincide con rol supervisor, técnico supervisor o admin, agregar
+      if (isSupervisorRole || isSupervisorTech || isAdminAgent) {
         tokens.add(token);
       }
     }
@@ -94,6 +103,63 @@ export const loadManagerDeviceTokens = async (
   } catch (err) {
     console.error(`${LOG_PREFIX} error inesperado en loadManagerDeviceTokens:`, err);
     return [];
+  }
+};
+
+/**
+ * Emite un evento de difusión (broadcast) en Supabase Realtime hacia las consolas de gerentes.
+ */
+export const broadcastIncidentAlert = async (
+  supabase: SupabaseClient,
+  organizationId: string,
+  payload: {
+    event?: "incident_push" | "incident_resolved";
+    board: number;
+    port: number;
+    affectedCount: number;
+    severity?: "critical" | "warning" | "normal";
+    title?: string;
+    body?: string;
+    status?: "active" | "resolved";
+  },
+): Promise<void> => {
+  try {
+    const channelName = `crm-incidents-${organizationId}`;
+    const channel = supabase.channel(channelName);
+
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        void supabase.removeChannel(channel);
+        resolve();
+      }, 2500);
+
+      channel.subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          void channel
+            .send({
+              type: "broadcast",
+              event: payload.event || "incident_push",
+              payload: {
+                board: payload.board,
+                port: payload.port,
+                affectedCount: payload.affectedCount,
+                severity: payload.severity || "critical",
+                title: payload.title,
+                body: payload.body,
+                status: payload.status || "active",
+                timestamp: new Date().toISOString(),
+              },
+            })
+            .finally(() => {
+              clearTimeout(timeout);
+              void supabase.removeChannel(channel);
+              resolve();
+            });
+        }
+      });
+    });
+  } catch (err) {
+    console.warn(`${LOG_PREFIX} error emitiendo broadcast a realtime:`, err);
   }
 };
 
@@ -311,6 +377,18 @@ export const evaluateAndAlertPortIncidents = async ({
         });
       }
 
+      // Difusión en tiempo real hacia las pantallas de gerentes conectadas
+      void broadcastIncidentAlert(supabase, organizationId, {
+        event: "incident_push",
+        board,
+        port,
+        affectedCount: totalAffected,
+        severity: incidentType === "altered_power" ? "warning" : "critical",
+        title: `🚨 Alerta InnoverCorp: Incidencia en Tarjeta ${board} • Puerto ${port}`,
+        body: `Se han detectado ${totalAffected} clientes desconectados en Tarjeta ${board} / Puerto PON ${port}.`,
+        status: "active",
+      });
+
       return {
         hasIncident: true,
         board,
@@ -354,6 +432,18 @@ export const evaluateAndAlertPortIncidents = async ({
           console.warn(`${LOG_PREFIX} error enviando notificacion de resolucion:`, e),
         );
       }
+
+      // Difusión en tiempo real hacia las pantallas de gerentes
+      void broadcastIncidentAlert(supabase, organizationId, {
+        event: "incident_resolved",
+        board,
+        port,
+        affectedCount: 0,
+        severity: "normal",
+        title: `✅ Red Normalizada: Tarjeta ${board} • Puerto ${port}`,
+        body: `Los servicios en Tarjeta ${board} / Puerto PON ${port} se han normalizado.`,
+        status: "resolved",
+      });
 
       return {
         hasIncident: false,

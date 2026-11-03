@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import {
   Activity,
+  AlertTriangle,
   Bot,
   Building2,
   Check,
@@ -84,6 +85,7 @@ const icons = {
   tickets: Ticket,
   technicians: HardHat,
   notifications: Activity,
+  incidents: AlertTriangle,
   labels: Tags,
   agents: Bot,
   settings: Settings2,

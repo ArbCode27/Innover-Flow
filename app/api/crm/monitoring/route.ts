@@ -279,7 +279,10 @@ export async function GET(req: NextRequest) {
       .eq("organization_id", organizationId)
       .eq("status", "active");
 
-    const activeAlertsMap = new Map<string, { last_alert_sent_at: string; incident_type: string }>();
+    const activeAlertsMap = new Map<
+      string,
+      { last_alert_sent_at: string; incident_type: string; acknowledged_at?: string | null }
+    >();
     for (const alert of activeAlertsData || []) {
       activeAlertsMap.set(`${alert.board}:${alert.port}`, alert);
     }
@@ -292,6 +295,7 @@ export async function GET(req: NextRequest) {
         managerAlertSent: Boolean(alertInfo),
         managerAlertSentAt: alertInfo?.last_alert_sent_at || null,
         managerAlertAgo: alertInfo ? formatDurationAgo(alertInfo.last_alert_sent_at).text : null,
+        acknowledgedAt: alertInfo?.acknowledged_at || null,
       };
     });
 

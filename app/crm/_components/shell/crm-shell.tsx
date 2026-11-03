@@ -28,6 +28,7 @@ import {
   resolveTicketConversationId,
 } from "@/lib/field-tickets";
 import { DashboardView } from "../dashboard/dashboard-view";
+import { IncidentsView } from "../incidents/incidents-view";
 import { NotificationsView } from "../notifications/notifications-view";
 import { CrmAppearanceHydrator } from "./crm-appearance-hydrator";
 import { CrmMobileNav, CrmSidebar } from "./crm-sidebar";
@@ -336,6 +337,24 @@ export const CrmShell = () => {
             {activeView === "notifications" &&
             isViewAllowed("notifications", auth.agent, auth.organizationRole) ? (
               <NotificationsView organizationId={auth.agent.organization_id} />
+            ) : null}
+            {activeView === "incidents" &&
+            isViewAllowed("incidents", auth.agent, auth.organizationRole) ? (
+              <IncidentsView
+                organizationId={auth.agent.organization_id}
+                onOpenTicketChat={handleOpenTicketChat}
+                onOpenClientChat={(clientId) => {
+                  const conv = crm.conversations.find((c) => c.client_id === clientId);
+                  if (conv) {
+                    handleOpenTicketChat(conv.id);
+                  } else {
+                    setActiveView("conversations");
+                  }
+                }}
+                onCreateFieldTicket={async (ticketPayload) => {
+                  await fieldTickets.createTicket(ticketPayload as never);
+                }}
+              />
             ) : null}
             {activeView === "labels" && isViewAllowed("labels", auth.agent, auth.organizationRole) ? (
               <LabelsView
