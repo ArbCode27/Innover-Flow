@@ -4,6 +4,10 @@ import { getSupabaseAdmin } from "@/app/api/crm/_lib/supabase-admin";
 import { getAppTechnicianAuthContext } from "../../_lib/app-auth";
 import { APP_ERROR_CODES, AppApiError, toAppErrorResponse } from "../../_lib/app-errors";
 
+const CACHE_HEADERS = {
+  "Cache-Control": "private, s-maxage=60, stale-while-revalidate=300",
+};
+
 const rangeStartMs = (range: string) => {
   const now = Date.now();
   if (range === "today") {
@@ -41,7 +45,10 @@ export const GET = async (request: NextRequest) => {
     const fromIso = new Date(fromMs).toISOString();
     const supabase = getSupabaseAdmin();
 
-    const technicians = await listTechnicians(supabase, session.organizationId);
+    const allTechnicians = await listTechnicians(supabase, session.organizationId);
+    const fieldTechnicians = allTechnicians.filter(
+      (tech) => !tech.isSupervisor && tech.appEnabled !== false,
+    );
 
     type TechStats = {
       assigned: number;
@@ -124,7 +131,7 @@ export const GET = async (request: NextRequest) => {
         rowsByEmp.set(empId, list);
       }
 
-      for (const tech of technicians) {
+      for (const tech of fieldTechnicians) {
         const rows = rowsByEmp.get(tech.id) || [];
         const inRange = rows.filter((r) => {
           const created = Date.parse(r.created_at);
@@ -158,7 +165,7 @@ export const GET = async (request: NextRequest) => {
       }
     }
 
-    const metrics = technicians.map((tech) => {
+    const metrics = fieldTechnicians.map((tech) => {
       const stats = statsByEmployee.get(tech.id) || {
         assigned: 0,
         pending: 0,
@@ -186,10 +193,13 @@ export const GET = async (request: NextRequest) => {
       (a, b) => b.closed - a.closed || b.assigned - a.assigned || a.name.localeCompare(b.name),
     );
 
-    return NextResponse.json({
-      range: range === "today" || range === "30d" ? range : "7d",
-      metrics,
-    });
+    return NextResponse.json(
+      {
+        range: range === "today" || range === "30d" ? range : "7d",
+        metrics,
+      },
+      { headers: CACHE_HEADERS },
+    );
   } catch (error) {
     return toAppErrorResponse(error, {
       code: APP_ERROR_CODES.TICKETS_LOAD_FAILED,

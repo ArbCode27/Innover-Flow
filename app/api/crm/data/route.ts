@@ -546,6 +546,7 @@ export const POST = async (request: NextRequest) => {
         if (input.onu && data?.id) {
           try {
             await supabase.from("client_onus").insert({
+              organization_id: organizationId,
               client_id: data.id,
               onu_external_id: input.onu.unique_external_id,
               sn: input.onu.sn.trim().toUpperCase(),
@@ -589,6 +590,7 @@ export const POST = async (request: NextRequest) => {
         .from("client_onus")
         .upsert(
           {
+            organization_id: organizationId,
             client_id: input.clientId,
             onu_external_id: input.onu.unique_external_id,
             sn: input.onu.sn.trim().toUpperCase(),
@@ -598,7 +600,7 @@ export const POST = async (request: NextRequest) => {
             status: input.onu.status ?? null,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: "onu_external_id" },
+          { onConflict: "organization_id,onu_external_id" },
         )
         .select()
         .single();

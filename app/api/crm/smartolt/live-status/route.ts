@@ -21,6 +21,9 @@ export async function POST(req: NextRequest) {
     // Si no se proporcionó onuExternalId directamente, buscar en client_onus por clientId o sn
     if (!resolvedExternalId && (clientId || sn)) {
       let query = supabase.from("client_onus").select("onu_external_id, status, rx_signal");
+      if (context.organizationId) {
+        query = query.eq("organization_id", context.organizationId);
+      }
       if (clientId) {
         query = query.eq("client_id", Number(clientId));
       } else if (sn) {
@@ -39,8 +42,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Consultar diagnóstico completo en vivo en SmartOLT
-    const fullInfo = await getOnuFullStatusInfo(resolvedExternalId);
+    // Consultar diagnóstico completo en vivo en SmartOLT con credenciales de la sucursal
+    const fullInfo = await getOnuFullStatusInfo(resolvedExternalId, {
+      organizationId: context.organizationId,
+    });
 
     if (!fullInfo) {
       return NextResponse.json(
@@ -56,6 +61,7 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const updatePayload: Record<string, unknown> = {
       updated_at: now,
+      organization_id: context.organizationId,
     };
 
     if (fullInfo.onu_status) {
@@ -74,10 +80,16 @@ export async function POST(req: NextRequest) {
       updatePayload.onu_number = fullInfo.onu_number;
     }
 
-    await supabase
+    let updateQuery = supabase
       .from("client_onus")
       .update(updatePayload)
       .eq("onu_external_id", resolvedExternalId);
+
+    if (context.organizationId) {
+      updateQuery = updateQuery.eq("organization_id", context.organizationId);
+    }
+
+    await updateQuery;
 
     // Evaluar estado del puerto PON para alertas a gerentes
     const evalBoard = fullInfo.board;

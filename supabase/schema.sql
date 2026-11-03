@@ -372,32 +372,35 @@ LANGUAGE sql
 STABLE
 AS $$
   SELECT
-    employee_id,
+    ft.employee_id,
     COUNT(*) FILTER (
-      WHERE created_at >= p_from_date
-         OR (closed_at IS NOT NULL AND closed_at >= p_from_date)
+      WHERE ft.created_at >= p_from_date
+         OR (ft.closed_at IS NOT NULL AND ft.closed_at >= p_from_date)
     ) AS assigned,
     COUNT(*) FILTER (
-      WHERE status IN ('open', 'scheduled')
+      WHERE ft.status IN ('open', 'scheduled')
     ) AS pending,
     COUNT(*) FILTER (
-      WHERE status = 'done'
-        AND closed_at IS NOT NULL
-        AND closed_at >= p_from_date
+      WHERE ft.status = 'done'
+        AND ft.closed_at IS NOT NULL
+        AND ft.closed_at >= p_from_date
     ) AS closed,
     AVG(
-      EXTRACT(EPOCH FROM (closed_at - created_at))
+      EXTRACT(EPOCH FROM (ft.closed_at - ft.created_at))
     ) FILTER (
-      WHERE status = 'done'
-        AND closed_at IS NOT NULL
-        AND closed_at >= p_from_date
-        AND closed_at >= created_at
+      WHERE ft.status = 'done'
+        AND ft.closed_at IS NOT NULL
+        AND ft.closed_at >= p_from_date
+        AND ft.closed_at >= ft.created_at
     ) AS avg_close_seconds
-  FROM public.field_tickets
-  WHERE organization_id = p_organization_id
-    AND employee_id IS NOT NULL
-  GROUP BY employee_id;
+  FROM public.field_tickets ft
+  WHERE ft.organization_id = p_organization_id
+    AND ft.employee_id IS NOT NULL
+  GROUP BY ft.employee_id;
 $$;
+
+GRANT EXECUTE ON FUNCTION public.get_supervisor_metrics(uuid, timestamptz) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_supervisor_metrics(uuid, timestamptz) TO service_role;
 
 CREATE TABLE IF NOT EXISTS public.ticket_categories (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -642,7 +645,7 @@ CREATE INDEX IF NOT EXISTS conv_events_metrics_idx ON public.conversation_events
 CREATE TABLE IF NOT EXISTS public.organization_integrations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
-  provider text NOT NULL CHECK (provider IN ('wispro', 'whatsapp')),
+  provider text NOT NULL CHECK (provider IN ('wispro', 'whatsapp', 'smartolt')),
   status text NOT NULL DEFAULT 'disconnected' CHECK (status IN ('disconnected', 'pending', 'connected', 'error')),
   config jsonb NOT NULL DEFAULT '{}'::jsonb,
   credentials_encrypted text,

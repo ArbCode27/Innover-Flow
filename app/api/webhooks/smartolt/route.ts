@@ -25,8 +25,30 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
+    // Identificar la organización destino (vía query param ?org=slug_o_id o header x-organization-id)
+    const orgParam =
+      req.nextUrl.searchParams.get("org")?.trim() ||
+      req.headers.get("x-organization-id")?.trim();
+
+    let organizationId: string | null = null;
+    if (orgParam) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgParam);
+      const { data: orgData } = isUuid
+        ? await supabase.from("organizations").select("id").eq("id", orgParam).maybeSingle()
+        : await supabase.from("organizations").select("id").eq("slug", orgParam).maybeSingle();
+      if (orgData?.id) {
+        organizationId = orgData.id;
+      }
+    }
+
     // 1. Localizar la ONU existente en nuestra base de datos
-    let query = supabase.from("client_onus").select("id, client_id, board, port, status, rx_signal");
+    let query = supabase
+      .from("client_onus")
+      .select("id, client_id, board, port, status, rx_signal, organization_id");
+
+    if (organizationId) {
+      query = query.eq("organization_id", organizationId);
+    }
     if (externalId) {
       query = query.eq("onu_external_id", externalId);
     } else {
@@ -35,10 +57,26 @@ export async function POST(req: NextRequest) {
 
     const { data: existingOnu } = await query.maybeSingle();
 
+    // Si no se pasó ?org, deducirlo de la ONU o de su cliente vinculado
+    if (!organizationId && existingOnu) {
+      organizationId = existingOnu.organization_id || null;
+      if (!organizationId && existingOnu.client_id) {
+        const { data: clientData } = await supabase
+          .from("clients")
+          .select("organization_id")
+          .eq("id", existingOnu.client_id)
+          .maybeSingle();
+        organizationId = clientData?.organization_id || null;
+      }
+    }
+
     const now = new Date().toISOString();
     const updatePayload: Record<string, unknown> = {
       updated_at: now,
     };
+    if (organizationId) {
+      updatePayload.organization_id = organizationId;
+    }
 
     // 2. Procesamiento según tipo de evento
     if (event === "onu.status_changed" || body.status || body.onu_status) {
@@ -82,8 +120,11 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Ejecutar actualización en Supabase
-    if (Object.keys(updatePayload).length > 1) {
+    if (Object.keys(updatePayload).length > (organizationId ? 2 : 1)) {
       let updateQuery = supabase.from("client_onus").update(updatePayload);
+      if (organizationId) {
+        updateQuery = updateQuery.eq("organization_id", organizationId);
+      }
       if (externalId) {
         updateQuery = updateQuery.eq("onu_external_id", externalId);
       } else {
@@ -98,24 +139,15 @@ export async function POST(req: NextRequest) {
       // 4. Evaluar incidencias en el puerto PON en segundo plano
       const targetBoard = (updatePayload.board as number | undefined) ?? existingOnu?.board;
       const targetPort = (updatePayload.port as number | undefined) ?? existingOnu?.port;
-      const clientId = existingOnu?.client_id;
 
-      if (targetBoard != null && targetPort != null && clientId) {
+      if (targetBoard != null && targetPort != null && organizationId) {
         void (async () => {
           try {
-            const { data: clientData } = await supabase
-              .from("clients")
-              .select("organization_id")
-              .eq("id", clientId)
-              .maybeSingle();
-
-            if (clientData?.organization_id) {
-              await evaluateAndAlertPortIncidents({
-                organizationId: clientData.organization_id,
-                board: Number(targetBoard),
-                port: Number(targetPort),
-              });
-            }
+            await evaluateAndAlertPortIncidents({
+              organizationId,
+              board: Number(targetBoard),
+              port: Number(targetPort),
+            });
           } catch (evalErr) {
             console.warn("[SMARTOLT_WEBHOOK] Error evaluando incidencias del puerto:", evalErr);
           }

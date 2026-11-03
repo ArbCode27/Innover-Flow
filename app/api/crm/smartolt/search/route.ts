@@ -4,7 +4,7 @@ import { getOnuBySN } from "@/lib/smartolt";
 
 export async function GET(req: NextRequest) {
   try {
-    await getCrmAuthContext(req);
+    const context = await getCrmAuthContext(req);
 
     const sn = req.nextUrl.searchParams.get("sn");
     const cleanSn = sn?.trim().toUpperCase();
@@ -16,7 +16,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const onu = await getOnuBySN(cleanSn);
+    const onu = await getOnuBySN(cleanSn, {
+      organizationId: context.organizationId,
+    });
 
     if (!onu) {
       return NextResponse.json(

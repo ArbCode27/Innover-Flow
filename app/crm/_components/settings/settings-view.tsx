@@ -250,7 +250,10 @@ export const SettingsView = ({
           onUpdated={onOrganizationUpdated}
         />
 
-        <IntegrationsSettingsSection organizationRole={organizationRole} />
+        <IntegrationsSettingsSection
+          organization={organization}
+          organizationRole={organizationRole}
+        />
 
         <PaymentMethodsSettingsSection organizationRole={organizationRole} />
 

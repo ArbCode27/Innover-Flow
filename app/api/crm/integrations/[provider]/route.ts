@@ -13,6 +13,7 @@ import {
   sanitizeIntegration,
 } from "../../_lib/organization-integrations";
 import { getSupabaseAdmin } from "../../_lib/supabase-admin";
+import { normalizeSmartOltBaseUrl } from "@/lib/smartolt";
 
 const wisproSchema = z.object({
   apiToken: z.string().trim().min(8).max(500),
@@ -24,10 +25,15 @@ const wisproSchema = z.object({
     .default("https://www.cloud.wispro.co/api/v1"),
 });
 
-type Provider = "wispro";
+const smartOltSchema = z.object({
+  apiKey: z.string().trim().min(8, "La API Key debe tener al menos 8 caracteres").max(500),
+  baseUrl: z.string().trim().min(3, "Ingresa un subdominio o URL válida").max(300),
+});
+
+type Provider = "wispro" | "smartolt";
 
 const parseProvider = (value: string): Provider | null =>
-  value === "wispro" ? value : null;
+  value === "wispro" || value === "smartolt" ? value : null;
 
 const verifyWispro = async (token: string, baseUrl: string) => {
   const response = await fetch(
@@ -46,6 +52,60 @@ const verifyWispro = async (token: string, baseUrl: string) => {
     );
   }
   return { base_url: baseUrl.replace(/\/+$/, "") };
+};
+
+const verifySmartOlt = async (apiKey: string, rawBaseUrl: string) => {
+  const baseUrl = normalizeSmartOltBaseUrl(rawBaseUrl);
+
+  try {
+    const response = await fetch(`${baseUrl}/api/system/get_olts`, {
+      headers: {
+        "X-Token": apiKey,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(10_000),
+      cache: "no-store",
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("SmartOLT rechazó el token (API Key no autorizada)");
+    }
+
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        base_url: baseUrl,
+        olts_count: Array.isArray(data.olts) ? data.olts.length : undefined,
+      };
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("rechazó")) {
+      throw err;
+    }
+  }
+
+  // Fallback con endpoint de ONU
+  const fallback = await fetch(
+    `${baseUrl}/api/onu/get_onus_details_by_sn/VERIFY_CONNECTION_TEST`,
+    {
+      headers: {
+        "X-Token": apiKey,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(10_000),
+      cache: "no-store",
+    },
+  );
+
+  if (fallback.status === 401 || fallback.status === 403) {
+    throw new Error("SmartOLT rechazó el token (API Key no autorizada)");
+  }
+
+  if (!fallback.ok && fallback.status >= 500) {
+    throw new Error(`SmartOLT respondió con error del servidor (${fallback.status})`);
+  }
+
+  return { base_url: baseUrl };
 };
 
 const handleError = (error: unknown) => {
@@ -102,17 +162,30 @@ export const PUT = async (
     }
 
     const rawPayload = await request.json();
-    const parsed = wisproSchema.safeParse(rawPayload);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.issues[0]?.message || "Datos inválidos" },
-        { status: 400 },
-      );
-    }
+    let config: Record<string, unknown> = {};
+    let secret = "";
 
-    const wispro = parsed.data;
-    const config = await verifyWispro(wispro.apiToken, wispro.baseUrl);
-    const secret = wispro.apiToken;
+    if (provider === "wispro") {
+      const parsed = wisproSchema.safeParse(rawPayload);
+      if (!parsed.success) {
+        return NextResponse.json(
+          { error: parsed.error.issues[0]?.message || "Datos inválidos" },
+          { status: 400 },
+        );
+      }
+      config = await verifyWispro(parsed.data.apiToken, parsed.data.baseUrl);
+      secret = parsed.data.apiToken;
+    } else if (provider === "smartolt") {
+      const parsed = smartOltSchema.safeParse(rawPayload);
+      if (!parsed.success) {
+        return NextResponse.json(
+          { error: parsed.error.issues[0]?.message || "Datos inválidos" },
+          { status: 400 },
+        );
+      }
+      config = await verifySmartOlt(parsed.data.apiKey, parsed.data.baseUrl);
+      secret = parsed.data.apiKey;
+    }
 
     const now = new Date().toISOString();
     const { data, error } = await getSupabaseAdmin()
@@ -167,10 +240,11 @@ export const POST = async (
 
     const secret = decryptIntegrationSecret(data.credentials_encrypted);
     const config = (data.config || {}) as Record<string, unknown>;
-    const nextConfig = await verifyWispro(
-      secret,
-      String(config.base_url || ""),
-    );
+    const nextConfig =
+      provider === "wispro"
+        ? await verifyWispro(secret, String(config.base_url || ""))
+        : await verifySmartOlt(secret, String(config.base_url || ""));
+
     const now = new Date().toISOString();
     const { data: updated, error: updateError } = await supabase
       .from("organization_integrations")
