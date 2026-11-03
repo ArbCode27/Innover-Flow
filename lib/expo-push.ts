@@ -253,20 +253,20 @@ export const buildExpoNetworkAlertPushMessage = (
 
   // 2. Canal nativo, color de acento y prioridad según severidad
   let channelId: "innover-critical" | "innover-warning" | "innover-success";
-  let color: "#EF4444" | "#F59E0B" | "#10B981";
+  let color: "#ef4444" | "#f59e0b" | "#10b981";
   let priority: "high" | "default";
 
   if (severity === "critical") {
     channelId = "innover-critical";
-    color = "#EF4444";
+    color = "#ef4444";
     priority = "high";
   } else if (severity === "warning") {
     channelId = "innover-warning";
-    color = "#F59E0B";
+    color = "#f59e0b";
     priority = "high";
   } else {
     channelId = "innover-success";
-    color = "#10B981";
+    color = "#10b981";
     priority = "default";
   }
 
@@ -432,10 +432,10 @@ export const buildExpoIncidentPushMessage = (input: {
   priority: input.incidentType === "resolved" ? "default" : "high",
   color:
     input.incidentType === "resolved"
-      ? "#10B981"
+      ? "#10b981"
       : input.incidentType === "altered_power"
-        ? "#F59E0B"
-        : "#EF4444",
+        ? "#f59e0b"
+        : "#ef4444",
   collapseId: `pon-${input.board}-${input.port}`,
   data: {
     kind: "pon_incident",
@@ -504,6 +504,13 @@ export const sendExpoPushMessages = async (
   messages: ExpoPushMessage[],
 ): Promise<{ tickets: ExpoPushTicket[] }> => {
   if (!messages.length) return { tickets: [] };
+
+  for (const message of messages) {
+    if (message.color) {
+      const trimmed = message.color.trim().toLowerCase();
+      message.color = /^#[0-9a-f]{6}$/.test(trimmed) ? trimmed : undefined;
+    }
+  }
 
   warnIfMissingExpoAccessToken();
   const headers = expoPushHeaders();

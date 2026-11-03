@@ -7,6 +7,8 @@ import {
 } from "./chat-push-preview.ts";
 import {
   buildExpoChatPushMessage,
+  buildExpoIncidentPushMessage,
+  buildExpoNetworkAlertPushMessage,
   buildExpoTicketPushMessage,
   collectUnregisteredExpoTokens,
   normalizeExpoTickets,
@@ -163,6 +165,113 @@ describe("expo push tickets", () => {
         tickets.map((ticket) => ticket.id),
         ["expo-1", "expo-2"],
       );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("genera colores hexadecimales en minúsculas válidos para Expo Push API", () => {
+    const criticalAlert = buildExpoNetworkAlertPushMessage({
+      token: "ExponentPushToken[alert-crit]",
+      clients: [{ name: "Cliente Uno", board: 1, port: 1, incidentType: "LOS" }],
+    });
+    assert.equal(criticalAlert.color, "#ef4444");
+    assert.match(criticalAlert.color ?? "", /^#[0-9a-f]{6}$/);
+
+    const warningAlert = buildExpoNetworkAlertPushMessage({
+      token: "ExponentPushToken[alert-warn]",
+      clients: [{ name: "Cliente Dos", board: 1, port: 1, incidentType: "Potencia alterada" }],
+    });
+    assert.equal(warningAlert.color, "#f59e0b");
+    assert.match(warningAlert.color ?? "", /^#[0-9a-f]{6}$/);
+
+    const restoredAlert = buildExpoNetworkAlertPushMessage({
+      token: "ExponentPushToken[alert-restored]",
+      clients: [],
+      forcedSeverity: "normal",
+    });
+    assert.equal(restoredAlert.color, "#10b981");
+    assert.match(restoredAlert.color ?? "", /^#[0-9a-f]{6}$/);
+
+    const resolvedIncident = buildExpoIncidentPushMessage({
+      token: "ExponentPushToken[inc-res]",
+      title: "Resuelto",
+      body: "Normal",
+      board: 1,
+      port: 1,
+      incidentType: "resolved",
+      affectedCount: 0,
+      losCount: 0,
+      alteredCount: 0,
+    });
+    assert.equal(resolvedIncident.color, "#10b981");
+    assert.match(resolvedIncident.color ?? "", /^#[0-9a-f]{6}$/);
+
+    const alteredIncident = buildExpoIncidentPushMessage({
+      token: "ExponentPushToken[inc-alt]",
+      title: "Alarma",
+      body: "Potencia",
+      board: 1,
+      port: 1,
+      incidentType: "altered_power",
+      affectedCount: 2,
+      losCount: 0,
+      alteredCount: 2,
+    });
+    assert.equal(alteredIncident.color, "#f59e0b");
+    assert.match(alteredIncident.color ?? "", /^#[0-9a-f]{6}$/);
+
+    const outageIncident = buildExpoIncidentPushMessage({
+      token: "ExponentPushToken[inc-outage]",
+      title: "Corte",
+      body: "LOS",
+      board: 1,
+      port: 1,
+      incidentType: "massive_outage",
+      affectedCount: 5,
+      losCount: 5,
+      alteredCount: 0,
+    });
+    assert.equal(outageIncident.color, "#ef4444");
+    assert.match(outageIncident.color ?? "", /^#[0-9a-f]{6}$/);
+  });
+
+  it("sanitiza defensivamente el campo color antes de enviar a Expo", async () => {
+    let capturedPayload: unknown = null;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: unknown, init?: { body?: unknown }) => {
+      capturedPayload = JSON.parse(String(init?.body || "[]"));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: [{ status: "ok", id: "expo-sanitized-1" }, { status: "ok", id: "expo-sanitized-2" }],
+        }),
+      };
+    }) as typeof fetch;
+
+    try {
+      await sendExpoPushMessages([
+        {
+          to: "ExponentPushToken[upper]",
+          title: "Upper Color",
+          body: "Prueba",
+          color: " #EF4444 ",
+        },
+        {
+          to: "ExponentPushToken[invalid]",
+          title: "Invalid Color",
+          body: "Prueba",
+          color: "invalid-color",
+        },
+      ]);
+
+      const batch = capturedPayload as Array<{ to: string; color?: string }>;
+      assert.equal(batch[0].color, "#ef4444");
+      assert.match(batch[0].color ?? "", /^#[0-9a-f]{6}$/);
+      // undefined color in object becomes omitted in JSON.stringify
+      assert.equal(batch[1].color, undefined);
+      assert.equal("color" in batch[1], false);
     } finally {
       globalThis.fetch = originalFetch;
     }
