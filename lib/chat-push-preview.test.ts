@@ -10,6 +10,7 @@ import {
   buildExpoIncidentPushMessage,
   buildExpoNetworkAlertPushMessage,
   buildExpoTicketPushMessage,
+  buildExpoTechnicianTicketPushMessage,
   collectUnregisteredExpoTokens,
   normalizeExpoTickets,
   sendExpoPushMessages,
@@ -108,6 +109,60 @@ describe("expo push tickets", () => {
       title: "Caída de fibra",
       conversationId: 44,
     });
+  });
+
+  it("arma el payload de ticket asignado al técnico de campo", () => {
+    const fullMessage = buildExpoTechnicianTicketPushMessage({
+      token: "ExponentPushToken[tech-1]",
+      ticketId: "2f1c0a10-9c3a-4b11-8d2e-1a2b3c4d5e6f",
+      publicId: 502,
+      title: "Revisión ONU",
+      clientName: "Carlos Delgado",
+      addressText: "Urb. Las Flores Casa 12",
+      priority: "high",
+    });
+
+    assert.equal(fullMessage.to, "ExponentPushToken[tech-1]");
+    assert.equal(fullMessage.title, "Nuevo ticket asignado · Caso #502");
+    assert.equal(
+      fullMessage.body,
+      "Revisión ONU · Carlos Delgado · Urb. Las Flores Casa 12. Toca para abrir el caso.",
+    );
+    assert.equal(fullMessage.sound, "default");
+    assert.equal(fullMessage.channelId, "star-ticket");
+    assert.equal(fullMessage.priority, "high");
+    assert.equal(
+      fullMessage.collapseId,
+      "tech-ticket-2f1c0a10-9c3a-4b11-8d2e-1a2b3c4d5e6f",
+    );
+    assert.deepEqual(fullMessage.data, {
+      kind: "field_ticket",
+      targetRole: "technician",
+      ticketId: "2f1c0a10-9c3a-4b11-8d2e-1a2b3c4d5e6f",
+      publicId: 502,
+      title: "Revisión ONU",
+      clientName: "Carlos Delgado",
+      addressText: "Urb. Las Flores Casa 12",
+      priority: "high",
+      action: "assigned",
+    });
+
+    const fallbackMessage = buildExpoTechnicianTicketPushMessage({
+      token: "ExponentPushToken[tech-2]",
+      ticketId: "33333333-9c3a-4b11-8d2e-1a2b3c4d5e6f",
+      publicId: null,
+      title: null,
+    });
+
+    assert.equal(fallbackMessage.title, "Nuevo ticket asignado");
+    assert.equal(
+      fallbackMessage.body,
+      "Tienes un nuevo ticket asignado en tu cola de trabajo.",
+    );
+    assert.equal(
+      fallbackMessage.collapseId,
+      "tech-ticket-33333333-9c3a-4b11-8d2e-1a2b3c4d5e6f",
+    );
   });
 
   it("borra solo tokens DeviceNotRegistered", () => {

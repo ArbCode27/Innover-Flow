@@ -16,6 +16,18 @@ export type ExpoTicketPushData = {
   conversationId: number;
 };
 
+export type ExpoTechnicianTicketPushData = {
+  kind: "field_ticket";
+  targetRole: "technician";
+  ticketId: string;
+  publicId: number | null;
+  title: string | null;
+  clientName?: string | null;
+  addressText?: string | null;
+  priority?: string | null;
+  action: "assigned";
+};
+
 export type ExpoIncidentPushData = {
   kind: "pon_incident";
   board: number;
@@ -63,6 +75,7 @@ export type ExpoPushMessage = {
   data?:
     | ExpoChatPushData
     | ExpoTicketPushData
+    | ExpoTechnicianTicketPushData
     | ExpoIncidentPushData
     | ExpoNetworkAlertPushData
     | Record<string, unknown>;
@@ -187,6 +200,42 @@ export const buildExpoTicketPushMessage = (input: {
     conversationId: toPushNumber(input.conversationId ?? 0),
   },
 });
+
+export const buildExpoTechnicianTicketPushMessage = (input: {
+  token: string;
+  ticketId: string;
+  publicId: number | null;
+  title: string | null;
+  clientName?: string | null;
+  addressText?: string | null;
+  priority?: string | null;
+}): ExpoPushMessage => {
+  const publicLabel = input.publicId ? `Caso #${input.publicId}` : null;
+  const title = publicLabel ? `Nuevo ticket asignado · ${publicLabel}` : "Nuevo ticket asignado";
+  const details = [input.title, input.clientName, input.addressText].filter(Boolean).join(" · ");
+  const body = details ? `${details}. Toca para abrir el caso.` : "Tienes un nuevo ticket asignado en tu cola de trabajo.";
+
+  return {
+    to: input.token,
+    title,
+    body,
+    sound: "default",
+    channelId: "star-ticket",
+    priority: "high",
+    collapseId: `tech-ticket-${input.ticketId}`,
+    data: {
+      kind: "field_ticket",
+      targetRole: "technician",
+      ticketId: input.ticketId,
+      publicId: input.publicId,
+      title: input.title,
+      clientName: input.clientName,
+      addressText: input.addressText,
+      priority: input.priority,
+      action: "assigned",
+    },
+  };
+};
 
 export interface NetworkAlertClientItem {
   name: string;

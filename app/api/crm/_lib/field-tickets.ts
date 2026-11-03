@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { enqueueAppPush, notifyAppFieldTicketPush } from "@/lib/app-push";
+import {
+  enqueueAppPush,
+  notifyAppFieldTicketPush,
+  notifyTechnicianTicketAssignedPush,
+} from "@/lib/app-push";
 import {
   assertVisitWindowRange,
   buildMapsUrl,
@@ -645,6 +649,20 @@ export const createFieldTicket = async (
         title: ticket.title?.trim() || null,
       }),
     );
+    if (ticket.employeeId) {
+      enqueueAppPush(() =>
+        notifyTechnicianTicketAssignedPush(supabase, {
+          organizationId,
+          technicianId: ticket.employeeId!,
+          ticketId: ticket.id,
+          publicId: ticket.publicId > 0 ? ticket.publicId : null,
+          title: ticket.title?.trim() || null,
+          clientName: ticket.clientName,
+          addressText: ticket.addressText,
+          priority: ticket.priority,
+        }),
+      );
+    }
     return ticket;
   };
   if (
@@ -769,6 +787,22 @@ export const updateFieldTicket = async (
   const [ticket] = await attachCategories(supabase, organizationId, [
     mapFieldTicket(data),
   ]);
+
+  if (patch.employee_id && patch.employee_id !== current.employeeId) {
+    enqueueAppPush(() =>
+      notifyTechnicianTicketAssignedPush(supabase, {
+        organizationId,
+        technicianId: ticket.employeeId!,
+        ticketId: ticket.id,
+        publicId: ticket.publicId > 0 ? ticket.publicId : null,
+        title: ticket.title?.trim() || null,
+        clientName: ticket.clientName,
+        addressText: ticket.addressText,
+        priority: ticket.priority,
+      }),
+    );
+  }
+
   return ticket;
 };
 
@@ -801,7 +835,22 @@ export const reassignFieldTicket = async (
     .select(DETAIL_COLUMNS)
     .single();
   if (error) throw error;
-  return mapFieldTicket(data);
+  const updated = mapFieldTicket(data);
+  if (updated.employeeId && updated.employeeId !== current.employeeId) {
+    enqueueAppPush(() =>
+      notifyTechnicianTicketAssignedPush(supabase, {
+        organizationId,
+        technicianId: updated.employeeId!,
+        ticketId: updated.id,
+        publicId: updated.publicId > 0 ? updated.publicId : null,
+        title: updated.title?.trim() || null,
+        clientName: updated.clientName,
+        addressText: updated.addressText,
+        priority: updated.priority,
+      }),
+    );
+  }
+  return updated;
 };
 
 const observationKey = (ticketId: string, observation: string) =>

@@ -4,6 +4,7 @@ import { buildChatPushPreview } from "@/lib/chat-push-preview";
 import {
   buildExpoChatPushMessage,
   buildExpoTicketPushMessage,
+  buildExpoTechnicianTicketPushMessage,
   collectUnregisteredExpoTokens,
   sendExpoPushMessages,
   type ExpoPushMessage,
@@ -298,6 +299,93 @@ export const notifyAppFieldTicketPush = async (
     });
   } catch (error) {
     console.warn(`${LOG_PREFIX} ticket_push_failed`, {
+      ticketId: input.ticketId,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+  }
+};
+
+export const loadTechnicianDeviceTokens = async (
+  supabase: SupabaseClient,
+  organizationId: string,
+  technicianId: string,
+): Promise<string[]> => {
+  const { data: devices, error } = await supabase
+    .from("app_devices")
+    .select("push_token")
+    .eq("organization_id", organizationId)
+    .eq("technician_id", technicianId);
+
+  if (error) {
+    console.warn(`${LOG_PREFIX} technician_devices_lookup_failed`, error.message);
+    return [];
+  }
+
+  return [
+    ...new Set(
+      (devices || [])
+        .map((row) => String(row.push_token || "").trim())
+        .filter(Boolean),
+    ),
+  ];
+};
+
+export const notifyTechnicianTicketAssignedPush = async (
+  supabase: SupabaseClient,
+  input: {
+    organizationId: string;
+    technicianId: string;
+    ticketId: string;
+    publicId: number | null;
+    title: string | null;
+    clientName?: string | null;
+    addressText?: string | null;
+    priority?: string | null;
+  },
+) => {
+  try {
+    const tokens = await loadTechnicianDeviceTokens(
+      supabase,
+      input.organizationId,
+      input.technicianId,
+    );
+
+    if (!tokens.length) {
+      console.log(`${LOG_PREFIX} no_technician_devices`, {
+        technicianId: input.technicianId,
+        ticketId: input.ticketId,
+      });
+      return;
+    }
+
+    const messages = tokens.map((token) =>
+      buildExpoTechnicianTicketPushMessage({
+        token,
+        ticketId: input.ticketId,
+        publicId: input.publicId,
+        title: input.title,
+        clientName: input.clientName,
+        addressText: input.addressText,
+        priority: input.priority,
+      }),
+    );
+
+    const { tickets } = await sendExpoPushMessages(messages);
+    await pruneUnregisteredAppDevices(
+      supabase,
+      input.organizationId,
+      tokens,
+      tickets,
+    );
+    console.log(`${LOG_PREFIX} technician_push_sent`, {
+      technicianId: input.technicianId,
+      ticketId: input.ticketId,
+      devices: tokens.length,
+      expoTicketIds: tickets.map((t) => t.id ?? null),
+    });
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} technician_push_failed`, {
+      technicianId: input.technicianId,
       ticketId: input.ticketId,
       error: error instanceof Error ? error.message : "unknown",
     });

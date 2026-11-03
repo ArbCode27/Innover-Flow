@@ -152,7 +152,7 @@ export const getMobilePrimaryNavItems = (
   organizationRole?: OrganizationRole | null,
 ): CrmView[] => {
   if (isCrmAdmin(agent, organizationRole)) {
-    return ["dashboard", "incidents", "conversations", "my-conversations"];
+    return ["dashboard", "notifications", "conversations", "my-conversations"];
   }
 
   const dept = agent?.department || "soporte";

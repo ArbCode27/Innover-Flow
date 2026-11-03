@@ -7,7 +7,7 @@ export const CRM_NAV_ITEMS: Array<{
   label: string;
 }> = [
   { id: "dashboard", label: "Dashboard" },
-  { id: "incidents", label: "Incidencias" },
+  { id: "notifications", label: "Monitoreo" },
   { id: "conversations", label: "Conversaciones" },
   { id: "my-conversations", label: "Mis asignadas" },
   { id: "history", label: "Historial" },
@@ -16,7 +16,6 @@ export const CRM_NAV_ITEMS: Array<{
   { id: "payments", label: "Pagos" },
   { id: "tickets", label: "Tickets" },
   { id: "technicians", label: "Técnicos" },
-  { id: "notifications", label: "Monitoreo" },
   { id: "labels", label: "Etiquetas" },
   { id: "agents", label: "Agentes" },
   { id: "settings", label: "Ajustes" },

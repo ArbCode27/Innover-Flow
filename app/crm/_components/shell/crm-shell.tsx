@@ -336,7 +336,21 @@ export const CrmShell = () => {
             ) : null}
             {activeView === "notifications" &&
             isViewAllowed("notifications", auth.agent, auth.organizationRole) ? (
-              <NotificationsView organizationId={auth.agent.organization_id} />
+              <NotificationsView
+                organizationId={auth.agent.organization_id}
+                onOpenTicketChat={handleOpenTicketChat}
+                onOpenClientChat={(clientId) => {
+                  const conv = crm.conversations.find((c) => c.client_id === clientId);
+                  if (conv) {
+                    handleOpenTicketChat(conv.id);
+                  } else {
+                    setActiveView("conversations");
+                  }
+                }}
+                onCreateFieldTicket={async (ticketPayload) => {
+                  await fieldTickets.createTicket(ticketPayload as never);
+                }}
+              />
             ) : null}
             {activeView === "incidents" &&
             isViewAllowed("incidents", auth.agent, auth.organizationRole) ? (

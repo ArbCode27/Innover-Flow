@@ -7,6 +7,7 @@
  *   pnpm verify:expo-push
  *   pnpm verify:expo-push -- --token "ExponentPushToken[xxxxxxxx]"
  *   pnpm verify:expo-push -- --token "…" --kind field_ticket
+ *   pnpm verify:expo-push -- --token "…" --kind technician_ticket
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -69,38 +70,59 @@ if (!token) {
 }
 
 const message =
-  kind === "field_ticket"
+  kind === "technician_ticket"
     ? {
         to: token,
-        title: "Visita técnica registrada",
-        body: "Hay un seguimiento de visita en tu cuenta. Ábrelo en Mi ticket.",
+        title: "Nuevo ticket asignado · Caso #101",
+        body: "Revisión fibra óptica · Juan Pérez · Av. Principal 123. Toca para abrir el caso.",
         sound: "default",
         channelId: "star-ticket",
         priority: "high",
-        collapseId: "verify-ticket",
+        collapseId: "tech-ticket-00000000-0000-4000-8000-000000000001",
         data: {
           kind: "field_ticket",
+          targetRole: "technician",
           ticketId: "00000000-0000-4000-8000-000000000001",
-          publicId: 0,
-          title: "Verificación push",
-          conversationId: 0,
+          publicId: 101,
+          title: "Revisión fibra óptica",
+          clientName: "Juan Pérez",
+          addressText: "Av. Principal 123",
+          priority: "urgent",
+          action: "assigned",
         },
       }
-    : {
-        to: token,
-        title: "Star Conectados",
-        body: "Prueba de notificación (Innover-Flow)",
-        sound: "default",
-        channelId: "star-chat",
-        priority: "high",
-        collapseId: "0",
-        data: {
-          kind: "chat_message",
-          conversationId: 0,
-          messageId: 0,
-          direction: "out",
-        },
-      };
+    : kind === "field_ticket"
+      ? {
+          to: token,
+          title: "Visita técnica registrada",
+          body: "Hay un seguimiento de visita en tu cuenta. Ábrelo en Mi ticket.",
+          sound: "default",
+          channelId: "star-ticket",
+          priority: "high",
+          collapseId: "verify-ticket",
+          data: {
+            kind: "field_ticket",
+            ticketId: "00000000-0000-4000-8000-000000000001",
+            publicId: 0,
+            title: "Verificación push",
+            conversationId: 0,
+          },
+        }
+      : {
+          to: token,
+          title: "Star Conectados",
+          body: "Prueba de notificación (Innover-Flow)",
+          sound: "default",
+          channelId: "star-chat",
+          priority: "high",
+          collapseId: "0",
+          data: {
+            kind: "chat_message",
+            conversationId: 0,
+            messageId: 0,
+            direction: "out",
+          },
+        };
 
 const headers = {
   "Content-Type": "application/json",
