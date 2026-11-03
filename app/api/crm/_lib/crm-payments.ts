@@ -1,4 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  buildPaymentBankStats,
+  normalizeReceptorBank,
+  type CrmPaymentBankStat,
+} from "@/app/crm/_lib/payments";
 
 export const CRM_PAYMENT_STATUSES = [
   "RECIBIDO",
@@ -312,7 +317,7 @@ export const applyCrmPaymentExtraction = async (
   try {
     const amount = parseAmount(input.amount);
     const cedula = digitsOnly(input.cedula);
-    const bank = trimOrNull(input.bank);
+    const bank = normalizeReceptorBank(input.bank);
     const transactionCode = digitsOnly(input.transactionCode);
     const clientName = trimOrNull(input.clientName);
 
@@ -465,7 +470,7 @@ const insertCrmPayment = async (
 
   const amount = parseAmount(input.amount);
   const cedula = digitsOnly(input.cedula);
-  const bank = trimOrNull(input.bank);
+  const bank = normalizeReceptorBank(input.bank);
   const transactionCode = digitsOnly(input.transactionCode);
   const clientName = trimOrNull(input.clientName);
   const complete = Boolean(amount && cedula && bank && transactionCode && clientName);
@@ -579,7 +584,7 @@ export const listCrmPayments = async (
   filters: ListCrmPaymentsFilters,
   organizationId?: string,
 ) => {
-  const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
+  const limit = Math.min(Math.max(filters.limit ?? 50, 1), 2000);
   const offset = Math.max(filters.offset ?? 0, 0);
 
   const listBaseQuery = supabase.from("crm_payments").select("*", { count: "exact" });
@@ -601,6 +606,21 @@ export const listCrmPayments = async (
     .order("bank", { ascending: true })
     .limit(200);
 
+  // Consulta de estadísticas agregadas por banco para el rango de fechas actual
+  let statsQuery = supabase
+    .from("crm_payments")
+    .select("bank, amount, status");
+  if (organizationId) {
+    statsQuery = statsQuery.eq("organization_id", organizationId);
+  }
+  if (filters.from && isIsoDate(filters.from)) {
+    statsQuery = statsQuery.gte("payment_date", filters.from);
+  }
+  if (filters.to && isIsoDate(filters.to)) {
+    statsQuery = statsQuery.lte("payment_date", filters.to);
+  }
+  statsQuery = statsQuery.limit(5000);
+
   const countQueries = CRM_PAYMENT_STATUSES.map((status) =>
     applyListFilters(
       organizationId
@@ -616,11 +636,12 @@ export const listCrmPayments = async (
     ),
   );
 
-  const [listResult, banksResult, ...countResults] = await Promise.all([
+  const [listResult, banksResult, statsResult, ...countResults] = await Promise.all([
     listQuery
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1),
     banksQuery,
+    statsQuery,
     ...countQueries,
   ]);
 
@@ -634,12 +655,24 @@ export const listCrmPayments = async (
     counts[status] = result?.error ? 0 : (result?.count ?? 0);
   });
 
+  const rawBanks = (banksResult.data || [])
+    .map((row) => String((row as { bank?: string }).bank || "").trim())
+    .filter(Boolean);
+
+  const bankStats = buildPaymentBankStats(
+    (statsResult.data || []) as Array<{
+      bank: string | null;
+      amount: number | null;
+      status: string;
+    }>,
+  );
+
+  // Unir bancos encontrados con los nombres normalizados en bankStats
   const banks = Array.from(
-    new Set(
-      (banksResult.data || [])
-        .map((row) => String((row as { bank?: string }).bank || "").trim())
-        .filter(Boolean),
-    ),
+    new Set([
+      ...bankStats.map((s) => s.bank),
+      ...rawBanks.map((b) => normalizeReceptorBank(b) || b),
+    ]),
   );
 
   return {
@@ -647,6 +680,7 @@ export const listCrmPayments = async (
     total: listResult.count ?? (listResult.data || []).length,
     counts,
     banks,
+    bankStats,
     limit,
     offset,
   };

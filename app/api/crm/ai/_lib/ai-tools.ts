@@ -153,7 +153,8 @@ export const AI_TOOL_DECLARATIONS = [
         },
         bank: {
           type: "string",
-          description: "Banco del comprobante.",
+          description:
+            "Banco RECEPTOR o destino de la empresa a donde se transfirió el pago (ej. 'Venezuela', 'Banplus', 'Bancamiga'). REGLA CRÍTICA: NUNCA extraigas el banco emisor u origen desde donde pagó el cliente (como Banesco, Mercantil, Provincial, etc.).",
         },
         wispro_id: {
           type: "string",
@@ -295,7 +296,7 @@ Flujo obligatorio de pagos:
 1) Si llega imagen de comprobante SIN cédula/RIF: analiza y PIDE el documento (solo números). No hagas handoff.
 2) Con cédula o RIF (números): lookup_wispro_by_cedula (vincula solo si hay 1 match).
 3) Si count>1: confirma el abonado y llama link_wispro_client.
-4) Luego submit_payment_receipt.
+4) Luego submit_payment_receipt (REGLA CRÍTICA de banco: el parámetro bank debe ser ÚNICAMENTE el BANCO RECEPTOR o destino de la empresa: Venezuela/BDV, Banplus, Bancamiga; NUNCA el banco emisor del cliente como Banesco, Mercantil, Provincial).
 5) Confirma según el resultado de la tool. Nunca digas que el pago está aprobado.
 
 Flujo obligatorio de soporte técnico:

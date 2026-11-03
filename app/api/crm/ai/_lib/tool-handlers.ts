@@ -15,6 +15,7 @@ import {
   applyCrmPaymentExtraction,
   intakeCrmReceipt,
 } from "@/app/api/crm/_lib/crm-payments";
+import { normalizeReceptorBank } from "@/app/crm/_lib/payments";
 import { ensureConversationLabel } from "@/app/api/crm/_lib/conversation-labels";
 import {
   withClosedOfficeNotice,
@@ -718,7 +719,7 @@ const handleSubmitPaymentReceipt = async (
   const amount = parsed.data.amount ?? pending?.amount ?? null;
   const transactionCode =
     parsed.data.transaction_code ?? pending?.transaction_code ?? null;
-  const bank = (parsed.data.bank || pending?.bank || "").trim() || null;
+  const bank = normalizeReceptorBank(parsed.data.bank || pending?.bank);
   const comment = parsed.data.comment ?? pending?.comment ?? null;
 
   if (existingMetadata.payment_submitted === true) {

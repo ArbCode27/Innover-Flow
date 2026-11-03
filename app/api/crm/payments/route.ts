@@ -226,7 +226,7 @@ const listQuerySchema = z.object({
   ),
   bank: optionalText,
   q: optionalText,
-  limit: z.coerce.number().int().min(1).max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(2000).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 });
 

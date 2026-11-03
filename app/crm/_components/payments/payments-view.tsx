@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
-import { Info, RefreshCw } from "lucide-react";
+import { FileSpreadsheet, Info, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import type {
   CrmPayment,
+  CrmPaymentBankStat,
   CrmPaymentStatus,
   CrmPaymentStatusCounts,
 } from "../../_lib/payments";
@@ -13,6 +15,8 @@ import { formatPaymentAmount, formatPaymentField } from "../../_lib/payments";
 import type { Agent } from "../../_lib/types";
 import { CrmButton } from "../shared/crm-button";
 import { LoadingState } from "../shared/loading-state";
+import { PaymentsBankCards } from "./payments-bank-cards";
+import { PaymentsExportDialog } from "./payments-export-dialog";
 import {
   PaymentsFilters,
   PaymentsPagination,
@@ -77,10 +81,12 @@ export const PaymentsView = ({
   const [page, setPage] = useState(1);
   const [payments, setPayments] = useState<CrmPayment[]>([]);
   const [banks, setBanks] = useState<string[]>([]);
+  const [bankStats, setBankStats] = useState<CrmPaymentBankStat[]>([]);
   const [counts, setCounts] = useState<CrmPaymentStatusCounts>(EMPTY_COUNTS);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -117,6 +123,7 @@ export const PaymentsView = ({
           total?: number;
           counts?: CrmPaymentStatusCounts;
           banks?: string[];
+          bankStats?: CrmPaymentBankStat[];
         };
 
         if (!response.ok || !payload.ok) {
@@ -133,6 +140,7 @@ export const PaymentsView = ({
         setTotal(nextTotal);
         setCounts(payload.counts || EMPTY_COUNTS);
         setBanks(payload.banks || []);
+        setBankStats(payload.bankStats || []);
         setError(null);
       } catch (loadError) {
         setError(
@@ -399,19 +407,34 @@ export const PaymentsView = ({
             extracción
           </p>
         </div>
-        <CrmButton
-          type="button"
-          variant="secondary"
-          onClick={() => void loadPayments("refresh")}
-          disabled={isRefreshing || isLoading}
-          className="w-full cursor-pointer sm:w-auto"
-          aria-label="Actualizar listado de pagos">
-          <RefreshCw
-            className={`mr-2 size-4 ${isRefreshing ? "animate-spin" : ""}`}
-            aria-hidden="true"
-          />
-          Actualizar
-        </CrmButton>
+        <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setExportDialogOpen(true)}
+            className="w-full sm:w-auto cursor-pointer border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 hover:text-emerald-800 dark:border-emerald-500/30 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+            aria-label="Abrir modal para exportar pagos a Excel">
+            <FileSpreadsheet
+              className="mr-2 size-4 text-emerald-600 dark:text-emerald-400"
+              aria-hidden="true"
+            />
+            Exportar a Excel
+          </Button>
+
+          <CrmButton
+            type="button"
+            variant="secondary"
+            onClick={() => void loadPayments("refresh")}
+            disabled={isRefreshing || isLoading}
+            className="w-full cursor-pointer sm:w-auto"
+            aria-label="Actualizar listado de pagos">
+            <RefreshCw
+              className={`mr-2 size-4 ${isRefreshing ? "animate-spin" : ""}`}
+              aria-hidden="true"
+            />
+            Actualizar
+          </CrmButton>
+        </div>
       </div>
 
       <div className="space-y-5">
@@ -428,6 +451,13 @@ export const PaymentsView = ({
         ) : null}
 
         <PaymentsStats total={total} counts={counts} />
+
+        <PaymentsBankCards
+          bankStats={bankStats}
+          selectedBank={bank}
+          onSelectBank={handleBankChange}
+        />
+
         <PaymentsFilters
           searchTerm={searchTerm}
           dateRange={dateRange}
@@ -469,6 +499,16 @@ export const PaymentsView = ({
           </>
         )}
       </div>
+
+      <PaymentsExportDialog
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        initialFrom={dateRange.from}
+        initialTo={dateRange.to}
+        initialBank={bank}
+        bankStats={bankStats}
+        knownBanks={banks}
+      />
     </div>
   );
 };
