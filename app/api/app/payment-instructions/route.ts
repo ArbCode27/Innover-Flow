@@ -15,6 +15,10 @@ import {
 } from "../_lib/app-errors";
 import { loadAppClient } from "../_lib/load-app-client";
 
+const CACHE_HEADERS = {
+  "Cache-Control": "private, s-maxage=300, stale-while-revalidate=600",
+};
+
 export const GET = async (request: NextRequest) => {
   try {
     const session = await getAppCustomerAuthContext(request);
@@ -42,7 +46,7 @@ export const GET = async (request: NextRequest) => {
       );
     } catch (error) {
       if (isMissingTableError(error)) {
-        return NextResponse.json({ methods: [] });
+        return NextResponse.json({ methods: [] }, { headers: CACHE_HEADERS });
       }
       throw error;
     }
@@ -51,14 +55,20 @@ export const GET = async (request: NextRequest) => {
       const match = isPaymentMethodKey(methodParam)
         ? getPaymentMethodByKey(methods, methodParam)
         : null;
-      return NextResponse.json({
-        methods: match ? [toAppPaymentMethodDto(match)] : [],
-      });
+      return NextResponse.json(
+        {
+          methods: match ? [toAppPaymentMethodDto(match)] : [],
+        },
+        { headers: CACHE_HEADERS },
+      );
     }
 
-    return NextResponse.json({
-      methods: methods.map(toAppPaymentMethodDto),
-    });
+    return NextResponse.json(
+      {
+        methods: methods.map(toAppPaymentMethodDto),
+      },
+      { headers: CACHE_HEADERS },
+    );
   } catch (error) {
     return toAppErrorResponse(error, {
       code: APP_ERROR_CODES.PAYMENT_INSTRUCTIONS_LOAD_FAILED,

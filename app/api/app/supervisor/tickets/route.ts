@@ -1,43 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  listFieldTickets,
-  mapFieldTicket,
-} from "@/app/api/crm/_lib/field-tickets";
+import { mapFieldTicket } from "@/app/api/crm/_lib/field-tickets";
 import { getSupabaseAdmin } from "@/app/api/crm/_lib/supabase-admin";
-import type { FieldTicket } from "@/lib/field-tickets/types";
 import { getAppTechnicianAuthContext } from "../../_lib/app-auth";
 import { APP_ERROR_CODES, AppApiError, toAppErrorResponse } from "../../_lib/app-errors";
 import { toTechnicianCasoDto } from "../../_lib/technician-caso-dto";
+
+const SUPERVISOR_TICKET_COLUMNS =
+  "id, public_id, wispro_issue_id, title, cause, status, priority, kind, client_name, client_phone, maps_url, latitude, longitude, address_text, window_start, window_end, facade_media_url, resolution_observation, employee_id, employee_name, closed_at, created_at, organization_id";
 
 const startOfTodayIso = () => {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return start.toISOString();
-};
-
-const applyStatusFilter = (
-  tickets: FieldTicket[],
-  status: string,
-): FieldTicket[] => {
-  if (status === "pending") {
-    return tickets.filter(
-      (ticket) => ticket.status === "open" || ticket.status === "scheduled",
-    );
-  }
-  if (status === "done") {
-    return tickets.filter(
-      (ticket) => ticket.status === "done" || ticket.status === "cancelled",
-    );
-  }
-  if (status === "today") {
-    const start = Date.parse(startOfTodayIso());
-    return tickets.filter((ticket) => {
-      const created = Date.parse(ticket.createdAt);
-      const closed = ticket.closedAt ? Date.parse(ticket.closedAt) : NaN;
-      return created >= start || (Number.isFinite(closed) && closed >= start);
-    });
-  }
-  return tickets;
 };
 
 export const GET = async (request: NextRequest) => {
@@ -58,29 +32,38 @@ export const GET = async (request: NextRequest) => {
       request.nextUrl.searchParams.get("technician_id")?.trim() || "";
 
     const supabase = getSupabaseAdmin();
-    let tickets: FieldTicket[];
+
+    let query = supabase
+      .from("field_tickets")
+      .select(SUPERVISOR_TICKET_COLUMNS)
+      .eq("organization_id", session.organizationId);
 
     if (technicianId) {
-      const { data, error } = await supabase
-        .from("field_tickets")
-        .select("*")
-        .eq("organization_id", session.organizationId)
-        .eq("employee_id", technicianId)
-        .order("created_at", { ascending: false })
-        .limit(300);
-      if (error) throw error;
-      tickets = (data || []).map((row) =>
-        mapFieldTicket(row as Record<string, unknown>),
-      );
-    } else {
-      tickets = await listFieldTickets(supabase, session.organizationId);
+      query = query.eq("employee_id", technicianId);
     }
 
-    const filtered = applyStatusFilter(tickets, status).slice(0, 200);
+    if (status === "pending") {
+      query = query.in("status", ["open", "scheduled"]);
+    } else if (status === "done") {
+      query = query.in("status", ["done", "cancelled"]);
+    } else if (status === "today") {
+      const todayIso = startOfTodayIso();
+      query = query.or(`created_at.gte.${todayIso},closed_at.gte.${todayIso}`);
+    }
+
+    const { data, error } = await query
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (error) throw error;
+
+    const tickets = (data || []).map((row) =>
+      mapFieldTicket(row as Record<string, unknown>),
+    );
 
     return NextResponse.json({
-      tickets: filtered.map(toTechnicianCasoDto),
-      total: filtered.length,
+      tickets: tickets.map(toTechnicianCasoDto),
+      total: tickets.length,
     });
   } catch (error) {
     return toAppErrorResponse(error, {

@@ -35,6 +35,8 @@ export const GET = async (request: NextRequest) => {
       client,
       organizationId: session.organizationId,
       billingStale,
+      skipPendingInvoices: true,
+      force: forceRefresh,
     });
 
     return NextResponse.json({

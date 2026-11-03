@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    await getCrmAuthContext(req);
+    const context = await getCrmAuthContext(req);
 
     const body = await req.json().catch(() => ({}));
     const onuExternalId = (body.onu_external_id || body.onuExternalId || "").trim();

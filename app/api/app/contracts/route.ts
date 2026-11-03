@@ -16,6 +16,10 @@ import {
 import { APP_ERROR_CODES, toAppErrorResponse } from "../_lib/app-errors";
 import { loadAppClient } from "../_lib/load-app-client";
 
+const CACHE_HEADERS = {
+  "Cache-Control": "private, s-maxage=300, stale-while-revalidate=600",
+};
+
 const withClientPlanFallback = (
   contract: AppContractDto | null,
   clientPlan: string | null,
@@ -51,17 +55,20 @@ export const GET = async (_request: NextRequest) => {
     const clientDto = toAppClientDto(client);
 
     if (!clientDto.wispro_linked || !clientDto.wispro_id) {
-      return NextResponse.json({
-        wispro_linked: false,
-        holder_name: clientDto.name,
-        cedula: clientDto.cedula,
-        cedula_display: formatCedulaDisplay(clientDto.cedula),
-        zone: clientDto.zone,
-        account_status: clientDto.account,
-        plan: clientDto.plan,
-        primary: null,
-        contracts: [],
-      });
+      return NextResponse.json(
+        {
+          wispro_linked: false,
+          holder_name: clientDto.name,
+          cedula: clientDto.cedula,
+          cedula_display: formatCedulaDisplay(clientDto.cedula),
+          zone: clientDto.zone,
+          account_status: clientDto.account,
+          plan: clientDto.plan,
+          primary: null,
+          contracts: [],
+        },
+        { headers: CACHE_HEADERS },
+      );
     }
 
     const contracts = await withOptionalOrganizationWispro(
@@ -89,17 +96,20 @@ export const GET = async (_request: NextRequest) => {
       clientDto.plan_name,
     );
 
-    return NextResponse.json({
-      wispro_linked: true,
-      holder_name: clientDto.name,
-      cedula: clientDto.cedula,
-      cedula_display: formatCedulaDisplay(clientDto.cedula),
-      zone: clientDto.zone,
-      account_status: clientDto.account,
-      plan: clientDto.plan,
-      primary,
-      contracts: mapped,
-    });
+    return NextResponse.json(
+      {
+        wispro_linked: true,
+        holder_name: clientDto.name,
+        cedula: clientDto.cedula,
+        cedula_display: formatCedulaDisplay(clientDto.cedula),
+        zone: clientDto.zone,
+        account_status: clientDto.account,
+        plan: clientDto.plan,
+        primary,
+        contracts: mapped,
+      },
+      { headers: CACHE_HEADERS },
+    );
   } catch (error) {
     return toAppErrorResponse(error, {
       code: APP_ERROR_CODES.CONTRACTS_LOAD_FAILED,

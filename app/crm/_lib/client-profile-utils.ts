@@ -29,6 +29,19 @@ export const resolveActivePlanLabel = (input: {
   return formatClientPlan(input.clientPlan ?? null);
 };
 
+export interface CachedInvoiceItem {
+  id: string;
+  invoice_number?: string | null;
+  state?: string | null;
+  balance?: number;
+  amount?: number;
+  balance_usd_formatted?: string;
+  amount_usd_formatted?: string;
+  first_due_date?: string | null;
+  period_to?: string | null;
+  concept?: string | null;
+}
+
 export interface ClientEnvoicingData {
   debt: number;
   hasDebt: boolean;
@@ -39,6 +52,7 @@ export interface ClientEnvoicingData {
   contractId?: string | null;
   planName?: string | null;
   pppProfile?: string | null;
+  pendingInvoices?: CachedInvoiceItem[];
 }
 
 export const parseClientEnvoicing = (
@@ -81,6 +95,9 @@ export const parseClientEnvoicing = (
       planName: typeof parsed.planName === "string" ? parsed.planName : null,
       pppProfile:
         typeof parsed.pppProfile === "string" ? parsed.pppProfile : null,
+      pendingInvoices: Array.isArray(parsed.pendingInvoices)
+        ? (parsed.pendingInvoices as CachedInvoiceItem[])
+        : undefined,
     };
   } catch {
     return null;

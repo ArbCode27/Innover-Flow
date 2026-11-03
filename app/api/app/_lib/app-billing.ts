@@ -1,14 +1,18 @@
+import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveOfficeHoursSnapshot } from "@/app/crm/_lib/office-hours";
 import { getCrmSettings } from "@/app/api/crm/_lib/crm-settings";
 import {
   enrichDebtWithBcv,
+  formatUsd,
 } from "@/app/api/crm/_lib/dolarvzla-rate";
 import {
   listPendingInvoicesForClient,
   withOptionalOrganizationWispro,
+  type WisproInvoice,
 } from "@/app/api/crm/_lib/wispro-api";
 import { refreshClientBillingFromWispro } from "@/app/api/crm/_lib/wispro-billing-refresh";
+import { parseClientEnvoicing } from "@/app/crm/_lib/client-profile-utils";
 import {
   formatBcvRateDisplay,
   toAppClientDto,
@@ -68,6 +72,75 @@ const resolvePeriodLabel = (invoices: AppInvoiceDto[]) => {
   return null;
 };
 
+/** Snapshot con menos de 30 minutos se considera fresco para app móvil */
+export const APP_BILLING_FRESH_TTL_MS = 30 * 60 * 1000;
+
+export const scheduleBackgroundTask = (task: () => Promise<unknown>) => {
+  try {
+    after(async () => {
+      try {
+        await task();
+      } catch (err) {
+        console.warn("[BACKGROUND_TASK] error", err);
+      }
+    });
+  } catch {
+    task().catch((err) => {
+      console.warn("[BACKGROUND_TASK] fallback error", err);
+    });
+  }
+};
+
+const inFlightBillingRefreshes = new Set<number>();
+
+export const triggerBackgroundBillingRefresh = (input: {
+  supabase: SupabaseClient;
+  clientId: number;
+  wisproId: string;
+  organizationId: string;
+  envoicing?: string | null;
+  clientName?: string | null;
+  cedula?: string | null;
+}) => {
+  if (inFlightBillingRefreshes.has(input.clientId)) {
+    return;
+  }
+  inFlightBillingRefreshes.add(input.clientId);
+
+  scheduleBackgroundTask(async () => {
+    try {
+      await withOptionalOrganizationWispro(input.organizationId, async () => {
+        let pendingInvoices: WisproInvoice[] | undefined = undefined;
+        if (input.cedula) {
+          try {
+            pendingInvoices = await listPendingInvoicesForClient({
+              wisproClientId: input.wisproId,
+              cedula: input.cedula,
+            });
+          } catch (e) {
+            console.warn("[APP_BILLING] background pending invoices failed", e);
+          }
+        }
+
+        await refreshClientBillingFromWispro({
+          supabase: input.supabase,
+          clientId: input.clientId,
+          wisproId: input.wisproId,
+          envoicing: input.envoicing,
+          clientName: input.clientName,
+          force: true,
+          pendingInvoices,
+          timeoutMs: 10_000,
+        });
+      });
+    } catch (err) {
+      console.warn("[APP_BILLING] background refresh failed", err);
+    } finally {
+      inFlightBillingRefreshes.delete(input.clientId);
+    }
+  });
+};
+
 export const maybeRefreshAppClientBilling = async (input: {
   supabase: SupabaseClient;
   client: AppClientRow;
@@ -79,6 +152,35 @@ export const maybeRefreshAppClientBilling = async (input: {
     return { client: input.client, billingStale: false };
   }
 
+  const snapshot = parseClientEnvoicing(input.client.envoicing);
+  const calculatedAt = snapshot?.calculatedAt;
+  const ageMs = calculatedAt ? Date.now() - Date.parse(calculatedAt) : Infinity;
+  const hasSnapshot = snapshot !== null && typeof snapshot.debt === "number";
+  const isFresh =
+    Number.isFinite(ageMs) && ageMs >= 0 && ageMs < APP_BILLING_FRESH_TTL_MS;
+
+  // 1. Snapshot fresco (< 30 min) y sin force refresh: responder de inmediato en 0ms
+  if (!input.force && isFresh && hasSnapshot) {
+    return { client: input.client, billingStale: false };
+  }
+
+  // 2. Stale-While-Revalidate: si hay datos previos pero desactualizados (o sin force),
+  // responder de inmediato con billing_stale: true y delegar el refresco asíncrono
+  if (!input.force && hasSnapshot) {
+    triggerBackgroundBillingRefresh({
+      supabase: input.supabase,
+      clientId: Number(input.client.id),
+      wisproId,
+      organizationId: input.organizationId,
+      envoicing: input.client.envoicing,
+      clientName: input.client.name,
+      cedula: input.client.cedula,
+    });
+
+    return { client: input.client, billingStale: true };
+  }
+
+  // 3. Force refresh explícito (pull-to-refresh) o cliente nuevo sin ningún snapshot previo
   const refresh = await withOptionalOrganizationWispro(
     input.organizationId,
     () =>
@@ -89,6 +191,7 @@ export const maybeRefreshAppClientBilling = async (input: {
         envoicing: input.client.envoicing,
         clientName: input.client.name,
         force: Boolean(input.force),
+        timeoutMs: 5_000,
       }),
   );
 
@@ -115,28 +218,54 @@ export const buildAppBillingPayload = async (input: {
   client: AppClientRow;
   organizationId: string;
   billingStale?: boolean;
+  skipPendingInvoices?: boolean;
+  force?: boolean;
 }): Promise<AppBillingPayload> => {
   const clientDto = toAppClientDto(input.client);
   const settings = await getCrmSettings(input.supabase, input.organizationId);
   const office = resolveOfficeHoursSnapshot(new Date(), settings.office_hours);
 
   let pendingInvoices: AppInvoiceDto[] = [];
-  if (clientDto.wispro_linked && clientDto.cedula) {
-    try {
-      const invoices = await withOptionalOrganizationWispro(
-        input.organizationId,
-        () =>
-          listPendingInvoicesForClient({
-            wisproClientId: clientDto.wispro_id,
-            cedula: clientDto.cedula,
-          }),
-      );
-      pendingInvoices = invoices.map(toAppInvoiceDto);
-    } catch (error) {
-      console.warn("[APP_BILLING] pending_invoices_failed", {
-        clientId: clientDto.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
+
+  if (!input.skipPendingInvoices && clientDto.wispro_linked) {
+    const snapshot = parseClientEnvoicing(input.client.envoicing);
+    if (
+      snapshot?.pendingInvoices &&
+      Array.isArray(snapshot.pendingInvoices) &&
+      snapshot.pendingInvoices.length > 0
+    ) {
+      pendingInvoices = snapshot.pendingInvoices.map((inv) => ({
+        id: String(inv.id),
+        invoice_number: inv.invoice_number ?? null,
+        state: inv.state ?? null,
+        balance_usd_formatted:
+          inv.balance_usd_formatted ??
+          (typeof inv.balance === "number" ? formatUsd(inv.balance) : "$0.00"),
+        amount_usd_formatted:
+          inv.amount_usd_formatted ??
+          (typeof inv.amount === "number" ? formatUsd(inv.amount) : "$0.00"),
+        first_due_date: inv.first_due_date ?? null,
+        period_to: inv.period_to ?? null,
+        concept: inv.concept ?? null,
+      }));
+    } else if (input.force && clientDto.cedula) {
+      // Solo hacer llamada de red bloqueante a Wispro si es un pull-to-refresh forzado explícito
+      try {
+        const invoices = await withOptionalOrganizationWispro(
+          input.organizationId,
+          () =>
+            listPendingInvoicesForClient({
+              wisproClientId: clientDto.wispro_id,
+              cedula: clientDto.cedula,
+            }),
+        );
+        pendingInvoices = invoices.map(toAppInvoiceDto);
+      } catch (error) {
+        console.warn("[APP_BILLING] pending_invoices_failed", {
+          clientId: clientDto.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 

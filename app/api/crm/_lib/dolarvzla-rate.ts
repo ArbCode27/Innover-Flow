@@ -1,8 +1,9 @@
 const LOG_PREFIX = "[DOLARVZLA_BCV]";
 /** Official BCV rates feed from dolarvzla. */
 const DEFAULT_URL = "https://rates.dolarvzla.com/bcv/current.json";
-const REQUEST_TIMEOUT_MS = 8_000;
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const REQUEST_TIMEOUT_MS = 4_000;
+/** TTL de 1 hora en memoria para evitar llamadas de red bloqueantes por cada petición */
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 export type BcvRateSnapshot = {
   /** Primary USD→Bs rate from current.usd */
@@ -169,13 +170,51 @@ const fetchFreshRate = async (): Promise<BcvRateSnapshot> => {
   return snapshot;
 };
 
-/** Returns current BCV USD rate. Uses a short in-memory cache. */
+let pendingFetch: Promise<BcvRateSnapshot> | null = null;
+
+const fetchFreshRateCoalesced = async (): Promise<BcvRateSnapshot> => {
+  if (pendingFetch) return pendingFetch;
+  pendingFetch = fetchFreshRate()
+    .catch((error) => {
+      // Si la llamada remota falla pero hay un snapshot previo en caché (aunque expirado),
+      // no rompemos el flujo y lo reusamos
+      if (cache) {
+        console.warn(`${LOG_PREFIX} fetch_failed_using_expired_cache`, {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return cache.snapshot;
+      }
+      throw error;
+    })
+    .finally(() => {
+      pendingFetch = null;
+    });
+  return pendingFetch;
+};
+
+/** 
+ * Devuelve la tasa BCV USD actual.
+ * Utiliza caché en memoria con TTL de 1 hora y patrón Stale-While-Revalidate (SWR):
+ * si el caché expiró pero existe, responde de inmediato en 0ms y revalida en background.
+ */
 export const getBcvRate = async (): Promise<BcvRateSnapshot> => {
-  if (cache && cache.expiresAt > Date.now()) {
+  const now = Date.now();
+  if (cache && cache.expiresAt > now) {
     return cache.snapshot;
   }
 
-  return fetchFreshRate();
+  // Stale-While-Revalidate: si ya tenemos datos previos, devolver de inmediato sin bloquear
+  if (cache) {
+    fetchFreshRateCoalesced().catch((error) => {
+      console.warn(`${LOG_PREFIX} background_swr_failed`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    return cache.snapshot;
+  }
+
+  // Cold-start (sin caché previo): fetch coalescente con timeout corto
+  return fetchFreshRateCoalesced();
 };
 
 export const enrichDebtWithBcv = async (debtUsd: number) => {

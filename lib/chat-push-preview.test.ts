@@ -121,15 +121,20 @@ describe("expo push tickets", () => {
     assert.deepEqual(collectUnregisteredExpoTokens(tokens, tickets), ["token-b"]);
   });
 
-  it("envía un request por token a Expo Push", async () => {
+  it("envía el lote de mensajes a Expo Push", async () => {
     const calls: unknown[] = [];
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (_url: unknown, init?: { body?: unknown }) => {
-      calls.push(JSON.parse(String(init?.body || "{}")));
+      calls.push(JSON.parse(String(init?.body || "[]")));
       return {
         ok: true,
         status: 200,
-        json: async () => ({ data: { status: "ok", id: `expo-${calls.length}` } }),
+        json: async () => ({
+          data: [
+            { status: "ok", id: "expo-1" },
+            { status: "ok", id: "expo-2" },
+          ],
+        }),
       };
     }) as typeof fetch;
 
@@ -149,9 +154,11 @@ describe("expo push tickets", () => {
           conversationId: 1,
         }),
       ]);
-      assert.equal(calls.length, 2);
-      assert.equal((calls[0] as { to: string }).to, "ExponentPushToken[one]");
-      assert.equal((calls[1] as { to: string }).to, "ExponentPushToken[two]");
+      assert.equal(calls.length, 1);
+      const batch = calls[0] as Array<{ to: string }>;
+      assert.equal(batch.length, 2);
+      assert.equal(batch[0].to, "ExponentPushToken[one]");
+      assert.equal(batch[1].to, "ExponentPushToken[two]");
       assert.deepEqual(
         tickets.map((ticket) => ticket.id),
         ["expo-1", "expo-2"],

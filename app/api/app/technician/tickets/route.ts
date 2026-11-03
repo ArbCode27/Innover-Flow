@@ -8,6 +8,9 @@ import { getAppTechnicianAuthContext } from "../../_lib/app-auth";
 import { APP_ERROR_CODES, toAppErrorResponse } from "../../_lib/app-errors";
 import { toTechnicianCasoDto } from "../../_lib/technician-caso-dto";
 
+const TECHNICIAN_TICKET_COLUMNS =
+  "id, public_id, wispro_issue_id, title, cause, status, priority, kind, client_name, client_phone, maps_url, latitude, longitude, address_text, window_start, window_end, facade_media_url, resolution_observation, employee_id, employee_name, closed_at, created_at, organization_id";
+
 export const GET = async (request: NextRequest) => {
   try {
     const session = await getAppTechnicianAuthContext(request);
@@ -25,7 +28,7 @@ export const GET = async (request: NextRequest) => {
     if (includeDone) {
       const { data, error } = await supabase
         .from("field_tickets")
-        .select("*")
+        .select(TECHNICIAN_TICKET_COLUMNS)
         .eq("organization_id", session.organizationId)
         .eq("employee_id", session.technicianId)
         .in("status", ["done", "cancelled"])

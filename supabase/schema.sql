@@ -153,6 +153,7 @@ CREATE TABLE IF NOT EXISTS public.conversations (
 );
 CREATE INDEX IF NOT EXISTS conversations_org_status_idx ON public.conversations (organization_id, status);
 CREATE INDEX IF NOT EXISTS conversations_client_idx ON public.conversations (client_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_org_client ON public.conversations (organization_id, client_id);
 CREATE INDEX IF NOT EXISTS conversations_agent_idx ON public.conversations (agent_id);
 CREATE INDEX IF NOT EXISTS conversations_updated_idx ON public.conversations (updated_at DESC);
 CREATE INDEX IF NOT EXISTS conversations_org_channel_idx
@@ -191,6 +192,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
   created_at timestamptz DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS messages_conv_idx ON public.messages (conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_conv_id_created ON public.messages (conversation_id, id DESC);
 CREATE INDEX IF NOT EXISTS messages_wa_idx ON public.messages (wa_message_id);
 CREATE INDEX IF NOT EXISTS messages_org_idx ON public.messages (organization_id);
 ALTER TABLE public.messages REPLICA IDENTITY FULL;
@@ -305,10 +307,17 @@ CREATE INDEX IF NOT EXISTS field_tickets_conversation_idx
 CREATE INDEX IF NOT EXISTS field_tickets_crm_client_idx
   ON public.field_tickets (crm_client_id)
   WHERE crm_client_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_field_tickets_client
+  ON public.field_tickets (crm_client_id, organization_id);
+CREATE INDEX IF NOT EXISTS idx_field_tickets_org_status
+  ON public.field_tickets (organization_id, status, created_at DESC);
 ALTER TABLE public.field_tickets REPLICA IDENTITY FULL;
 CREATE INDEX IF NOT EXISTS field_tickets_employee_status_idx
   ON public.field_tickets (employee_id, status)
   WHERE status IN ('open', 'scheduled');
+CREATE INDEX IF NOT EXISTS idx_field_tickets_employee_status
+  ON public.field_tickets (employee_id, status)
+  WHERE employee_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS field_tickets_employee_phone_last10_idx
   ON public.field_tickets (
     organization_id,
@@ -347,6 +356,48 @@ DROP TRIGGER IF EXISTS field_tickets_touch_updated_at ON public.field_tickets;
 CREATE TRIGGER field_tickets_touch_updated_at
 BEFORE UPDATE ON public.field_tickets
 FOR EACH ROW EXECUTE FUNCTION public.field_tickets_touch_updated_at();
+
+CREATE OR REPLACE FUNCTION public.get_supervisor_metrics(
+  p_organization_id uuid,
+  p_from_date timestamptz
+)
+RETURNS TABLE (
+  employee_id text,
+  assigned bigint,
+  pending bigint,
+  closed bigint,
+  avg_close_seconds numeric
+)
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT
+    employee_id,
+    COUNT(*) FILTER (
+      WHERE created_at >= p_from_date
+         OR (closed_at IS NOT NULL AND closed_at >= p_from_date)
+    ) AS assigned,
+    COUNT(*) FILTER (
+      WHERE status IN ('open', 'scheduled')
+    ) AS pending,
+    COUNT(*) FILTER (
+      WHERE status = 'done'
+        AND closed_at IS NOT NULL
+        AND closed_at >= p_from_date
+    ) AS closed,
+    AVG(
+      EXTRACT(EPOCH FROM (closed_at - created_at))
+    ) FILTER (
+      WHERE status = 'done'
+        AND closed_at IS NOT NULL
+        AND closed_at >= p_from_date
+        AND closed_at >= created_at
+    ) AS avg_close_seconds
+  FROM public.field_tickets
+  WHERE organization_id = p_organization_id
+    AND employee_id IS NOT NULL
+  GROUP BY employee_id;
+$$;
 
 CREATE TABLE IF NOT EXISTS public.ticket_categories (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

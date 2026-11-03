@@ -33,6 +33,7 @@ export const GET = async (request: NextRequest) => {
       client,
       organizationId: session.organizationId,
       billingStale,
+      force: forceRefresh,
     });
 
     return NextResponse.json(billing);

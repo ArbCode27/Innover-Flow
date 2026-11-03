@@ -189,7 +189,7 @@ export const ClientFormDialog = ({
 
     // Verificar si el cliente de Wispro ya cuenta con SN
     const customerSn =
-      ((selected.customer as Record<string, unknown>).sn as string)?.trim() ||
+      ((selected.customer as unknown as Record<string, unknown>).sn as string)?.trim() ||
       "";
 
     if (customerSn) {

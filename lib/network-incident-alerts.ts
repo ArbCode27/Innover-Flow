@@ -257,7 +257,7 @@ export const evaluateAndAlertPortIncidents = async ({
           );
 
           try {
-            const tickets = await sendExpoPushMessages(messages);
+            const { tickets } = await sendExpoPushMessages(messages);
             alertSent = true;
 
             // Limpieza de tokens inválidos
