@@ -31,6 +31,11 @@ import {
 } from "@/app/api/crm/_lib/payment-review-ownership";
 import { persistOutboundMessage } from "@/app/api/crm/_lib/channel-messages";
 import { buildPaymentSuccessMessage } from "@/app/crm/_lib/payment-success-message";
+import {
+  getOrganizationSaeConfig,
+  postSaePagoReporte,
+  postSaePagoConciliado,
+} from "@/app/api/crm/_lib/sae-api";
 
 type PaymentWithLatestInvoice = Awaited<
   ReturnType<typeof listCrmPayments>
@@ -600,6 +605,61 @@ export async function PATCH(req: NextRequest) {
         wisproPayment,
       });
 
+      // Si la organización tiene SAE Plus configurado, despachar el pago a SAE
+      let saePayment: unknown = null;
+      try {
+        const saeConfig = await getOrganizationSaeConfig(context.organizationId);
+        const meta = (currentPayment.receipt_metadata || {}) as Record<string, unknown>;
+        const contractId =
+          (meta.sae_contract_id as string | undefined) ||
+          (meta.id_contrato as string | undefined) ||
+          saeConfig.testContractId ||
+          currentPayment.wispro_client_id;
+
+        if (saeConfig && contractId) {
+          const bankKey = String(currentPayment.bank || "").trim();
+          const idCuba =
+            (saeConfig.bankCubaMap && saeConfig.bankCubaMap[bankKey]) ||
+            (meta.id_cuba as string | undefined) ||
+            "1";
+
+          const amountInBs =
+            Number(currentPayment.amount_raw) ||
+            Number(currentPayment.amount) ||
+            0;
+
+          const saePayload = {
+            id_contrato: String(contractId),
+            id_cuba: String(idCuba),
+            monto: amountInBs,
+            referencia: String(currentPayment.transaction_code || ""),
+            fecha: currentPayment.payment_date,
+            observacion: `Aprobado CRM #${currentPayment.id.slice(0, 8)}`,
+            cambio: meta.cambio ? String(meta.cambio) : null,
+          };
+
+          if (saeConfig.defaultMode === "conciliados") {
+            saePayment = await postSaePagoConciliado(saeConfig, saePayload);
+          } else {
+            saePayment = await postSaePagoReporte(saeConfig, {
+              ...saePayload,
+              telefono: currentPayment.phone_id || null,
+            });
+          }
+
+          await patchPaymentReceiptMetadata(supabase, currentPayment.id, {
+            sae_payment_result: saePayment,
+            sae_payment_dispatched_at: new Date().toISOString(),
+          });
+        }
+      } catch (saeError) {
+        console.warn("[CRM_PAYMENTS] sae_dispatch_soft_failed", {
+          paymentId: currentPayment.id,
+          error:
+            saeError instanceof Error ? saeError.message : String(saeError),
+        });
+      }
+
       const ownership = await applyPaymentReviewOwnership(supabase, {
         paymentId: currentPayment.id,
         conversationId:
@@ -629,6 +689,7 @@ export async function PATCH(req: NextRequest) {
         ok: true,
         payment,
         wisproPayment,
+        saePayment,
         approve_kind: decision.kind,
         remaining_amount: decision.remainingAmount,
         conversation_id: ownership.conversationId,

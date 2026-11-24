@@ -35,7 +35,7 @@ export interface OrganizationAccess extends Organization {
 }
 
 export interface OrganizationIntegration {
-  provider: "wispro" | "whatsapp" | "smartolt";
+  provider: "wispro" | "whatsapp" | "smartolt" | "sae";
   status: "disconnected" | "pending" | "connected" | "error";
   config: Record<string, unknown>;
   has_credentials: boolean;

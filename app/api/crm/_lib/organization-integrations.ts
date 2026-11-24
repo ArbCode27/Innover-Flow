@@ -1,7 +1,7 @@
 import { decryptIntegrationSecret } from "./integration-secrets";
 import { getSupabaseAdmin } from "./supabase-admin";
 
-export type IntegrationProvider = "wispro" | "whatsapp" | "smartolt";
+export type IntegrationProvider = "wispro" | "whatsapp" | "smartolt" | "sae";
 
 export const sanitizeIntegration = (row: Record<string, unknown> | null) => ({
   provider: row?.provider || null,
@@ -35,7 +35,9 @@ export const getOrganizationIntegration = async (
         ? "Wispro"
         : provider === "smartolt"
           ? "SmartOLT"
-          : "Integración";
+          : provider === "sae"
+            ? "SAE Plus"
+            : "Integración";
     throw new Error(
       `${providerName} no está conectado para esta organización`,
     );

@@ -15,6 +15,12 @@ import {
 import { getSupabaseAdmin } from "../../_lib/supabase-admin";
 import { normalizeSmartOltBaseUrl } from "@/lib/smartolt";
 
+import {
+  parseSaeSecret,
+  serializeSaeSecret,
+  verifySae,
+} from "../../_lib/sae-api";
+
 const wisproSchema = z.object({
   apiToken: z.string().trim().min(8).max(500),
   baseUrl: z
@@ -30,10 +36,24 @@ const smartOltSchema = z.object({
   baseUrl: z.string().trim().min(3, "Ingresa un subdominio o URL válida").max(300),
 });
 
-type Provider = "wispro" | "smartolt";
+const saeSchema = z.object({
+  apiToken: z.string().trim().min(4, "El Api-Token es obligatorio").max(500),
+  apiConnect: z.string().trim().min(1, "El Api-Connect (ID Empresa) es obligatorio").max(100),
+  baseUrl: z
+    .string()
+    .trim()
+    .url("URL no válida")
+    .max(300)
+    .default("https://apiservice.saeplus.com"),
+  defaultMode: z.enum(["reportes", "conciliados"]).default("reportes"),
+  bankCubaMap: z.record(z.string()).optional().default({}),
+  testContractId: z.string().trim().optional().nullable(),
+});
+
+type Provider = "wispro" | "smartolt" | "sae";
 
 const parseProvider = (value: string): Provider | null =>
-  value === "wispro" || value === "smartolt" ? value : null;
+  value === "wispro" || value === "smartolt" || value === "sae" ? value : null;
 
 const verifyWispro = async (token: string, baseUrl: string) => {
   const response = await fetch(
@@ -185,6 +205,29 @@ export const PUT = async (
       }
       config = await verifySmartOlt(parsed.data.apiKey, parsed.data.baseUrl);
       secret = parsed.data.apiKey;
+    } else if (provider === "sae") {
+      const parsed = saeSchema.safeParse(rawPayload);
+      if (!parsed.success) {
+        return NextResponse.json(
+          { error: parsed.error.issues[0]?.message || "Datos inválidos" },
+          { status: 400 },
+        );
+      }
+      const verified = await verifySae(
+        parsed.data.apiToken,
+        parsed.data.apiConnect,
+        parsed.data.baseUrl,
+      );
+      config = {
+        base_url: verified.base_url,
+        default_mode: parsed.data.defaultMode,
+        bank_cuba_map: parsed.data.bankCubaMap,
+        test_contract_id: parsed.data.testContractId || null,
+      };
+      secret = serializeSaeSecret({
+        apiToken: parsed.data.apiToken,
+        apiConnect: parsed.data.apiConnect,
+      });
     }
 
     const now = new Date().toISOString();
@@ -243,7 +286,16 @@ export const POST = async (
     const nextConfig =
       provider === "wispro"
         ? await verifyWispro(secret, String(config.base_url || ""))
-        : await verifySmartOlt(secret, String(config.base_url || ""));
+        : provider === "smartolt"
+          ? await verifySmartOlt(secret, String(config.base_url || ""))
+          : await (() => {
+              const creds = parseSaeSecret(secret);
+              return verifySae(
+                creds.apiToken,
+                creds.apiConnect,
+                String(config.base_url || ""),
+              );
+            })();
 
     const now = new Date().toISOString();
     const { data: updated, error: updateError } = await supabase

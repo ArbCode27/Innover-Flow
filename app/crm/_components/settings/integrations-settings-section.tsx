@@ -7,6 +7,7 @@ import {
   Copy,
   Link2,
   Network,
+  Receipt,
   RefreshCw,
   Server,
   Unplug,
@@ -37,6 +38,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type {
   Organization,
   OrganizationIntegration,
@@ -44,7 +52,7 @@ import type {
 } from "../../_lib/types";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 
-type Provider = "wispro" | "smartolt";
+type Provider = "wispro" | "smartolt" | "sae";
 
 const emptyIntegration = (provider: Provider): OrganizationIntegration => ({
   provider,
@@ -274,6 +282,387 @@ const WisproCard = ({
         </div>
       </CardContent>
     </Card>
+  );
+};
+
+/**
+ * Tarjeta de integración de SAE Plus (Abonados, contratos y reportes de pago).
+ */
+const SaeCard = ({
+  integration,
+  canEdit,
+  onChanged,
+}: {
+  integration: OrganizationIntegration;
+  canEdit: boolean;
+  onChanged: (integration: OrganizationIntegration) => void;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [apiToken, setApiToken] = useState("");
+  const [apiConnect, setApiConnect] = useState("");
+  const [baseUrl, setBaseUrl] = useState(
+    String(integration.config.base_url || "https://apiservice.saeplus.com"),
+  );
+  const [defaultMode, setDefaultMode] = useState<"reportes" | "conciliados">(
+    integration.config.default_mode === "conciliados" ? "conciliados" : "reportes",
+  );
+  const [bankVenezuelaCuba, setBankVenezuelaCuba] = useState(
+    String(
+      (integration.config.bank_cuba_map as Record<string, string> | undefined)
+        ?.Venezuela || "",
+    ),
+  );
+  const [bankBanplusCuba, setBankBanplusCuba] = useState(
+    String(
+      (integration.config.bank_cuba_map as Record<string, string> | undefined)
+        ?.Banplus || "",
+    ),
+  );
+  const [bankBancamigaCuba, setBankBancamigaCuba] = useState(
+    String(
+      (integration.config.bank_cuba_map as Record<string, string> | undefined)
+        ?.Bancamiga || "",
+    ),
+  );
+  const [testContractId, setTestContractId] = useState(
+    String(integration.config.test_contract_id || ""),
+  );
+
+  useEffect(() => {
+    setBaseUrl(
+      String(integration.config.base_url || "https://apiservice.saeplus.com"),
+    );
+    setDefaultMode(
+      integration.config.default_mode === "conciliados"
+        ? "conciliados"
+        : "reportes",
+    );
+    const cubaMap =
+      (integration.config.bank_cuba_map as
+        | Record<string, string>
+        | undefined) || {};
+    setBankVenezuelaCuba(cubaMap.Venezuela || "");
+    setBankBanplusCuba(cubaMap.Banplus || "");
+    setBankBancamigaCuba(cubaMap.Bancamiga || "");
+    setTestContractId(String(integration.config.test_contract_id || ""));
+  }, [integration.config]);
+
+  const isConnected = integration.status === "connected";
+
+  const handleSave = async () => {
+    if (!canEdit || isSaving) return;
+    setIsSaving(true);
+    try {
+      const bankCubaMap: Record<string, string> = {};
+      if (bankVenezuelaCuba.trim())
+        bankCubaMap.Venezuela = bankVenezuelaCuba.trim();
+      if (bankBanplusCuba.trim()) bankCubaMap.Banplus = bankBanplusCuba.trim();
+      if (bankBancamigaCuba.trim())
+        bankCubaMap.Bancamiga = bankBancamigaCuba.trim();
+
+      const response = await fetch("/api/crm/integrations/sae", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apiToken,
+          apiConnect,
+          baseUrl,
+          defaultMode,
+          bankCubaMap,
+          testContractId: testContractId.trim() || null,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "No se pudo conectar");
+      }
+      onChanged(payload.integration);
+      setApiToken("");
+      setApiConnect("");
+      setIsOpen(false);
+      toast.success("SAE Plus conectado");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo conectar");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setIsTesting(true);
+    try {
+      const response = await fetch("/api/crm/integrations/sae", {
+        method: "POST",
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "La conexión falló");
+      }
+      onChanged(payload.integration);
+      toast.success("Conexión con SAE Plus verificada");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "La conexión falló");
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    const response = await fetch("/api/crm/integrations/sae", {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const payload = await response.json();
+      toast.error(payload.error || "No se pudo desconectar");
+      return;
+    }
+    onChanged(emptyIntegration("sae"));
+    toast.success("SAE Plus desconectado");
+  };
+
+  return (
+    <Card className="col-span-1 rounded-2xl border border-black/5 bg-transparent dark:border-white/10 lg:col-span-2">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="rounded-xl bg-crm-accent-muted p-2.5 text-crm-accent">
+              <Receipt className="size-5" aria-hidden="true" />
+            </span>
+            <div>
+              <CardTitle className="text-base font-semibold">SAE Plus</CardTitle>
+              <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                Gestión de abonados, consulta de contratos, saldo en tiempo real y reporte de pagos.
+              </p>
+            </div>
+          </div>
+
+          <Badge variant={isConnected ? "default" : "secondary"}>
+            {isConnected ? <CheckCircle2 className="mr-1 size-3" /> : null}
+            {statusLabel[integration.status]}
+          </Badge>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-3">
+        {isConnected ? (
+          <div className={`space-y-1 text-xs ${CRM_SURFACES.textMuted}`}>
+            <p>
+              URL API:{" "}
+              <span className="font-mono text-foreground">
+                {String(integration.config.base_url || "")}
+              </span>
+            </p>
+            <p>
+              Modalidad de pago:{" "}
+              <span className="font-semibold text-foreground">
+                {integration.config.default_mode === "conciliados"
+                  ? "Conciliado directo (/v1/pagos/conciliados)"
+                  : "Reporte pendiente (/v1/pagos/reportes)"}
+              </span>
+            </p>
+            {integration.config.test_contract_id ? (
+              <p>
+                Contrato de prueba:{" "}
+                <span className="font-mono text-foreground">
+                  {String(integration.config.test_contract_id)}
+                </span>
+              </p>
+            ) : null}
+            <p>
+              Verificada:{" "}
+              {integration.last_verified_at
+                ? new Date(integration.last_verified_at).toLocaleString("es-VE")
+                : "Reciente"}
+            </p>
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+              <CrmButton disabled={!canEdit} size="sm">
+                <Link2 className="size-4" />
+                {isConnected ? "Reconfigurar" : "Conectar SAE Plus"}
+              </CrmButton>
+            </DialogTrigger>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Conectar SAE Plus</DialogTitle>
+                <DialogDescription>
+                  Ingresa las credenciales API de SAEplus Connect asignadas a tu empresa.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <Label htmlFor="sae-base-url">URL de la API</Label>
+                  <Input
+                    id="sae-base-url"
+                    value={baseUrl}
+                    onChange={(event) => setBaseUrl(event.target.value)}
+                    placeholder="https://apiservice.saeplus.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sae-token">Api-Token</Label>
+                  <Input
+                    id="sae-token"
+                    type="password"
+                    autoComplete="new-password"
+                    value={apiToken}
+                    onChange={(event) => setApiToken(event.target.value)}
+                    placeholder="Token API asignado a la empresa..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sae-connect">Api-Connect (ID Empresa)</Label>
+                  <Input
+                    id="sae-connect"
+                    value={apiConnect}
+                    onChange={(event) => setApiConnect(event.target.value)}
+                    placeholder="Identificador de la empresa en SAE..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sae-mode">
+                    Modalidad de reporte de pagos por defecto
+                  </Label>
+                  <Select
+                    value={defaultMode}
+                    onValueChange={(val) =>
+                      setDefaultMode(val as "reportes" | "conciliados")
+                    }>
+                    <SelectTrigger id="sae-mode">
+                      <SelectValue placeholder="Selecciona la modalidad" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="reportes">
+                        Reportar Pago (/v1/pagos/reportes - REGISTRADA)
+                      </SelectItem>
+                      <SelectItem value="conciliados">
+                        Reportar Conciliado (/v1/pagos/conciliados - PROCESADO)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                    {defaultMode === "reportes"
+                      ? "La operación queda en estatus REGISTRADA y pasa por conciliación bancaria en SAE."
+                      : "La operación se asienta directamente como PROCESADO en el estado de cuenta del abonado."}
+                  </p>
+                </div>
+                <div className="space-y-2 rounded-lg border border-black/5 p-3 dark:border-white/10">
+                  <Label className="text-xs font-semibold">
+                    Mapeo de Cuentas CUBA (id_cuba)
+                  </Label>
+                  <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                    Asocia el id_cuba de SAE a cada banco receptor para insertar el pago en la cuenta correcta.
+                  </p>
+                  <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="cuba-venezuela" className="text-[11px]">
+                        Banco Venezuela
+                      </Label>
+                      <Input
+                        id="cuba-venezuela"
+                        placeholder="id_cuba BDV"
+                        value={bankVenezuelaCuba}
+                        onChange={(e) => setBankVenezuelaCuba(e.target.value)}
+                        className="text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="cuba-banplus" className="text-[11px]">
+                        Banplus
+                      </Label>
+                      <Input
+                        id="cuba-banplus"
+                        placeholder="id_cuba Banplus"
+                        value={bankBanplusCuba}
+                        onChange={(e) => setBankBanplusCuba(e.target.value)}
+                        className="text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="cuba-bancamiga" className="text-[11px]">
+                        Bancamiga
+                      </Label>
+                      <Input
+                        id="cuba-bancamiga"
+                        placeholder="id_cuba Bancamiga"
+                        value={bankBancamigaCuba}
+                        onChange={(e) => setBankBancamigaCuba(e.target.value)}
+                        className="text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sae-test-contract">
+                    Contrato de prueba (Opcional)
+                  </Label>
+                  <Input
+                    id="sae-test-contract"
+                    value={testContractId}
+                    onChange={(event) => setTestContractId(event.target.value)}
+                    placeholder="Número o ID de contrato para pruebas autorizadas"
+                  />
+                  <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+                    Al estar sobre el entorno productivo de SAE, usa contratos autorizados para ensayos.
+                  </p>
+                </div>
+              </div>
+              <DialogFooter>
+                <CrmButton
+                  onClick={() => void handleSave()}
+                  disabled={isSaving || !apiToken || !apiConnect || !baseUrl}>
+                  {isSaving ? "Validando…" : "Validar y conectar"}
+                </CrmButton>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {isConnected ? (
+            <>
+              <CrmButton
+                size="sm"
+                variant="secondary"
+                onClick={() => void handleTest()}
+                disabled={isTesting}>
+                <RefreshCw
+                  className={`size-4 ${isTesting ? "animate-spin" : ""}`}
+                />
+                Probar
+              </CrmButton>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <CrmButton size="sm" variant="ghost" disabled={!canEdit}>
+                    <Unplug className="size-4" />
+                    Desconectar
+                  </CrmButton>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>¿Desconectar SAE Plus?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      El CRM dejará de consultar abonados y saldos en tiempo real con estas credenciales.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => void handleDisconnect()}>
+                      Desconectar
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
   );
 };
 
@@ -549,6 +938,7 @@ export const IntegrationsSettingsSection = ({
   const [integrations, setIntegrations] = useState<Record<Provider, OrganizationIntegration>>({
     wispro: emptyIntegration("wispro"),
     smartolt: emptyIntegration("smartolt"),
+    sae: emptyIntegration("sae"),
   });
   const canEdit = organizationRole === "owner" || organizationRole === "admin";
 
@@ -567,10 +957,16 @@ export const IntegrationsSettingsSection = ({
   useEffect(() => {
     void loadIntegration("wispro");
     void loadIntegration("smartolt");
+    void loadIntegration("sae");
   }, [loadIntegration]);
 
   const handleChanged = (integration: OrganizationIntegration) => {
-    if (integration.provider !== "wispro" && integration.provider !== "smartolt") return;
+    if (
+      integration.provider !== "wispro" &&
+      integration.provider !== "smartolt" &&
+      integration.provider !== "sae"
+    )
+      return;
     setIntegrations((current) => ({
       ...current,
       [integration.provider]: integration,
@@ -588,6 +984,11 @@ export const IntegrationsSettingsSection = ({
       <CardContent className="grid gap-5">
         <WisproCard
           integration={integrations.wispro}
+          canEdit={canEdit}
+          onChanged={handleChanged}
+        />
+        <SaeCard
+          integration={integrations.sae}
           canEdit={canEdit}
           onChanged={handleChanged}
         />
