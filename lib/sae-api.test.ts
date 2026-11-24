@@ -10,6 +10,7 @@ import {
   getSaeAbonadoSaldo,
   getSaeAbonadoServicios,
   getSaeAbonadoEstadoCuenta,
+  getSaeCuentasBancarias,
   type SaeConfig,
 } from "./sae.ts";
 
@@ -40,7 +41,6 @@ describe("SAE Plus API Client", () => {
     baseUrl: "https://apiservice.saeplus.com",
     apiToken: "test_token_xyz",
     apiConnect: "EMP_001",
-    defaultMode: "reportes",
   };
 
   it("envía encabezados requeridos Api-Token y Api-Connect en verifySae", async () => {
@@ -141,7 +141,7 @@ describe("SAE Plus API Client", () => {
     try {
       const res = await postSaePagoReporte(fakeConfig, {
         id_contrato: "20440",
-        id_cuba: "1",
+        id_cuba: "CUBA03615DDD64E39434",
         monto: 1350.5,
         referencia: "0052147885",
         fecha: "2026-11-23",
@@ -154,7 +154,7 @@ describe("SAE Plus API Client", () => {
       assert.equal(res.data.resultado, "ok");
       assert.match(capturedUrl, /\/v1\/pagos\/reportes$/);
       assert.equal(capturedBody.id_contrato, "20440");
-      assert.equal(capturedBody.id_cuba, "1");
+      assert.equal(capturedBody.id_cuba, "CUBA03615DDD64E39434");
       assert.equal(capturedBody.monto, 1350.5);
       assert.equal(capturedBody.referencia, "0052147885");
       assert.equal(capturedBody.fecha, "2026-11-23");
@@ -189,7 +189,7 @@ describe("SAE Plus API Client", () => {
     try {
       const res = await postSaePagoConciliado(fakeConfig, {
         id_contrato: "20440",
-        id_cuba: "2",
+        id_cuba: "CUBA15DA2D6051B58185",
         monto: 2377.85,
         referencia: "0077441258",
         fecha: "2026-11-23",
@@ -201,9 +201,48 @@ describe("SAE Plus API Client", () => {
       assert.equal(res.data.resultado, "ok");
       assert.match(capturedUrl, /\/v1\/pagos\/conciliados$/);
       assert.equal(capturedBody.id_contrato, "20440");
-      assert.equal(capturedBody.id_cuba, "2");
+      assert.equal(capturedBody.id_cuba, "CUBA15DA2D6051B58185");
       assert.equal(capturedBody.monto, 2377.85);
       assert.equal(capturedBody.referencia, "0077441258");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("consulta el catálogo de cuentas bancarias", async () => {
+    let capturedUrl = "";
+    let capturedHeaders: Record<string, string> = {};
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      capturedUrl = String(url);
+      capturedHeaders = (init?.headers as Record<string, string>) || {};
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: {
+            resultado: "ok",
+            info: [
+              {
+                id_cuba: "CUBA03615DDD64E39434",
+                numero_cuenta: "01020258240000276070",
+                banco: "VENEZUELA",
+              },
+            ],
+          },
+        }),
+      } as Response;
+    }) as typeof fetch;
+
+    try {
+      const cuentas = await getSaeCuentasBancarias(fakeConfig);
+      assert.equal(cuentas.length, 1);
+      assert.equal(cuentas[0].id_cuba, "CUBA03615DDD64E39434");
+      assert.match(capturedUrl, /\/v1\/catalogos\/cuentas-bancarias$/);
+      assert.equal(capturedHeaders["Api-Token"], fakeConfig.apiToken);
+      assert.equal(capturedHeaders["Api-Connect"], fakeConfig.apiConnect);
     } finally {
       globalThis.fetch = originalFetch;
     }

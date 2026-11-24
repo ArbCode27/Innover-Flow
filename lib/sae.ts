@@ -1,3 +1,5 @@
+import { parseSaeCuentasBancarias, type SaeCuentaBancaria } from "./sae-cuentas.ts";
+
 export class SaeApiError extends Error {
   readonly status: number;
   readonly code?: string;
@@ -19,8 +21,6 @@ export interface SaeConfig {
   baseUrl: string;
   apiToken: string;
   apiConnect: string;
-  defaultMode?: "reportes" | "conciliados";
-  bankCubaMap?: Record<string, string>;
   testContractId?: string | null;
 }
 
@@ -424,6 +424,24 @@ export const getSaeAbonadoPagos = async (
     config,
     `/v1/abonados/${encodeURIComponent(abonadoId)}/pagos${queryString ? `?${queryString}` : ""}`,
   );
+};
+
+export const getSaeCuentasBancarias = async (
+  config: SaeConfig,
+): Promise<SaeCuentaBancaria[]> => {
+  const payload = await saeRequest<unknown>(
+    config,
+    "/v1/catalogos/cuentas-bancarias",
+  );
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "success" in payload &&
+    (payload as { success?: unknown }).success === false
+  ) {
+    throw new SaeApiError("SAE Plus no devolvió las cuentas bancarias", 502);
+  }
+  return parseSaeCuentasBancarias(payload);
 };
 
 export const postSaePagoReporte = async (

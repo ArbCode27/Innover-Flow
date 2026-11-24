@@ -23,6 +23,7 @@ import {
   type PaymentsDateRange,
 } from "./payments-filters";
 import { PaymentsStats } from "./payments-stats";
+import { PaymentsSaeConcileDialog } from "./payments-sae-concile-dialog";
 import { PaymentsTable } from "./payments-table";
 
 const PAGE_SIZE = 25;
@@ -82,6 +83,8 @@ export const PaymentsView = ({
   const [payments, setPayments] = useState<CrmPayment[]>([]);
   const [banks, setBanks] = useState<string[]>([]);
   const [bankStats, setBankStats] = useState<CrmPaymentBankStat[]>([]);
+  const [saeConnected, setSaeConnected] = useState(false);
+  const [concilePayment, setConcilePayment] = useState<CrmPayment | null>(null);
   const [counts, setCounts] = useState<CrmPaymentStatusCounts>(EMPTY_COUNTS);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -124,6 +127,7 @@ export const PaymentsView = ({
           counts?: CrmPaymentStatusCounts;
           banks?: string[];
           bankStats?: CrmPaymentBankStat[];
+          sae_connected?: boolean;
         };
 
         if (!response.ok || !payload.ok) {
@@ -141,6 +145,7 @@ export const PaymentsView = ({
         setCounts(payload.counts || EMPTY_COUNTS);
         setBanks(payload.banks || []);
         setBankStats(payload.bankStats || []);
+        setSaeConnected(Boolean(payload.sae_connected));
         setError(null);
       } catch (loadError) {
         setError(
@@ -394,6 +399,48 @@ export const PaymentsView = ({
     void handlePaymentAction(paymentId, "reject");
   };
 
+  const handleConcileSae = (paymentId: string) => {
+    const payment = payments.find((item) => item.id === paymentId) ?? null;
+    setConcilePayment(payment);
+  };
+
+  const handleRetrySae = async (paymentId: string) => {
+    setUpdatingId(paymentId);
+    setError(null);
+    try {
+      const response = await fetch(`/api/crm/payments/${paymentId}/sae`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "registrar" }),
+      });
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        error?: string;
+        payment?: CrmPayment;
+      };
+      if (!response.ok || !payload.ok || !payload.payment) {
+        throw new Error(payload.error || "No se pudo registrar el pago en SAE");
+      }
+      reconcilePaymentRow(payload.payment);
+      if (payload.payment.sae?.stage === "registrada") {
+        toast.success("Pago registrado en SAE");
+        return;
+      }
+      toast.warning(
+        payload.payment.sae?.error || "El pago sigue pendiente de registro en SAE",
+      );
+    } catch (retryError) {
+      const message =
+        retryError instanceof Error
+          ? retryError.message
+          : "No se pudo registrar el pago en SAE";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   return (
     <div className={`crm-scrollbar min-h-0 flex-1 overflow-y-auto p-4 md:p-6`}>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -485,8 +532,11 @@ export const PaymentsView = ({
               payments={payments}
               updatingId={updatingId}
               canReviewPayments={canReviewPayments}
+              saeConnected={saeConnected}
               onApprove={handleApprove}
               onReject={handleReject}
+              onConcileSae={handleConcileSae}
+              onRetrySae={(paymentId) => void handleRetrySae(paymentId)}
               onOpenChat={onOpenClientChat}
             />
             <PaymentsPagination
@@ -499,6 +549,14 @@ export const PaymentsView = ({
           </>
         )}
       </div>
+
+      <PaymentsSaeConcileDialog
+        payment={concilePayment}
+        onOpenChange={(open) => {
+          if (!open) setConcilePayment(null);
+        }}
+        onUpdated={reconcilePaymentRow}
+      />
 
       <PaymentsExportDialog
         open={exportDialogOpen}

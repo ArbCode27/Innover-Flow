@@ -39,7 +39,7 @@ export const POST = async (req: NextRequest) => {
     const context = await getCrmAuthContext(req);
     const config = await getOrganizationSaeConfig(context.organizationId);
 
-    const targetMode = parsed.data.modo || config.defaultMode || "reportes";
+    const targetMode = parsed.data.modo || "reportes";
 
     if (targetMode === "conciliados") {
       const response = await postSaePagoConciliado(config, {

@@ -38,13 +38,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type {
   Organization,
   OrganizationIntegration,
@@ -305,27 +298,6 @@ const SaeCard = ({
   const [baseUrl, setBaseUrl] = useState(
     String(integration.config.base_url || "https://apiservice.saeplus.com"),
   );
-  const [defaultMode, setDefaultMode] = useState<"reportes" | "conciliados">(
-    integration.config.default_mode === "conciliados" ? "conciliados" : "reportes",
-  );
-  const [bankVenezuelaCuba, setBankVenezuelaCuba] = useState(
-    String(
-      (integration.config.bank_cuba_map as Record<string, string> | undefined)
-        ?.Venezuela || "",
-    ),
-  );
-  const [bankBanplusCuba, setBankBanplusCuba] = useState(
-    String(
-      (integration.config.bank_cuba_map as Record<string, string> | undefined)
-        ?.Banplus || "",
-    ),
-  );
-  const [bankBancamigaCuba, setBankBancamigaCuba] = useState(
-    String(
-      (integration.config.bank_cuba_map as Record<string, string> | undefined)
-        ?.Bancamiga || "",
-    ),
-  );
   const [testContractId, setTestContractId] = useState(
     String(integration.config.test_contract_id || ""),
   );
@@ -334,18 +306,6 @@ const SaeCard = ({
     setBaseUrl(
       String(integration.config.base_url || "https://apiservice.saeplus.com"),
     );
-    setDefaultMode(
-      integration.config.default_mode === "conciliados"
-        ? "conciliados"
-        : "reportes",
-    );
-    const cubaMap =
-      (integration.config.bank_cuba_map as
-        | Record<string, string>
-        | undefined) || {};
-    setBankVenezuelaCuba(cubaMap.Venezuela || "");
-    setBankBanplusCuba(cubaMap.Banplus || "");
-    setBankBancamigaCuba(cubaMap.Bancamiga || "");
     setTestContractId(String(integration.config.test_contract_id || ""));
   }, [integration.config]);
 
@@ -355,13 +315,6 @@ const SaeCard = ({
     if (!canEdit || isSaving) return;
     setIsSaving(true);
     try {
-      const bankCubaMap: Record<string, string> = {};
-      if (bankVenezuelaCuba.trim())
-        bankCubaMap.Venezuela = bankVenezuelaCuba.trim();
-      if (bankBanplusCuba.trim()) bankCubaMap.Banplus = bankBanplusCuba.trim();
-      if (bankBancamigaCuba.trim())
-        bankCubaMap.Bancamiga = bankBancamigaCuba.trim();
-
       const response = await fetch("/api/crm/integrations/sae", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -369,8 +322,6 @@ const SaeCard = ({
           apiToken,
           apiConnect,
           baseUrl,
-          defaultMode,
-          bankCubaMap,
           testContractId: testContractId.trim() || null,
         }),
       });
@@ -433,7 +384,7 @@ const SaeCard = ({
             <div>
               <CardTitle className="text-base font-semibold">SAE Plus</CardTitle>
               <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-                Gestión de abonados, consulta de contratos, saldo en tiempo real y reporte de pagos.
+                Gestión de abonados, consulta de contratos y registro de pagos para conciliar después.
               </p>
             </div>
           </div>
@@ -455,12 +406,7 @@ const SaeCard = ({
               </span>
             </p>
             <p>
-              Modalidad de pago:{" "}
-              <span className="font-semibold text-foreground">
-                {integration.config.default_mode === "conciliados"
-                  ? "Conciliado directo (/v1/pagos/conciliados)"
-                  : "Reporte pendiente (/v1/pagos/reportes)"}
-              </span>
+              Cuentas: se consultan en SAE al conciliar cada pago.
             </p>
             {integration.config.test_contract_id ? (
               <p>
@@ -523,79 +469,9 @@ const SaeCard = ({
                     onChange={(event) => setApiConnect(event.target.value)}
                     placeholder="Identificador de la empresa en SAE..."
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sae-mode">
-                    Modalidad de reporte de pagos por defecto
-                  </Label>
-                  <Select
-                    value={defaultMode}
-                    onValueChange={(val) =>
-                      setDefaultMode(val as "reportes" | "conciliados")
-                    }>
-                    <SelectTrigger id="sae-mode">
-                      <SelectValue placeholder="Selecciona la modalidad" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="reportes">
-                        Reportar Pago (/v1/pagos/reportes - REGISTRADA)
-                      </SelectItem>
-                      <SelectItem value="conciliados">
-                        Reportar Conciliado (/v1/pagos/conciliados - PROCESADO)
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
                   <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-                    {defaultMode === "reportes"
-                      ? "La operación queda en estatus REGISTRADA y pasa por conciliación bancaria en SAE."
-                      : "La operación se asienta directamente como PROCESADO en el estado de cuenta del abonado."}
+                    Identifica a la empresa. SAE lo pide junto con el Api-Token en cada consulta.
                   </p>
-                </div>
-                <div className="space-y-2 rounded-lg border border-black/5 p-3 dark:border-white/10">
-                  <Label className="text-xs font-semibold">
-                    Mapeo de Cuentas CUBA (id_cuba)
-                  </Label>
-                  <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-                    Asocia el id_cuba de SAE a cada banco receptor para insertar el pago en la cuenta correcta.
-                  </p>
-                  <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-3">
-                    <div className="space-y-1">
-                      <Label htmlFor="cuba-venezuela" className="text-[11px]">
-                        Banco Venezuela
-                      </Label>
-                      <Input
-                        id="cuba-venezuela"
-                        placeholder="id_cuba BDV"
-                        value={bankVenezuelaCuba}
-                        onChange={(e) => setBankVenezuelaCuba(e.target.value)}
-                        className="text-xs"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="cuba-banplus" className="text-[11px]">
-                        Banplus
-                      </Label>
-                      <Input
-                        id="cuba-banplus"
-                        placeholder="id_cuba Banplus"
-                        value={bankBanplusCuba}
-                        onChange={(e) => setBankBanplusCuba(e.target.value)}
-                        className="text-xs"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="cuba-bancamiga" className="text-[11px]">
-                        Bancamiga
-                      </Label>
-                      <Input
-                        id="cuba-bancamiga"
-                        placeholder="id_cuba Bancamiga"
-                        value={bankBancamigaCuba}
-                        onChange={(e) => setBankBancamigaCuba(e.target.value)}
-                        className="text-xs"
-                      />
-                    </div>
-                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="sae-test-contract">

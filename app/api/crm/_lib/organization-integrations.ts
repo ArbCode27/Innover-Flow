@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptIntegrationSecret } from "./integration-secrets";
 import { getSupabaseAdmin } from "./supabase-admin";
 
@@ -12,6 +13,29 @@ export const sanitizeIntegration = (row: Record<string, unknown> | null) => ({
   last_error: row?.last_error || null,
   updated_at: row?.updated_at || null,
 });
+
+export const isIntegrationConnected = async (
+  supabase: SupabaseClient,
+  organizationId: string,
+  provider: IntegrationProvider,
+) => {
+  const { data, error } = await supabase
+    .from("organization_integrations")
+    .select("status")
+    .eq("organization_id", organizationId)
+    .eq("provider", provider)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("[INTEGRATIONS] status_lookup_failed", {
+      provider,
+      message: error.message,
+    });
+    return false;
+  }
+
+  return data?.status === "connected";
+};
 
 export const getOrganizationIntegration = async (
   organizationId: string,

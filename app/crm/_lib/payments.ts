@@ -1,3 +1,5 @@
+import type { SaePaymentSnapshot } from "@/lib/sae-cuentas";
+
 export const CRM_PAYMENT_STATUSES = [
   "RECIBIDO",
   "EN_PROCESO",
@@ -52,6 +54,8 @@ export type CrmPayment = {
   receipt_media_url: string | null;
   /** Most recent pending Wispro invoice date (YYYY-MM-DD), when available. */
   latest_invoice_date?: string | null;
+  /** Etapa SAE del mismo comprobante: registro y luego conciliación. */
+  sae?: SaePaymentSnapshot | null;
   created_at: string;
   updated_at: string;
 };

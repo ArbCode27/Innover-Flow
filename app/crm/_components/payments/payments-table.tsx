@@ -21,15 +21,19 @@ import {
 } from "../../_lib/payments";
 import { StatusBadge } from "../shared/status-badge";
 import { EmptyState } from "../shared/empty-state";
-import { CheckCircle2, MessageCircle, Wallet, XCircle } from "lucide-react";
+import { CheckCircle2, MessageCircle, RefreshCw, Wallet, XCircle } from "lucide-react";
+import { SAE_STAGE_LABELS } from "@/lib/sae-cuentas";
 import { CrmButton } from "../shared/crm-button";
 
 interface PaymentsTableProps {
   payments: CrmPayment[];
   updatingId: string | null;
   canReviewPayments?: boolean;
+  saeConnected?: boolean;
   onApprove: (paymentId: string) => void;
   onReject: (paymentId: string) => void;
+  onConcileSae?: (paymentId: string) => void;
+  onRetrySae?: (paymentId: string) => void;
   onOpenChat?: (conversationId: number) => void;
 }
 
@@ -50,12 +54,43 @@ const PaymentValue = ({
   </span>
 );
 
+const SaeStageBadge = ({ payment }: { payment: CrmPayment }) => {
+  const stage = payment.sae?.stage;
+  if (!stage) {
+    return (
+      <span className={`text-xs italic ${CRM_SURFACES.textMuted}`}>
+        Sin registrar
+      </span>
+    );
+  }
+
+  const tone =
+    stage === "conciliada"
+      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+      : stage === "registrada"
+        ? "bg-sky-500/10 text-sky-800 dark:text-sky-200"
+        : stage === "error"
+          ? "bg-red-500/10 text-red-700 dark:text-red-300"
+          : "bg-amber-500/10 text-amber-800 dark:text-amber-200";
+
+  return (
+    <span
+      className={`inline-flex rounded-md px-2 py-1 text-[11px] font-medium ${tone}`}
+      title={payment.sae?.error || SAE_STAGE_LABELS[stage]}>
+      {SAE_STAGE_LABELS[stage]}
+    </span>
+  );
+};
+
 export const PaymentsTable = ({
   payments,
   updatingId,
   canReviewPayments = true,
+  saeConnected = false,
   onApprove,
   onReject,
+  onConcileSae,
+  onRetrySae,
   onOpenChat,
 }: PaymentsTableProps) => {
   if (!payments.length) {
@@ -73,7 +108,7 @@ export const PaymentsTable = ({
   return (
     <div className={`overflow-hidden ${CRM_TABLE}`}>
       <div className="overflow-x-auto">
-        <Table className="min-w-[1080px]">
+        <Table className="min-w-[1200px]">
           <TableHeader>
             <TableRow className={`${CRM_SURFACES.border} hover:bg-transparent`}>
               <TableHead className={CRM_SURFACES.textMuted}>Fecha</TableHead>
@@ -84,6 +119,9 @@ export const PaymentsTable = ({
               <TableHead className={CRM_SURFACES.textMuted}>Referencia</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Factura</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Estado</TableHead>
+              {saeConnected ? (
+                <TableHead className={CRM_SURFACES.textMuted}>SAE</TableHead>
+              ) : null}
               <TableHead className={CRM_SURFACES.textMuted}>Revisión</TableHead>
             </TableRow>
           </TableHeader>
@@ -93,6 +131,23 @@ export const PaymentsTable = ({
               const clientName = formatPaymentField(payment.client_name);
               const canReject = canRejectPayment(payment);
               const canApprove = isPaymentReadyForApproval(payment);
+              const saeStage = payment.sae?.stage ?? null;
+              const saeRegistered = Boolean(payment.sae?.registroAt);
+              const canConcileSae =
+                saeConnected &&
+                canReviewPayments &&
+                payment.status !== "RECHAZADO" &&
+                payment.status !== "DUPLICADO" &&
+                saeStage !== "conciliada" &&
+                saeStage !== "pendiente_contrato" &&
+                Boolean(
+                  payment.amount && payment.cedula && payment.transaction_code,
+                );
+              const canRetrySae =
+                saeConnected &&
+                canReviewPayments &&
+                !saeRegistered &&
+                (saeStage === "pendiente_contrato" || saeStage === "error");
               const approveHint = canApprove
                 ? `Aprobar pago de ${clientName}`
                 : "Faltan datos para aprobar este comprobante";
@@ -156,6 +211,11 @@ export const PaymentsTable = ({
                   <TableCell>
                     <StatusBadge status={payment.status} />
                   </TableCell>
+                  {saeConnected ? (
+                    <TableCell>
+                      <SaeStageBadge payment={payment} />
+                    </TableCell>
+                  ) : null}
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-2">
                       <CrmButton
@@ -201,6 +261,32 @@ export const PaymentsTable = ({
                             />
                             Aprobar
                           </CrmButton>
+                          {canConcileSae ? (
+                            <CrmButton
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              disabled={isUpdating}
+                              onClick={() => onConcileSae?.(payment.id)}
+                              aria-label={`Conciliar pago de ${clientName} en SAE`}>
+                              Conciliar
+                            </CrmButton>
+                          ) : null}
+                          {canRetrySae ? (
+                            <CrmButton
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              disabled={isUpdating}
+                              onClick={() => onRetrySae?.(payment.id)}
+                              aria-label={`Reintentar registro SAE de ${clientName}`}>
+                              <RefreshCw
+                                className={`size-4 ${isUpdating ? "animate-spin" : ""}`}
+                                aria-hidden="true"
+                              />
+                              Reintentar SAE
+                            </CrmButton>
+                          ) : null}
                           <CrmButton
                             type="button"
                             size="sm"
@@ -211,6 +297,35 @@ export const PaymentsTable = ({
                             <XCircle className="size-4" aria-hidden="true" />
                             Rechazar
                           </CrmButton>
+                        </>
+                      ) : canConcileSae || canRetrySae ? (
+                        <>
+                          {canConcileSae ? (
+                            <CrmButton
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              disabled={isUpdating}
+                              onClick={() => onConcileSae?.(payment.id)}
+                              aria-label={`Conciliar pago de ${clientName} en SAE`}>
+                              Conciliar
+                            </CrmButton>
+                          ) : null}
+                          {canRetrySae ? (
+                            <CrmButton
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              disabled={isUpdating}
+                              onClick={() => onRetrySae?.(payment.id)}
+                              aria-label={`Reintentar registro SAE de ${clientName}`}>
+                              <RefreshCw
+                                className={`size-4 ${isUpdating ? "animate-spin" : ""}`}
+                                aria-hidden="true"
+                              />
+                              Reintentar SAE
+                            </CrmButton>
+                          ) : null}
                         </>
                       ) : (
                         <span className={`text-xs ${CRM_SURFACES.textMuted}`}>

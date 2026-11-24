@@ -4,6 +4,7 @@ import {
   normalizeReceptorBank,
   type CrmPaymentBankStat,
 } from "@/app/crm/_lib/payments";
+import { syncSaeRegistrationIfConnected } from "./sae-payment-sync";
 
 export const CRM_PAYMENT_STATUSES = [
   "RECIBIDO",
@@ -421,13 +422,18 @@ export const applyCrmPaymentExtraction = async (
         throw new Error(error.message);
       }
 
-      return { ok: true, payment: data, duplicate: false };
+      if (!data) return { ok: true, payment: null, duplicate: false };
+      const synced = await syncSaeRegistrationIfConnected(supabase, data);
+      return { ok: true, payment: synced, duplicate: false };
     }
 
-    return insertCrmPayment(supabase, {
+    const inserted = await insertCrmPayment(supabase, {
       ...input,
       status: nextStatus,
     });
+    if (!inserted.ok || !inserted.payment || inserted.duplicate) return inserted;
+    const synced = await syncSaeRegistrationIfConnected(supabase, inserted.payment);
+    return { ...inserted, payment: synced };
   } catch (error) {
     console.error(`${LOG_PREFIX} extract_unexpected`, {
       error: error instanceof Error ? error.message : String(error),

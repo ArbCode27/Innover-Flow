@@ -22,12 +22,6 @@ export const getOrganizationSaeConfig = async (
     baseUrl,
     apiToken: credentials.apiToken,
     apiConnect: credentials.apiConnect,
-    defaultMode:
-      config.default_mode === "conciliados" ? "conciliados" : "reportes",
-    bankCubaMap:
-      config.bank_cuba_map && typeof config.bank_cuba_map === "object"
-        ? (config.bank_cuba_map as Record<string, string>)
-        : {},
     testContractId: config.test_contract_id
       ? String(config.test_contract_id).trim()
       : null,

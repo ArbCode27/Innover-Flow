@@ -45,8 +45,6 @@ const saeSchema = z.object({
     .url("URL no válida")
     .max(300)
     .default("https://apiservice.saeplus.com"),
-  defaultMode: z.enum(["reportes", "conciliados"]).default("reportes"),
-  bankCubaMap: z.record(z.string()).optional().default({}),
   testContractId: z.string().trim().optional().nullable(),
 });
 
@@ -220,8 +218,6 @@ export const PUT = async (
       );
       config = {
         base_url: verified.base_url,
-        default_mode: parsed.data.defaultMode,
-        bank_cuba_map: parsed.data.bankCubaMap,
         test_contract_id: parsed.data.testContractId || null,
       };
       secret = serializeSaeSecret({
