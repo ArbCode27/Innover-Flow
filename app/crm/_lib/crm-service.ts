@@ -7,6 +7,7 @@ import type {
   AgentStatus,
   Conversation,
   CreateClientInput,
+  UpdateClientInput,
   CreateLabelInput,
   CreateQuickReplyInput,
   CreateTicketInput,
@@ -369,6 +370,14 @@ export const crmService = {
     void existingClients;
     void organizationId;
     return mutateCrmData<Client>({ action: "createClient", ...input });
+  },
+
+  async updateClient(input: UpdateClientInput) {
+    return mutateCrmData<Client>({ action: "updateClient", ...input });
+  },
+
+  async deleteClient(clientId: number) {
+    await mutateCrmData({ action: "deleteClient", id: clientId });
   },
 
   async getClientById(clientId: number, organizationId: string) {

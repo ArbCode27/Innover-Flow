@@ -373,6 +373,17 @@ export interface CreateClientInput {
   onu?: CreateClientOnuInput | null;
 }
 
+export interface UpdateClientInput {
+  id: number;
+  name: string;
+  phone: string;
+  cedula?: string | null;
+  plan?: string | null;
+  zone?: string | null;
+  account: ClientAccountStatus;
+  app_enabled: boolean;
+}
+
 export interface BoardPortTarget {
   board: number;
   port: number;

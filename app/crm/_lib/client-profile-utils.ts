@@ -1,6 +1,13 @@
 import type { ClientAccountStatus } from "./types";
 import type { CrmBadgeTone } from "./crm-theme";
 
+export const formatClientDocument = (cedula?: string | null) => {
+  const value = cedula?.trim();
+  if (!value) return "";
+  if (/^[VEJGP]-/i.test(value)) return value.toUpperCase();
+  return `V-${value}`;
+};
+
 export const formatClientPlan = (plan: string | null) => {
   if (!plan || plan === "Sin asignar" || plan === "—") {
     return "Sin plan activo";

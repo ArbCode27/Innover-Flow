@@ -30,6 +30,7 @@ import type {
   Conversation,
   ConversationFilter,
   CreateClientInput,
+  UpdateClientInput,
   CreateLabelInput,
   CreateQuickReplyInput,
   CreateTicketInput,
@@ -1237,6 +1238,40 @@ export const useCrmData = (agent: Agent | null) => {
     toast.success(`${saved.name} agregado`);
   };
 
+  const updateClient = async (input: UpdateClientInput) => {
+    if (!agent) throw new Error("Sesión no válida");
+    const saved = await crmService.updateClient(input);
+    setData((current) => ({
+      ...current,
+      clients: current.clients.map((client) =>
+        client.id === saved.id
+          ? { ...client, ...saved, onu: saved.onu ?? client.onu ?? null }
+          : client,
+      ),
+    }));
+  };
+
+  const deleteClient = async (clientId: number) => {
+    if (!agent) throw new Error("Sesión no válida");
+    await crmService.deleteClient(clientId);
+    setData((current) => ({
+      ...current,
+      clients: current.clients.filter((client) => client.id !== clientId),
+      tickets: current.tickets.filter((ticket) => ticket.client_id !== clientId),
+      conversations: current.conversations.map((conversation) =>
+        conversation.client_id === clientId
+          ? { ...conversation, client_id: null }
+          : conversation,
+      ),
+    }));
+    setWisproSnapshotsByClientId((current) => {
+      if (!(clientId in current)) return current;
+      const next = { ...current };
+      delete next[clientId];
+      return next;
+    });
+  };
+
   const associateWisproToConversation = async (result: WisproSearchResult) => {
     if (!selectedConversation) return;
 
@@ -1583,6 +1618,8 @@ export const useCrmData = (agent: Agent | null) => {
     claimConversationForAgent,
     applyConversationClaimLocally,
     createClient,
+    updateClient,
+    deleteClient,
     associateWisproToConversation,
     unlinkWisproFromClient,
     createWisproPaymentPromise,

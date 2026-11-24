@@ -1,4 +1,6 @@
-import { Smartphone } from "lucide-react";
+"use client";
+
+import { Eye, Pencil, Smartphone, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -9,20 +11,31 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { CRM_SURFACES, CRM_TABLE } from "../../_lib/crm-theme";
+import { formatClientDocument } from "../../_lib/client-profile-utils";
 import type { Client, Ticket } from "../../_lib/types";
 import { AvatarInitials } from "../shared/avatar-initials";
+import { CrmButton } from "../shared/crm-button";
 import { StatusBadge } from "../shared/status-badge";
 
 interface ClientsTableProps {
   clients: Client[];
   tickets: Ticket[];
+  onView: (client: Client) => void;
+  onEdit: (client: Client) => void;
+  onDelete: (client: Client) => void;
 }
 
-export const ClientsTable = ({ clients, tickets }: ClientsTableProps) => {
+export const ClientsTable = ({
+  clients,
+  tickets,
+  onView,
+  onEdit,
+  onDelete,
+}: ClientsTableProps) => {
   return (
     <div className={CRM_TABLE}>
       <div className="overflow-x-auto">
-        <Table className="min-w-[860px]">
+        <Table className="min-w-[1040px]">
           <TableHeader>
             <TableRow className={`${CRM_SURFACES.border} hover:bg-transparent`}>
               <TableHead className={CRM_SURFACES.textMuted}>Cliente</TableHead>
@@ -33,6 +46,9 @@ export const ClientsTable = ({ clients, tickets }: ClientsTableProps) => {
               <TableHead className={CRM_SURFACES.textMuted}>Estado</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>App Móvil</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Tickets</TableHead>
+              <TableHead className={`text-right ${CRM_SURFACES.textMuted}`}>
+                Acciones
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -61,10 +77,8 @@ export const ClientsTable = ({ clients, tickets }: ClientsTableProps) => {
                     </TableCell>
                     <TableCell className="font-mono text-xs">
                       {client.cedula ? (
-                        <span className="bg-muted/50 px-1.5 py-0.5 rounded text-foreground">
-                          {client.cedula.startsWith("V-") || client.cedula.startsWith("E-") || client.cedula.startsWith("J-")
-                            ? client.cedula
-                            : `V-${client.cedula}`}
+                        <span className="rounded bg-muted/50 px-1.5 py-0.5 text-foreground">
+                          {formatClientDocument(client.cedula)}
                         </span>
                       ) : (
                         <span className={CRM_SURFACES.textMuted}>—</span>
@@ -109,12 +123,46 @@ export const ClientsTable = ({ clients, tickets }: ClientsTableProps) => {
                         }
                       />
                     </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-1.5">
+                        <CrmButton
+                          type="button"
+                          variant="secondary"
+                          className="h-8 px-2.5"
+                          onClick={() => onView(client)}
+                          aria-label={`Ver ${client.name}`}
+                        >
+                          <Eye className="size-3.5" aria-hidden="true" />
+                          <span className="sr-only sm:not-sr-only sm:ml-1.5">Ver</span>
+                        </CrmButton>
+                        <CrmButton
+                          type="button"
+                          variant="secondary"
+                          className="h-8 px-2.5"
+                          onClick={() => onEdit(client)}
+                          aria-label={`Editar ${client.name}`}
+                        >
+                          <Pencil className="size-3.5" aria-hidden="true" />
+                          <span className="sr-only sm:not-sr-only sm:ml-1.5">Editar</span>
+                        </CrmButton>
+                        <CrmButton
+                          type="button"
+                          variant="secondary"
+                          className="h-8 px-2.5 text-destructive hover:text-destructive"
+                          onClick={() => onDelete(client)}
+                          aria-label={`Eliminar ${client.name}`}
+                        >
+                          <Trash2 className="size-3.5" aria-hidden="true" />
+                          <span className="sr-only sm:not-sr-only sm:ml-1.5">Eliminar</span>
+                        </CrmButton>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 );
               })
             ) : (
               <TableRow className={CRM_SURFACES.border}>
-                <TableCell colSpan={8} className={`h-24 text-center ${CRM_SURFACES.textMuted}`}>
+                <TableCell colSpan={9} className={`h-24 text-center ${CRM_SURFACES.textMuted}`}>
                   Sin clientes aún.
                 </TableCell>
               </TableRow>

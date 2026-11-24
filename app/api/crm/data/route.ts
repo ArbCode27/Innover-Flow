@@ -8,7 +8,7 @@ import {
   isUniqueViolation,
   normalizeClientPhone,
 } from "@/app/crm/_lib/client-identity";
-import { createTicketId } from "@/app/crm/_lib/formatters";
+import { createTicketId, getInitials } from "@/app/crm/_lib/formatters";
 import { parseCrmAccentId } from "@/app/crm/_lib/crm-accents";
 import {
   DEFAULT_AFTER_HOURS_PAYMENTS,
@@ -78,6 +78,21 @@ const actionSchema = z.discriminatedUnion("action", [
       })
       .optional()
       .nullable(),
+  }),
+  z.object({
+    action: z.literal("updateClient"),
+    id: z.number().int().positive(),
+    name: z.string().trim().min(2).max(160),
+    phone: z.string().trim().min(8).max(30),
+    cedula: z.string().trim().max(30).optional().nullable(),
+    plan: z.string().trim().max(120).optional().nullable(),
+    zone: z.string().trim().max(120).optional().nullable(),
+    account: z.enum(["Al día", "Con deuda", "Suspendido", "Prospecto"]),
+    app_enabled: z.boolean(),
+  }),
+  z.object({
+    action: z.literal("deleteClient"),
+    id: z.number().int().positive(),
   }),
   z.object({
     action: z.literal("associateClientOnu"),
@@ -580,6 +595,106 @@ export const POST = async (request: NextRequest) => {
         }
         throw error;
       }
+    }
+
+    if (input.action === "updateClient") {
+      const { data: existing, error: existingError } = await supabase
+        .from("clients")
+        .select("id, cedula")
+        .eq("id", input.id)
+        .eq("organization_id", organizationId)
+        .maybeSingle();
+      if (existingError) throw existingError;
+      if (!existing) {
+        return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+      }
+
+      const phone = normalizeClientPhone(input.phone);
+      if (!phone) {
+        return NextResponse.json(
+          { error: "Ingresa un teléfono válido (mínimo 8 dígitos)" },
+          { status: 400 },
+        );
+      }
+
+      const rawCedula = input.cedula?.trim() || "";
+      const cedula =
+        rawCedula.replace(/^[VEJGP]-/i, "").replace(/\D/g, "") || null;
+
+      if (cedula && cedula !== existing.cedula) {
+        const { data: duplicate } = await supabase
+          .from("clients")
+          .select("id, name")
+          .eq("organization_id", organizationId)
+          .eq("cedula", cedula)
+          .neq("id", input.id)
+          .maybeSingle();
+        if (duplicate) {
+          return NextResponse.json(
+            {
+              error: `Ya existe un cliente con la cédula ${cedula} (${duplicate.name})`,
+            },
+            { status: 409 },
+          );
+        }
+      }
+
+      const name = input.name.trim();
+      const { data, error } = await supabase
+        .from("clients")
+        .update({
+          name,
+          phone,
+          cedula,
+          plan: input.plan?.trim() || null,
+          zone: input.zone?.trim() || null,
+          account: input.account,
+          app_enabled: input.app_enabled,
+          initials: getInitials(name),
+        })
+        .eq("id", input.id)
+        .eq("organization_id", organizationId)
+        .select("*")
+        .single();
+
+      if (error) {
+        if (isUniqueViolation(error)) {
+          return NextResponse.json(
+            { error: "Ya existe un cliente con este teléfono o cédula" },
+            { status: 409 },
+          );
+        }
+        throw error;
+      }
+
+      const { data: onu } = await supabase
+        .from("client_onus")
+        .select("*")
+        .eq("client_id", input.id)
+        .maybeSingle();
+
+      return NextResponse.json({ data: { ...data, onu: onu ?? null } });
+    }
+
+    if (input.action === "deleteClient") {
+      const { data: existing, error: existingError } = await supabase
+        .from("clients")
+        .select("id, name")
+        .eq("id", input.id)
+        .eq("organization_id", organizationId)
+        .maybeSingle();
+      if (existingError) throw existingError;
+      if (!existing) {
+        return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+      }
+
+      const { error } = await supabase
+        .from("clients")
+        .delete()
+        .eq("id", input.id)
+        .eq("organization_id", organizationId);
+      if (error) throw error;
+      return NextResponse.json({ success: true, data: { id: input.id } });
     }
 
     if (input.action === "associateClientOnu") {
