@@ -663,8 +663,6 @@ const SaeCard = ({
     </Card>
   );
 };
-  );
-};
 
 /**
  * Tarjeta de integración de SmartOLT (Diagnóstico óptico y monitoreo PON).
