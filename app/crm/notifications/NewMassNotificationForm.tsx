@@ -288,7 +288,7 @@ export const NewMassNotificationForm = ({
         <DialogHeader className="p-6 pb-4 border-b border-border/50">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <Radio className="size-5 text-emerald-500 animate-pulse" />
-            Difusión masiva por Smart OLT
+            Difusión masiva
           </DialogTitle>
           <DialogDescription className="text-xs">
             Segmenta el envío seleccionando múltiples combinaciones de Tarjetas (Boards),

@@ -50,8 +50,7 @@ export const OpenClientChatDialog = ({
             <span className="font-medium text-slate-800 dark:text-slate-200">
               {clientName}
             </span>{" "}
-            se registró correctamente en Wispro. ¿Quieres abrir el chat del
-            cliente?
+            se registró correctamente. ¿Quieres abrir el chat del cliente?
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

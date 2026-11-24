@@ -28,7 +28,7 @@ export const saeService = {
 
     const payload = await response.json();
     if (!response.ok) {
-      throw new Error(payload.error || "Error al consultar SAE Plus");
+      throw new Error(payload.error || "No se pudo consultar la ficha");
     }
 
     return (payload.data as SaeAbonadoListItem[]) || [];
@@ -76,7 +76,7 @@ export const saeService = {
 
     const body = await response.json();
     if (!response.ok) {
-      throw new Error(body.error || "No se pudo reportar el pago en SAE Plus");
+      throw new Error(body.error || "No se pudo reportar el pago");
     }
 
     return body.data;

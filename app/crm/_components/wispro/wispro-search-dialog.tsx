@@ -113,7 +113,7 @@ export const WisproSearchDialog = ({
         setError("No se encontró ningún cliente con esa búsqueda.");
       }
     } catch (searchError) {
-      setError(getErrorMessage(searchError, "Error al consultar Wispro"));
+      setError(getErrorMessage(searchError, "No se pudo consultar la ficha"));
     } finally {
       setIsSearching(false);
     }
@@ -153,11 +153,11 @@ export const WisproSearchDialog = ({
         <DialogContent className={CRM_DIALOG}>
           <DialogHeader>
             <DialogTitle>
-              {isRelink ? "Cambiar vinculación Wispro" : "Buscar cliente en Wispro"}
+              {isRelink ? "Cambiar vinculación" : "Buscar cliente"}
             </DialogTitle>
             <DialogDescription className={CRM_SURFACES.textMuted}>
               {isRelink
-                ? "Busca por cédula, RIF o nombre. El chat se mantiene; solo se actualiza la ficha Wispro."
+                ? "Busca por cédula, RIF o nombre. El chat se mantiene; solo se actualiza la ficha."
                 : "Consulta por cédula/RIF (solo números) o por nombre y asocia el resultado a la conversación activa."}
             </DialogDescription>
           </DialogHeader>
@@ -193,7 +193,7 @@ export const WisproSearchDialog = ({
                 <CrmButton
                   type="submit"
                   disabled={isSearching || isAssociating}
-                  aria-label="Buscar en Wispro">
+                  aria-label="Buscar cliente">
                   <Search className="size-4" aria-hidden="true" />
                   Buscar
                 </CrmButton>
@@ -201,7 +201,7 @@ export const WisproSearchDialog = ({
             </div>
           </form>
 
-          {isSearching ? <LoadingState label="Consultando Wispro..." /> : null}
+          {isSearching ? <LoadingState label="Buscando..." /> : null}
 
           {error ? (
             <p className="text-sm text-red-600 dark:text-red-300" role="alert">
@@ -210,7 +210,7 @@ export const WisproSearchDialog = ({
           ) : null}
 
           {results.length ? (
-            <ul className="space-y-2" aria-label="Resultados de Wispro">
+            <ul className="space-y-2" aria-label="Resultados">
               {results.map((result) => (
                 <li key={result.customer.id}>
                   <button
@@ -276,7 +276,7 @@ export const WisproSearchDialog = ({
         <AlertDialogContent className={CRM_DIALOG}>
           <AlertDialogHeader>
             <AlertDialogTitle className={CRM_SURFACES.textPrimary}>
-              ¿Reemplazar vinculación Wispro?
+              ¿Reemplazar vinculación?
             </AlertDialogTitle>
             <AlertDialogDescription className={CRM_SURFACES.textMuted}>
               Vas a reemplazar{" "}
@@ -291,7 +291,7 @@ export const WisproSearchDialog = ({
                   ? ` (${pendingResult.customer.national_identification_number})`
                   : ""}
               </strong>
-              . El chat se mantiene; solo cambia la ficha Wispro.
+              . El chat se mantiene; solo cambia la ficha.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -184,7 +184,7 @@ export const ConversationPanel = ({
       toast.error(
         error instanceof Error
           ? error.message
-          : "No se pudo desvincular Wispro",
+          : "No se pudo desvincular el cliente",
       );
     } finally {
       setIsUnlinkingWispro(false);
@@ -376,10 +376,10 @@ export const ConversationPanel = ({
         <AlertDialogContent className={CRM_DIALOG}>
           <AlertDialogHeader>
             <AlertDialogTitle className={CRM_SURFACES.textPrimary}>
-              ¿Desvincular de Wispro?
+              ¿Desvincular cliente?
             </AlertDialogTitle>
             <AlertDialogDescription className={CRM_SURFACES.textMuted}>
-              Se quitará la ficha Wispro de{" "}
+              Se quitará la ficha de{" "}
               <span className={`font-medium ${CRM_SURFACES.textPrimary}`}>
                 {clientDisplayName}
               </span>
@@ -415,7 +415,7 @@ export const ConversationPanel = ({
               ¿Crear promesa de pago (48h)?
             </AlertDialogTitle>
             <AlertDialogDescription className={CRM_SURFACES.textMuted}>
-              Se creará una promesa de pago en Wispro para{" "}
+              Se creará una promesa de pago para{" "}
               <span className={`font-medium ${CRM_SURFACES.textPrimary}`}>
                 {clientDisplayName}
               </span>

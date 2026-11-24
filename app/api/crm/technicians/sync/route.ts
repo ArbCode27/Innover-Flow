@@ -30,7 +30,7 @@ export const POST = async (request: NextRequest) => {
 
     if (integ?.status !== "connected" || !integ.credentials_encrypted) {
       return NextResponse.json(
-        { error: "Conecta Wispro en Integraciones antes de sincronizar." },
+        { error: "Conecta la facturación en Integraciones antes de sincronizar." },
         { status: 400 },
       );
     }

@@ -134,7 +134,7 @@ export const ClientFormDialog = ({
         setSearchError("No se encontró ningún cliente con esa búsqueda.");
       }
     } catch (error) {
-      setSearchError(getErrorMessage(error, "Error al consultar Wispro"));
+      setSearchError(getErrorMessage(error, "No se pudo consultar la ficha"));
     } finally {
       setIsSearching(false);
     }
@@ -148,7 +148,7 @@ export const ClientFormDialog = ({
 
   const handleCopyCredentials = async () => {
     if (!selectedFields || !generatedPassword) {
-      toast.error("Selecciona un cliente de Wispro para generar las credenciales");
+      toast.error("Selecciona un cliente para generar las credenciales");
       return;
     }
 
@@ -178,12 +178,12 @@ export const ClientFormDialog = ({
   const handleProceedToSmartOlt = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selected || !selectedFields) {
-      toast.error("Busca y selecciona un cliente de Wispro");
+      toast.error("Busca y selecciona un cliente");
       return;
     }
 
     if (!previewPhone) {
-      toast.error("Wispro no trajo teléfono. Ingresa el número móvil");
+      toast.error("No hay teléfono. Ingresa el número móvil");
       return;
     }
 
@@ -222,18 +222,18 @@ export const ClientFormDialog = ({
 
       if (!res.ok || !data.success || !data.onu) {
         setOnuSearchError(
-          data.message || `No se encontró la ONU con SN ${cleanSn} en SmartOLT`,
+          data.message || `No se encontró la ONU con SN ${cleanSn}`,
         );
         return;
       }
 
       setFoundOnu(data.onu as SmartOltOnuDetail);
-      toast.success("ONU encontrada en Smart OLT", {
+      toast.success("ONU encontrada", {
         description: `Board ${data.onu.board}, Port ${data.onu.port} (${data.onu.status})`,
       });
     } catch (err) {
       setOnuSearchError(
-        err instanceof Error ? err.message : "Error al consultar Smart OLT",
+        err instanceof Error ? err.message : "Error al consultar el equipo",
       );
     } finally {
       setIsSearchingOnu(false);
@@ -279,7 +279,7 @@ export const ClientFormDialog = ({
       toast.success("Cliente registrado con éxito", {
         description:
           includeOnu && foundOnu
-            ? `Vinculado a Smart OLT (Board ${foundOnu.board}, Port ${foundOnu.port})`
+            ? `Equipo vinculado (Board ${foundOnu.board}, Port ${foundOnu.port})`
             : "Ficha creada en CRM",
       });
 
@@ -303,11 +303,10 @@ export const ClientFormDialog = ({
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Smartphone className="size-5 text-blue-500" aria-hidden="true" />
-                Nuevo cliente · Búsqueda Wispro
+                Nuevo cliente
               </DialogTitle>
               <DialogDescription className={CRM_SURFACES.textMuted}>
-                La ficha inicial se toma de Wispro. Busca por cédula, RIF o nombre y
-                confirma los datos.
+                Busca por cédula, RIF o nombre y confirma los datos.
               </DialogDescription>
             </DialogHeader>
 
@@ -328,14 +327,14 @@ export const ClientFormDialog = ({
                     <CrmButton
                       type="submit"
                       disabled={isSearching}
-                      aria-label="Buscar en Wispro">
+                      aria-label="Buscar cliente">
                       <Search className="size-4" aria-hidden="true" />
                       Buscar
                     </CrmButton>
                   </div>
                 </div>
 
-                {isSearching ? <LoadingState label="Consultando Wispro..." /> : null}
+                {isSearching ? <LoadingState label="Buscando..." /> : null}
 
                 {searchError ? (
                   <p className="text-sm text-red-600 dark:text-red-300" role="alert">
@@ -344,7 +343,7 @@ export const ClientFormDialog = ({
                 ) : null}
 
                 {results.length ? (
-                  <ul className="space-y-2" aria-label="Resultados de Wispro">
+                  <ul className="space-y-2" aria-label="Resultados">
                     {results.map((result) => (
                       <li key={result.customer.id}>
                         <button
@@ -390,13 +389,13 @@ export const ClientFormDialog = ({
                       </dd>
                     </div>
                     <div>
-                      <dt className={`text-xs ${CRM_SURFACES.textMuted}`}>Zona Wispro</dt>
+                      <dt className={`text-xs ${CRM_SURFACES.textMuted}`}>Zona</dt>
                       <dd className={`text-sm ${CRM_SURFACES.textSecondary}`}>
                         {selectedFields.zone}
                       </dd>
                     </div>
                     <div>
-                      <dt className={`text-xs ${CRM_SURFACES.textMuted}`}>Teléfono Wispro</dt>
+                      <dt className={`text-xs ${CRM_SURFACES.textMuted}`}>Teléfono</dt>
                       <dd className={`font-mono text-sm ${CRM_SURFACES.textSecondary}`}>
                         {selectedFields.phone || "No registrado"}
                       </dd>
@@ -424,7 +423,7 @@ export const ClientFormDialog = ({
                       className={`${CRM_SURFACES.border} ${CRM_SURFACES.input}`}
                     />
                     <span className="text-xs text-muted-foreground">
-                      Wispro no trajo teléfono. Es obligatorio para la app.
+                      No hay teléfono registrado. Es obligatorio para la app.
                     </span>
                   </div>
                 ) : null}
@@ -514,7 +513,7 @@ export const ClientFormDialog = ({
               )}
               {selected ? (
                 <CrmButton type="submit" disabled={isSubmitting}>
-                  Continuar a Smart OLT
+                  Continuar
                 </CrmButton>
               ) : null}
             </DialogFooter>
@@ -525,10 +524,10 @@ export const ClientFormDialog = ({
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Wifi className="size-5 text-emerald-500" aria-hidden="true" />
-                Vincular equipo Smart OLT (ONU)
+                Vincular equipo
               </DialogTitle>
               <DialogDescription className={CRM_SURFACES.textMuted}>
-                Consulta el estado de red de la ONU en Smart OLT usando su Número de Serie (SN).
+                Consulta el estado de red de la ONU con su número de serie.
               </DialogDescription>
             </DialogHeader>
 
@@ -536,7 +535,7 @@ export const ClientFormDialog = ({
             {selectedFields ? (
               <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
                 <div>
-                  <span className="text-muted-foreground block text-[11px]">Cliente Wispro:</span>
+                  <span className="text-muted-foreground block text-[11px]">Cliente:</span>
                   <p className="font-semibold text-foreground text-sm">
                     {selectedFields.name}
                   </p>
@@ -567,17 +566,17 @@ export const ClientFormDialog = ({
                 <CrmButton
                   type="submit"
                   disabled={isSearchingOnu || isSubmitting}
-                  aria-label="Buscar en Smart OLT"
+                  aria-label="Buscar equipo"
                   className="shrink-0">
                   <Search className="size-4 mr-1" aria-hidden="true" />
                   Buscar
                 </CrmButton>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Se consultará el endpoint <code>get_onus_details_by_sn</code> de Smart OLT.
+                Se buscará el equipo por número de serie.
               </p>
 
-              {isSearchingOnu ? <LoadingState label="Consultando Smart OLT..." /> : null}
+              {isSearchingOnu ? <LoadingState label="Buscando equipo..." /> : null}
 
               {onuSearchError ? (
                 <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-2.5 text-xs text-red-600 dark:text-red-400">
@@ -636,7 +635,7 @@ export const ClientFormDialog = ({
 
                 {foundOnu.name || foundOnu.zone ? (
                   <p className="text-xs text-muted-foreground pt-0.5">
-                    Registrado en Smart OLT: <strong>{foundOnu.name}</strong>
+                    Registrado en la red: <strong>{foundOnu.name}</strong>
                     {foundOnu.zone ? ` (${foundOnu.zone})` : null}
                   </p>
                 ) : null}
@@ -652,7 +651,7 @@ export const ClientFormDialog = ({
                 disabled={isSubmitting}
                 className="w-full sm:w-auto">
                 <ArrowLeft className="size-4 mr-1" aria-hidden="true" />
-                Volver a Wispro
+                Volver
               </CrmButton>
 
               <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2">
@@ -662,7 +661,7 @@ export const ClientFormDialog = ({
                   onClick={() => handleFinalSubmit(false)}
                   disabled={isSubmitting}
                   className="w-full sm:w-auto text-muted-foreground hover:text-foreground">
-                  Omitir Smart OLT
+                  Omitir equipo
                 </CrmButton>
 
                 <CrmButton

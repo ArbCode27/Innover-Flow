@@ -57,7 +57,7 @@ const getWisproConfig = () => {
   if (organizationConfig) {
     if (!organizationConfig.token) {
       throw new WisproApiError(
-        "Wispro no está conectado para esta organización",
+        "La facturación no está conectada para esta organización",
         { status: 503, code: "config" },
       );
     }
@@ -69,7 +69,7 @@ const getWisproConfig = () => {
     process.env.WISPRO_API_KEY?.trim();
   if (!token) {
     throw new WisproApiError(
-      "WISPRO_API_TOKEN no está configurado en el servidor",
+      "La facturación no está configurada en el servidor",
       { status: 503, code: "config" },
     );
   }
@@ -97,7 +97,7 @@ export const withOrganizationWispro = async <T>(
   if (error) throw error;
   if (!data?.credentials_encrypted || data.status !== "connected") {
     throw new WisproApiError(
-      "Wispro no está conectado para esta organización",
+      "La facturación no está conectada para esta organización",
       { status: 503, code: "config" },
     );
   }
@@ -202,7 +202,7 @@ const wisproGet = async (
       path,
       error: error instanceof Error ? error.message : error,
     });
-    throw new WisproApiError("No se pudo conectar con Wispro", {
+    throw new WisproApiError("No se pudo conectar con la facturación", {
       status: 502,
       code: "upstream",
       cause: error,
@@ -220,7 +220,7 @@ const wisproGet = async (
         path,
         status: response.status,
       });
-      throw new WisproApiError("La respuesta de Wispro no es válida", {
+      throw new WisproApiError("La respuesta de facturación no es válida", {
         status: 502,
         code: "invalid_response",
       });
@@ -229,7 +229,7 @@ const wisproGet = async (
 
   if (response.status === 401 || response.status === 403) {
     console.error(`${LOG_PREFIX} unauthorized`, { path, status: response.status });
-    throw new WisproApiError("Wispro rechazó las credenciales de API", {
+    throw new WisproApiError("Las credenciales de facturación fueron rechazadas", {
       status: 502,
       code: "unauthorized",
     });
@@ -240,7 +240,7 @@ const wisproGet = async (
       path,
       status: response.status,
     });
-    throw new WisproApiError("No se pudo consultar Wispro. Intenta de nuevo.", {
+    throw new WisproApiError("No se pudo consultar la ficha. Intenta de nuevo.", {
       status: 502,
       code: "upstream",
     });
@@ -260,7 +260,7 @@ export const getClientCurrentAccount = async (
   const clientId = wisproClientId.trim();
   if (!clientId) {
     throw new WisproApiError(
-      "wispro_id es requerido para consultar cuenta corriente",
+      "El identificador del cliente es requerido para consultar la cuenta",
       { status: 400, code: "invalid_response" },
     );
   }
@@ -273,7 +273,7 @@ export const getClientCurrentAccount = async (
   const row = extractDataObject(payload);
   if (!row) {
     throw new WisproApiError(
-      "Wispro no devolvió la cuenta corriente del cliente",
+      "No se devolvió la cuenta corriente del cliente",
       { status: 502, code: "invalid_response" },
     );
   }
@@ -315,7 +315,7 @@ const wisproPost = async (
       body: requestBodyLog,
       error: error instanceof Error ? error.message : error,
     });
-    throw new WisproApiError("No se pudo conectar con Wispro", {
+    throw new WisproApiError("No se pudo conectar con la facturación", {
       status: 502,
       code: "upstream",
       cause: error,
@@ -334,7 +334,7 @@ const wisproPost = async (
         body: requestBodyLog,
         status: response.status,
       });
-      throw new WisproApiError("La respuesta de Wispro no es válida", {
+      throw new WisproApiError("La respuesta de facturación no es válida", {
         status: 502,
         code: "invalid_response",
       });
@@ -347,7 +347,7 @@ const wisproPost = async (
       body: requestBodyLog,
       status: response.status,
     });
-    throw new WisproApiError("Wispro rechazó las credenciales de API", {
+    throw new WisproApiError("Las credenciales de facturación fueron rechazadas", {
       status: 502,
       code: "unauthorized",
     });
@@ -360,7 +360,7 @@ const wisproPost = async (
       "message" in payload &&
       typeof (payload as { message?: unknown }).message === "string"
         ? String((payload as { message: string }).message)
-        : "No se pudo completar la operación en Wispro";
+        : "No se pudo completar la operación";
 
     console.error(`${LOG_PREFIX} post_upstream_error`, {
       path,
@@ -381,7 +381,7 @@ const wisproPost = async (
         "message" in payload &&
         typeof (payload as { message?: unknown }).message === "string"
           ? String((payload as { message: string }).message)
-          : "Wispro no pudo completar la operación";
+          : "No se pudo completar la operación";
 
       console.error(`${LOG_PREFIX} post_body_error`, {
         path,
@@ -1161,7 +1161,7 @@ export const createPaymentPromise = async (
 
   const id = String(row?.id || "").trim();
   if (!id) {
-    throw new WisproApiError("Wispro no devolvió la promesa de pago", {
+    throw new WisproApiError("No se devolvió la promesa de pago", {
       status: 502,
       code: "invalid_response",
     });
@@ -1194,7 +1194,7 @@ export const createWisproInvoicingPayment = async (
 ): Promise<WisproInvoicingPayment> => {
   const clientId = input.clientId.trim();
   if (!clientId) {
-    throw new WisproApiError("El cliente Wispro es requerido", {
+    throw new WisproApiError("El cliente es requerido", {
       status: 400,
       code: "invalid_response",
     });
@@ -1232,7 +1232,7 @@ export const createWisproInvoicingPayment = async (
 
   const id = String(row?.id || "").trim();
   if (!id) {
-    throw new WisproApiError("Wispro no devolvió el pago creado", {
+    throw new WisproApiError("No se devolvió el pago creado", {
       status: 502,
       code: "invalid_response",
     });
@@ -1303,7 +1303,7 @@ export const createPaymentPromiseForClient = async (input: {
         ok: false,
         created: false,
         reason: "no_contract",
-        error: "No se encontró un contrato Wispro para este cliente",
+        error: "No se encontró un contrato para este cliente",
       };
     }
 
@@ -1408,7 +1408,7 @@ export const fetchInvoicingForWisproClientId = async (
 }> => {
   const wisproId = wisproClientId.trim();
   if (!wisproId) {
-    throw new WisproApiError("wispro_id es requerido", {
+    throw new WisproApiError("El identificador del cliente es requerido", {
       status: 400,
       code: "invalid_response",
     });
@@ -1474,7 +1474,7 @@ export const getWisproClientById = async (
 ): Promise<WisproCustomer> => {
   const clientId = wisproClientId.trim();
   if (!clientId) {
-    throw new WisproApiError("wispro_id es requerido", {
+    throw new WisproApiError("El identificador del cliente es requerido", {
       status: 400,
       code: "invalid_response",
     });
@@ -1485,7 +1485,7 @@ export const getWisproClientById = async (
   const customer = normalizeWisproCustomer(record);
 
   if (!customer) {
-    throw new WisproApiError("No se encontró el cliente en Wispro", {
+    throw new WisproApiError("No se encontró el cliente", {
       status: 404,
       code: "invalid_response",
     });

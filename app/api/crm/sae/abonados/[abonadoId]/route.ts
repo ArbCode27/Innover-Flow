@@ -57,7 +57,7 @@ export const GET = async (
 
     if (!detalleRes && !saldoRes) {
       return NextResponse.json(
-        { error: "No se encontró el abonado en SAE Plus" },
+        { error: "No se encontró el abonado" },
         { status: 404 },
       );
     }
@@ -83,7 +83,7 @@ export const GET = async (
       );
     }
     const message =
-      error instanceof Error ? error.message : "Error al consultar abonado SAE";
+      error instanceof Error ? error.message : "No se pudo consultar el abonado";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 };

@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
     if (error instanceof Error && error.message.startsWith("Missing environment")) {
       console.error(`${LOG_PREFIX} config_missing`, { linkId, message: error.message });
       return NextResponse.json(
-        { error: "Integración Wispro no configurada en el servidor", linkId },
+        { error: "La facturación no está configurada", linkId },
         { status: 503 },
       );
     }

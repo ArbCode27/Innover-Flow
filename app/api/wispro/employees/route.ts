@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
     console.error("[API_WISPRO_EMPLOYEES_ERROR]", error);
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Error al obtener empleados de Wispro",
+        error: error instanceof Error ? error.message : "No se pudieron obtener los técnicos",
       },
       { status: 500 },
     );

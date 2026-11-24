@@ -110,16 +110,16 @@ export const PaymentsSaeConcileDialog = ({
         onUpdated(payload.payment);
       }
       if (!response.ok || !payload.ok || !payload.payment) {
-        throw new Error(payload.error || "No se pudo conciliar en SAE");
+        throw new Error(payload.error || "No se pudo conciliar el pago");
       }
       onUpdated(payload.payment);
       onOpenChange(false);
-      toast.success("Pago conciliado en SAE");
+      toast.success("Pago conciliado");
     } catch (saveError) {
       toast.error(
         saveError instanceof Error
           ? saveError.message
-          : "No se pudo conciliar en SAE",
+          : "No se pudo conciliar el pago",
       );
     } finally {
       setIsSaving(false);
@@ -130,10 +130,10 @@ export const PaymentsSaeConcileDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Conciliar pago en SAE</DialogTitle>
+          <DialogTitle>Conciliar pago</DialogTitle>
           <DialogDescription>
-            Elige la cuenta receptora registrada en SAE. Si el comprobante aún
-            no fue reportado, primero se registra y después se concilia.
+            Elige la cuenta receptora. Si el comprobante aún no fue reportado,
+            primero se registra y después se concilia.
           </DialogDescription>
         </DialogHeader>
         {payment ? (
@@ -172,7 +172,7 @@ export const PaymentsSaeConcileDialog = ({
                 <SelectTrigger
                   id="sae-cuenta"
                   className="w-full"
-                  aria-label="Cuenta receptora en SAE">
+                  aria-label="Cuenta receptora">
                   <SelectValue
                     placeholder={
                       isLoading ? "Cargando cuentas…" : "Selecciona una cuenta"
@@ -195,7 +195,7 @@ export const PaymentsSaeConcileDialog = ({
               ) : null}
               {!isLoading && !error && cuentas.length === 0 ? (
                 <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-                  SAE no devolvió cuentas bancarias para esta empresa.
+                  No hay cuentas bancarias para esta empresa.
                 </p>
               ) : null}
             </div>
@@ -213,7 +213,7 @@ export const PaymentsSaeConcileDialog = ({
             type="button"
             onClick={() => void handleConcile()}
             disabled={isSaving || isLoading || !selectedId}
-            aria-label="Confirmar conciliación en SAE">
+            aria-label="Confirmar conciliación">
             {isSaving ? "Conciliando…" : "Conciliar"}
           </CrmButton>
         </DialogFooter>

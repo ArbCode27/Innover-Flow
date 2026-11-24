@@ -36,7 +36,7 @@ export const TechniciansTable = ({
         <EmptyState
           icon={HardHat}
           title="No hay técnicos registrados"
-          description="Crea un técnico o sincroniza desde Wispro para empezar."
+          description="Crea un técnico o sincroniza el catálogo para empezar."
         />
       </div>
     );

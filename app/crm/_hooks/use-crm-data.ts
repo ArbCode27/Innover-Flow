@@ -197,7 +197,7 @@ export const useCrmData = (agent: Agent | null) => {
         toast.success(
           incoming.name
             ? `Nova vinculó a ${incoming.name}`
-            : "Nova vinculó el cliente Wispro",
+            : "Nova vinculó al cliente",
         );
       }
     },
@@ -1389,7 +1389,7 @@ export const useCrmData = (agent: Agent | null) => {
       return next;
     });
 
-    toast.success("Cliente desvinculado de Wispro");
+    toast.success("Cliente desvinculado");
   };
 
   const createWisproPaymentPromise = async () => {

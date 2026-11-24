@@ -19,7 +19,7 @@ export const SAE_STAGE_LABELS: Record<SaePaymentStage, string> = {
   pendiente_cuenta: "Pendiente cuenta",
   registrada: "Registrado",
   conciliada: "Conciliado",
-  error: "Error SAE",
+  error: "Error",
 };
 
 export interface SaePaymentSnapshot {

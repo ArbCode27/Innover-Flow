@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
           return NextResponse.json(
             {
               error:
-                "El cliente no está vinculado a Wispro. Vincúlalo antes de crear la promesa.",
+                "El cliente no está vinculado. Vincúlalo antes de crear la promesa.",
             },
             { status: 400 },
           );
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
 
     if (!wisproId && !cedula) {
       return NextResponse.json(
-        { error: "Se requiere un cliente vinculado a Wispro o una cédula" },
+        { error: "Se requiere un cliente vinculado o una cédula" },
         { status: 400 },
       );
     }
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("Missing environment")) {
       return NextResponse.json(
-        { error: "Integración Wispro no configurada en el servidor" },
+        { error: "La facturación no está configurada" },
         { status: 503 },
       );
     }

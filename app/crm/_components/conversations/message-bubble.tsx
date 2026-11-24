@@ -85,7 +85,7 @@ export const MessageBubble = memo(({
     if (!canRegisterManualPayment) {
       toast.error(
         manualPaymentBlockReason ||
-          "Vincula el cliente a Wispro antes de registrar el pago",
+          "Vincula el cliente antes de registrar el pago",
       );
       return;
     }

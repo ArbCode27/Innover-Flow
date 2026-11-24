@@ -85,12 +85,12 @@ export const ConversationDetails = ({
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-amber-700 dark:text-amber-300">
-              Número desconocido. Busca al cliente en Wispro para asociarlo a esta
+              Número desconocido. Busca al cliente para asociarlo a esta
               conversación.
             </p>
             {onOpenWispro ? (
               <CrmButton type="button" variant="secondary" size="sm" onClick={onOpenWispro}>
-                Buscar en Wispro
+                Buscar cliente
               </CrmButton>
             ) : null}
           </div>

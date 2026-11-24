@@ -170,7 +170,7 @@ export const TechniciansView = ({ organizationRole }: TechniciansViewProps) => {
         throw new Error(payload.error || "No se pudo sincronizar");
       }
       toast.success(
-        `Sincronizados ${payload.synced ?? 0} técnicos desde Wispro`,
+        `Sincronizados ${payload.synced ?? 0} técnicos`,
       );
       await loadTechnicians();
     } catch (error) {
@@ -209,7 +209,7 @@ export const TechniciansView = ({ organizationRole }: TechniciansViewProps) => {
                 className={`mr-2 size-4 ${isSyncing ? "animate-spin" : ""}`}
                 aria-hidden="true"
               />
-              {isSyncing ? "Sincronizando…" : "Sync Wispro"}
+              {isSyncing ? "Sincronizando…" : "Sincronizar"}
             </CrmButton>
             <CrmButton
               type="button"

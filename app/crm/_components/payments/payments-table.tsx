@@ -120,7 +120,7 @@ export const PaymentsTable = ({
               <TableHead className={CRM_SURFACES.textMuted}>Factura</TableHead>
               <TableHead className={CRM_SURFACES.textMuted}>Estado</TableHead>
               {saeConnected ? (
-                <TableHead className={CRM_SURFACES.textMuted}>SAE</TableHead>
+                <TableHead className={CRM_SURFACES.textMuted}>Registro</TableHead>
               ) : null}
               <TableHead className={CRM_SURFACES.textMuted}>Revisión</TableHead>
             </TableRow>
@@ -268,7 +268,7 @@ export const PaymentsTable = ({
                               variant="secondary"
                               disabled={isUpdating}
                               onClick={() => onConcileSae?.(payment.id)}
-                              aria-label={`Conciliar pago de ${clientName} en SAE`}>
+                              aria-label={`Conciliar pago de ${clientName}`}>
                               Conciliar
                             </CrmButton>
                           ) : null}
@@ -279,12 +279,12 @@ export const PaymentsTable = ({
                               variant="secondary"
                               disabled={isUpdating}
                               onClick={() => onRetrySae?.(payment.id)}
-                              aria-label={`Reintentar registro SAE de ${clientName}`}>
+                              aria-label={`Reintentar registro de ${clientName}`}>
                               <RefreshCw
                                 className={`size-4 ${isUpdating ? "animate-spin" : ""}`}
                                 aria-hidden="true"
                               />
-                              Reintentar SAE
+                              Reintentar
                             </CrmButton>
                           ) : null}
                           <CrmButton
@@ -307,7 +307,7 @@ export const PaymentsTable = ({
                               variant="secondary"
                               disabled={isUpdating}
                               onClick={() => onConcileSae?.(payment.id)}
-                              aria-label={`Conciliar pago de ${clientName} en SAE`}>
+                              aria-label={`Conciliar pago de ${clientName}`}>
                               Conciliar
                             </CrmButton>
                           ) : null}
@@ -318,12 +318,12 @@ export const PaymentsTable = ({
                               variant="secondary"
                               disabled={isUpdating}
                               onClick={() => onRetrySae?.(payment.id)}
-                              aria-label={`Reintentar registro SAE de ${clientName}`}>
+                              aria-label={`Reintentar registro de ${clientName}`}>
                               <RefreshCw
                                 className={`size-4 ${isUpdating ? "animate-spin" : ""}`}
                                 aria-hidden="true"
                               />
-                              Reintentar SAE
+                              Reintentar
                             </CrmButton>
                           ) : null}
                         </>

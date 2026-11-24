@@ -89,7 +89,7 @@ export const POST = async (req: NextRequest) => {
       );
     }
     const message =
-      error instanceof Error ? error.message : "Error al registrar pago en SAE";
+      error instanceof Error ? error.message : "No se pudo registrar el pago";
     console.error("[SAE_PAYMENT] failed", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -136,11 +136,11 @@ export const ClientProfileSection = ({
         status: freshOnu.status,
       }));
 
-      toast.success("Señal de Smart OLT actualizada", {
+      toast.success("Señal actualizada", {
         description: `Board ${freshOnu.board}, Port ${freshOnu.port} · ${freshOnu.status} (${freshOnu.signal ? `${freshOnu.signal} dBm` : "N/D"})`,
       });
     } catch (err) {
-      toast.error("Error al consultar Smart OLT", {
+      toast.error("Error al consultar el equipo", {
         description: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -165,13 +165,13 @@ export const ClientProfileSection = ({
       const data = await res.json();
 
       if (!res.ok || !data.success || !data.onu) {
-        setSearchError(data.message || `No se encontró la ONU ${cleanSn} en Smart OLT`);
+        setSearchError(data.message || `No se encontró la ONU ${cleanSn}`);
         return;
       }
 
       setFoundOnu(data.onu as SmartOltOnuDetail);
     } catch (err) {
-      setSearchError(err instanceof Error ? err.message : "Error al consultar Smart OLT");
+      setSearchError(err instanceof Error ? err.message : "Error al consultar el equipo");
     } finally {
       setIsSearching(false);
     }
@@ -247,7 +247,7 @@ export const ClientProfileSection = ({
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               <span
                 className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${CRM_BADGE_TONES.emerald}`}>
-                Wispro
+                Vinculado
               </span>
               {onOpenWispro ? (
                 <CrmButton
@@ -278,7 +278,7 @@ export const ClientProfileSection = ({
               size="sm"
               className="mt-1 h-7 px-2 text-[11px]"
               onClick={onOpenWispro}>
-              Vincular Wispro
+              Vincular cliente
             </CrmButton>
           ) : null}
         </div>
@@ -359,7 +359,7 @@ export const ClientProfileSection = ({
             className="w-full"
             disabled={isCreatingPaymentPromise}
             onClick={onCreatePaymentPromise}
-            aria-label="Crear promesa de pago por 48 horas en Wispro">
+            aria-label="Crear promesa de pago por 48 horas">
             {isCreatingPaymentPromise
               ? "Creando promesa..."
               : "Crear promesa 48h"}
@@ -404,7 +404,7 @@ export const ClientProfileSection = ({
               </div>
             </div>
 
-            {isSearching ? <LoadingState label="Consultando Smart OLT..." /> : null}
+            {isSearching ? <LoadingState label="Buscando equipo..." /> : null}
 
             {searchError ? (
               <p className="text-xs text-red-500">{searchError}</p>

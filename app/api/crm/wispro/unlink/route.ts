@@ -45,13 +45,13 @@ export async function POST(req: NextRequest) {
     if (error instanceof Error && error.message.startsWith("Missing environment")) {
       console.error(error.message);
       return NextResponse.json(
-        { error: "Integración Wispro no configurada en el servidor" },
+        { error: "La facturación no está configurada" },
         { status: 503 },
       );
     }
 
     const message =
-      error instanceof Error ? error.message : "No se pudo desvincular Wispro";
+      error instanceof Error ? error.message : "No se pudo desvincular el cliente";
 
     console.error("Wispro unlink error:", error);
     return NextResponse.json({ error: message }, { status: 500 });

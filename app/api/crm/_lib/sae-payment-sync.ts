@@ -124,7 +124,7 @@ const loadSaeConfig = async (organizationId: string) => {
     return await getOrganizationSaeConfig(organizationId);
   } catch (error) {
     throw new SaePaymentSyncError(
-      error instanceof Error ? error.message : "SAE Plus no está conectado",
+      error instanceof Error ? error.message : "La facturación no está conectada",
       409,
     );
   }
@@ -157,11 +157,11 @@ export const registerSaePayment = async (
     return payment;
   }
   if (blockedStatus(payment)) {
-    throw new SaePaymentSyncError("Este pago no se puede registrar en SAE", 409);
+    throw new SaePaymentSyncError("Este pago no se puede registrar", 409);
   }
   if (!isReadyToReport(payment)) {
     throw new SaePaymentSyncError(
-      "Faltan monto, referencia, fecha o cédula para registrar el pago en SAE",
+      "Faltan monto, referencia, fecha o cédula para registrar el pago",
     );
   }
 
@@ -184,8 +184,8 @@ export const registerSaePayment = async (
         sae_registro_result: null,
         sae_registro_error:
           (found.data || []).length > 1
-            ? "Hay más de un contrato en SAE para esta cédula. No se registró el pago."
-            : "No se encontró un contrato en SAE para esta cédula.",
+            ? "Hay más de un contrato para esta cédula. No se registró el pago."
+            : "No se encontró un contrato para esta cédula.",
       });
     }
     idContrato = picked.idContrato;
@@ -211,8 +211,8 @@ export const registerSaePayment = async (
           sae_registro_result: null,
           sae_registro_error:
             matches.length > 1
-              ? "Hay varias cuentas de ese banco en SAE. Elige la cuenta al conciliar."
-              : "Ninguna cuenta de SAE coincide con el banco del comprobante. Elige la cuenta al conciliar.",
+              ? "Hay varias cuentas de ese banco. Elige la cuenta al conciliar."
+              : "Ninguna cuenta coincide con el banco del comprobante. Elige la cuenta al conciliar.",
         });
       }
     }
@@ -256,7 +256,7 @@ export const registerSaePayment = async (
       sae_registro_attempt_at: attemptAt,
       sae_registro_error: saeErrorMessage(
         error,
-        "No se pudo registrar el pago en SAE",
+        "No se pudo registrar el pago",
       ),
     });
   }
@@ -297,7 +297,7 @@ export const conciliateSaePayment = async (
   idCuba: string,
 ) => {
   if (blockedStatus(payment)) {
-    throw new SaePaymentSyncError("Este pago no se puede conciliar en SAE", 409);
+    throw new SaePaymentSyncError("Este pago no se puede conciliar", 409);
   }
 
   const initial = readSaePaymentSnapshot(payment.receipt_metadata);
@@ -308,7 +308,7 @@ export const conciliateSaePayment = async (
   const cuenta = catalog.find((item) => item.id_cuba === idCuba.trim());
   if (!cuenta) {
     throw new SaePaymentSyncError(
-      "La cuenta elegida no está en el catálogo de SAE",
+      "La cuenta elegida no está en el catálogo",
     );
   }
 
@@ -321,7 +321,7 @@ export const conciliateSaePayment = async (
     const afterRegister = readSaePaymentSnapshot(current.receipt_metadata);
     if (!afterRegister.registroAt) {
       throw new SaePaymentSyncError(
-        afterRegister.error || "El pago no quedó registrado en SAE",
+        afterRegister.error || "El pago no quedó registrado",
         409,
         current,
       );
@@ -332,11 +332,11 @@ export const conciliateSaePayment = async (
   const idContrato = readSaePaymentSnapshot(current.receipt_metadata).idContrato;
   if (!facts.monto || !facts.referencia || !/^\d{4}-\d{2}-\d{2}$/.test(facts.fecha)) {
     throw new SaePaymentSyncError(
-      "Faltan monto, referencia o fecha para conciliar el pago en SAE",
+      "Faltan monto, referencia o fecha para conciliar el pago",
     );
   }
   if (!idContrato) {
-    throw new SaePaymentSyncError("El pago no tiene contrato SAE");
+    throw new SaePaymentSyncError("El pago no tiene contrato");
   }
 
   try {
@@ -360,7 +360,7 @@ export const conciliateSaePayment = async (
       sae_conciliado_error: null,
     });
   } catch (error) {
-    const message = saeErrorMessage(error, "No se pudo conciliar el pago en SAE");
+    const message = saeErrorMessage(error, "No se pudo conciliar el pago");
     const updated = await writeSaeMetadata(supabase, current.id, {
       sae_stage: "error",
       sae_id_cuba: cuenta.id_cuba,

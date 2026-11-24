@@ -189,7 +189,7 @@ export const getManualPaymentBlockReason = (
 ) => {
   const identity = resolveLinkedClientIdentity(client);
   if (!identity.linked) {
-    return "Vincula el cliente a Wispro antes de registrar el pago";
+    return "Vincula el cliente antes de registrar el pago";
   }
   if (!identity.cedula) {
     return "El cliente vinculado no tiene cédula en la base de datos";

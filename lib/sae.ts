@@ -221,7 +221,7 @@ export const saeRequest = async <T>(
     const errorMsg =
       payload && typeof payload === "object" && "error" in payload
         ? String(payload.error)
-        : `SAE Plus respondió con estado HTTP ${response.status}`;
+        : `La facturación respondió con estado HTTP ${response.status}`;
     throw new SaeApiError(errorMsg, response.status);
   }
 
@@ -250,7 +250,7 @@ export const verifySae = async (
 
   if (response.status === 401 || response.status === 403) {
     throw new SaeApiError(
-      "SAE Plus rechazó las credenciales (Api-Token o Api-Connect inválidos)",
+      "Se rechazaron las credenciales (Api-Token o Api-Connect inválidos)",
       response.status,
     );
   }
@@ -262,7 +262,7 @@ export const verifySae = async (
         ? String(errorPayload.error)
         : `HTTP ${response.status}`;
     throw new SaeApiError(
-      `No se pudo validar la conexión con SAE Plus: ${detail}`,
+      `No se pudo validar la conexión: ${detail}`,
       response.status,
     );
   }
@@ -439,7 +439,7 @@ export const getSaeCuentasBancarias = async (
     "success" in payload &&
     (payload as { success?: unknown }).success === false
   ) {
-    throw new SaeApiError("SAE Plus no devolvió las cuentas bancarias", 502);
+    throw new SaeApiError("No se devolvieron las cuentas bancarias", 502);
   }
   return parseSaeCuentasBancarias(payload);
 };

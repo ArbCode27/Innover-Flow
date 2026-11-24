@@ -54,10 +54,10 @@ const FEATURE_ITEMS: FeatureCardItem[] = [
     id: "pagos",
     title: "Conciliación de Pagos con IA",
     description:
-      "Lectura inteligente de comprobantes bancarios, conversión con tasa BCV del día, matching automático con facturas pendientes y registro directo en Wispro Cloud.",
+      "Lectura inteligente de comprobantes bancarios, conversión con tasa BCV del día, matching automático con facturas pendientes y registro en el sistema de facturación.",
     icon: Receipt,
     accentColor: "bg-emerald-500/10 text-emerald-500 dark:bg-emerald-500/20",
-    badge: "Wispro Sync",
+    badge: "Facturación",
   },
   {
     id: "productividad",

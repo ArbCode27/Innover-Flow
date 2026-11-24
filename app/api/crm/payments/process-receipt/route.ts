@@ -218,7 +218,7 @@ export async function POST(req: NextRequest) {
 
     if (!linkedIdentity.linked || !linkedIdentity.wisproId) {
       return NextResponse.json(
-        { error: "Vincula el cliente a Wispro antes de registrar el pago" },
+        { error: "Vincula el cliente antes de registrar el pago" },
         { status: 409 },
       );
     }
@@ -227,7 +227,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "El cliente vinculado no tiene cédula en la base de datos. Vuelve a asociarlo a Wispro.",
+            "El cliente vinculado no tiene cédula. Vuelve a asociarlo.",
         },
         { status: 409 },
       );

@@ -437,7 +437,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Faltan cédula, monto, banco, referencia o cliente Wispro para aprobar",
+            "Faltan cédula, monto, banco, referencia o cliente vinculado para aprobar",
         },
         { status: 400 },
       );
@@ -445,7 +445,7 @@ export async function PATCH(req: NextRequest) {
 
     if (!currentPayment.wispro_client_id) {
       return NextResponse.json(
-        { error: "El pago no tiene cliente Wispro vinculado" },
+        { error: "El pago no tiene un cliente vinculado" },
         { status: 400 },
       );
     }
@@ -653,7 +653,7 @@ export async function PATCH(req: NextRequest) {
       const message =
         approvalError instanceof Error
           ? approvalError.message
-          : "No se pudo registrar el pago en Wispro";
+          : "No se pudo registrar el pago";
 
       const payment = await markCrmPaymentApprovalError(supabase, {
         paymentId: currentPayment.id,

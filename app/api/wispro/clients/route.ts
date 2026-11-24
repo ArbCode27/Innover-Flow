@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     console.error("[API_WISPRO_CLIENTS_ERROR]", error);
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Error al buscar clientes en Wispro",
+        error: error instanceof Error ? error.message : "No se pudo buscar el cliente",
       },
       { status: 500 },
     );

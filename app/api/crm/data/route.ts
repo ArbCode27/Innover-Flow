@@ -499,7 +499,7 @@ export const POST = async (request: NextRequest) => {
         if (existingByWispro) {
           return NextResponse.json(
             {
-              error: `Ya existe un cliente vinculado a este registro de Wispro (${existingByWispro.name})`,
+              error: `Ya existe un cliente vinculado a este registro (${existingByWispro.name})`,
             },
             { status: 409 },
           );
@@ -521,7 +521,7 @@ export const POST = async (request: NextRequest) => {
           return NextResponse.json(
             {
               error:
-                "Wispro no trajo un teléfono válido. Ingresa el número móvil del cliente.",
+                "No hay un teléfono válido. Ingresa el número móvil del cliente.",
             },
             { status: 400 },
           );
@@ -589,7 +589,7 @@ export const POST = async (request: NextRequest) => {
           isUniqueViolation(error as { code?: string; message?: string })
         ) {
           return NextResponse.json(
-            { error: "Ya existe un cliente con este teléfono, cédula o Wispro ID" },
+            { error: "Ya existe un cliente con este teléfono o cédula" },
             { status: 409 },
           );
         }

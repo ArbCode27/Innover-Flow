@@ -35,7 +35,7 @@ export const GET = async (req: NextRequest) => {
     const message =
       error instanceof Error
         ? error.message
-        : "No se pudieron consultar las cuentas de SAE";
+        : "No se pudieron consultar las cuentas";
     console.error("[SAE_CUENTAS] failed", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }

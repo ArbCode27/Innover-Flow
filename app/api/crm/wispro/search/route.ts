@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
 
     console.error(`${LOG_PREFIX} unexpected_error`, error);
     return NextResponse.json(
-      { error: "Error interno al consultar Wispro" },
+      { error: "No se pudo consultar la ficha" },
       { status: 500 },
     );
   }

@@ -400,7 +400,7 @@ export const SettingsView = ({
                 Mensaje de pago aprobado
               </h3>
               <p className={`mt-1 text-sm ${CRM_SURFACES.textMuted}`}>
-                Se envía automáticamente al cliente cuando Wispro confirma el pago.
+                Se envía automáticamente al cliente cuando se confirma el pago.
                 Usa <code>{"{{mes}}"}</code> para insertar el mes del pago.
               </p>
             </div>

@@ -27,7 +27,7 @@ export const PaymentsStats = ({ total, counts }: PaymentsStatsProps) => (
     <MetricCard
       title="Aprobados"
       value={counts.APROBADO}
-      description="verificados en Wispro"
+      description="verificados"
       icon={CheckCircle2}
       tone="green"
     />

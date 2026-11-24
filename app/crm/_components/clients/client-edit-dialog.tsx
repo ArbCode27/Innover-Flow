@@ -112,8 +112,8 @@ export const ClientEditDialog = ({
         <DialogHeader>
           <DialogTitle className={CRM_SURFACES.textPrimary}>Editar cliente</DialogTitle>
           <DialogDescription className={CRM_SURFACES.textMuted}>
-            Actualiza la ficha local. Plan y estado de cuenta pueden volver a
-            sincronizarse desde Wispro.
+            Actualiza la ficha. El plan y el estado de cuenta pueden volver a
+            sincronizarse con la facturación.
           </DialogDescription>
         </DialogHeader>
 

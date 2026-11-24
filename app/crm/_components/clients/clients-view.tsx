@@ -84,7 +84,7 @@ export const ClientsView = ({
         <div>
           <h2 className={`text-xl font-semibold md:text-2xl ${CRM_SURFACES.textPrimary}`}>Clientes</h2>
           <p className={`text-sm ${CRM_SURFACES.textMuted}`}>
-            Suscriptores vinculados a Wispro
+            Suscriptores de la organización
           </p>
         </div>
         <CrmButton type="button" onClick={() => setIsDialogOpen(true)} className="w-full sm:w-auto">

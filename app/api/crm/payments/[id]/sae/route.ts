@@ -23,7 +23,7 @@ const bodySchema = z
     if (value.action === "conciliar" && !value.id_cuba) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Selecciona la cuenta de SAE",
+        message: "Selecciona la cuenta",
         path: ["id_cuba"],
       });
     }
@@ -94,7 +94,7 @@ export const POST = async (
       );
     }
     const message =
-      error instanceof Error ? error.message : "No se pudo actualizar el pago en SAE";
+      error instanceof Error ? error.message : "No se pudo actualizar el pago";
     console.error("[SAE_PAYMENT_ACTION] failed", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -1960,7 +1960,7 @@ export const NetworkMonitoringView = ({
                               className="h-7 text-xs px-2"
                               disabled={isDiagnosing}
                               onClick={() => void handleDiagnoseClient(client)}
-                              title="Consultar estado en vivo directo a Smart OLT">
+                              title="Consultar estado en vivo">
                               <RefreshCw
                                 className={cn(
                                   "size-3 mr-1 text-emerald-500",
@@ -2010,14 +2010,14 @@ export const NetworkMonitoringView = ({
           ========================================================================= */}
       <section
         ref={portsSectionRef}
-        aria-label="Puertos Smart OLT y rango de salud"
+        aria-label="Puertos y rango de salud"
         className={`${CRM_SURFACES.card} rounded-3xl border ${CRM_SURFACES.border} overflow-hidden shadow-xs`}>
         <div className="p-4 border-b border-border/40 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
               <h2
                 className={`text-base font-semibold ${CRM_SURFACES.textPrimary}`}>
-                Puertos Smart OLT y Rango de Salud
+                Puertos y rango de salud
               </h2>
               <Badge variant="outline" className="text-[11px] py-0">
                 {portsSummary.length} puertos

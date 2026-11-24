@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
 
     if (!String(client.wispro_id || "").trim()) {
       return NextResponse.json(
-        { error: "El cliente no está vinculado a Wispro" },
+        { error: "El cliente no está vinculado" },
         { status: 400 },
       );
     }

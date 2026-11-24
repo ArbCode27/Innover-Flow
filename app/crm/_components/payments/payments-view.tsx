@@ -419,21 +419,21 @@ export const PaymentsView = ({
         payment?: CrmPayment;
       };
       if (!response.ok || !payload.ok || !payload.payment) {
-        throw new Error(payload.error || "No se pudo registrar el pago en SAE");
+        throw new Error(payload.error || "No se pudo registrar el pago");
       }
       reconcilePaymentRow(payload.payment);
       if (payload.payment.sae?.stage === "registrada") {
-        toast.success("Pago registrado en SAE");
+        toast.success("Pago registrado");
         return;
       }
       toast.warning(
-        payload.payment.sae?.error || "El pago sigue pendiente de registro en SAE",
+        payload.payment.sae?.error || "El pago sigue pendiente de registro",
       );
     } catch (retryError) {
       const message =
         retryError instanceof Error
           ? retryError.message
-          : "No se pudo registrar el pago en SAE";
+          : "No se pudo registrar el pago";
       setError(message);
       toast.error(message);
     } finally {

@@ -75,7 +75,7 @@ export const POST = async (req: NextRequest) => {
       );
     }
     const message =
-      error instanceof Error ? error.message : "Error al consultar SAE Plus";
+      error instanceof Error ? error.message : "No se pudo consultar la ficha";
     console.error("[SAE_SEARCH] failed", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }

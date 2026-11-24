@@ -162,7 +162,7 @@ export const OnuStatusCard = ({
       <div className={cn("rounded-xl border border-dashed border-border/70 p-3.5 text-center space-y-2", className)}>
         <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
           <Server className="size-3.5" />
-          <span>Sin ONU vinculada en Smart OLT</span>
+          <span>Sin ONU vinculada</span>
         </div>
         {onOpenLinkModal ? (
           <CrmButton
@@ -195,7 +195,7 @@ export const OnuStatusCard = ({
         <div className="flex items-center gap-1.5">
           <Radio className="size-3.5 text-emerald-500" />
           <span className={`text-[11px] font-semibold uppercase tracking-wide ${CRM_SURFACES.textLabel}`}>
-            Datos OLT (Smart OLT)
+            Datos de la ONU
           </span>
         </div>
 
