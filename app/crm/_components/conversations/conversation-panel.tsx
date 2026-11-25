@@ -281,7 +281,7 @@ export const ConversationPanel = ({
         />
       </div>
       <Sheet open={isDetailsSheetOpen} onOpenChange={setIsDetailsSheetOpen}>
-        <SheetContent className={`inset-y-2 right-2 h-auto w-[min(88vw,24rem)] rounded-3xl border-0 p-0 sm:max-w-sm ${CRM_SURFACES.elevatedTranslucent} ${CRM_SURFACES.textPrimary}`}>
+        <SheetContent className={`inset-y-2 right-2 h-auto w-[min(88vw,24rem)] rounded-3xl border-0 bg-[var(--crm-dialog)] p-0 shadow-xl backdrop-blur-none sm:max-w-sm ${CRM_SURFACES.textPrimary}`}>
           <SheetHeader className={`border-b p-4 text-left ${CRM_SURFACES.border}`}>
             <SheetTitle className={CRM_SURFACES.textPrimary}>Ficha de conversación</SheetTitle>
             <SheetDescription className={CRM_SURFACES.textMuted}>

@@ -31,7 +31,7 @@ export const CRM_PANEL = `crm-glass ${CRM_RADIUS.panel} overflow-hidden`;
 export const CRM_TABLE = `overflow-hidden ${CRM_RADIUS.card} crm-glass`;
 
 export const CRM_DIALOG =
-  "crm-glass-strong rounded-3xl text-slate-900 dark:text-slate-100";
+  "rounded-3xl bg-[var(--crm-dialog)] text-slate-900 shadow-xl backdrop-blur-none dark:text-slate-100";
 
 export const CRM_MENU =
   "crm-glass-strong rounded-2xl text-slate-900 dark:text-slate-100";

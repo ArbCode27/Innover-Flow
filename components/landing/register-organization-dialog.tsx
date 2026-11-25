@@ -197,7 +197,7 @@ export const RegisterOrganizationDialog = ({
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
 
-      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl border border-white/20 bg-white/95 p-6 shadow-2xl backdrop-blur-2xl sm:max-w-xl sm:p-8 dark:border-white/10 dark:bg-[#120f18]/95">
+      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl border border-slate-200 bg-[var(--crm-dialog)] p-6 shadow-2xl backdrop-blur-none sm:max-w-xl sm:p-8 dark:border-white/10">
         <DialogHeader className="space-y-2 text-left">
           <div className="flex items-center gap-2">
             <div className="flex size-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md shadow-blue-600/25">
