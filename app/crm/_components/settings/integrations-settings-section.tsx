@@ -43,6 +43,7 @@ import type {
   OrganizationIntegration,
   OrganizationRole,
 } from "../../_lib/types";
+import { runClientDirectorySync } from "../../_lib/run-client-directory-sync";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 
 type Provider = "wispro" | "smartolt" | "sae";
@@ -113,6 +114,7 @@ const WisproCard = ({
       setApiToken("");
       setIsOpen(false);
       toast.success("Wispro conectado");
+      void importConnectedClients("wispro");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo conectar");
     } finally {
@@ -132,6 +134,7 @@ const WisproCard = ({
       }
       onChanged(payload.integration);
       toast.success("Conexión con Wispro verificada");
+      void importConnectedClients("wispro");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "La conexión falló");
     } finally {
@@ -248,6 +251,14 @@ const WisproCard = ({
                 <RefreshCw className={`size-4 ${isTesting ? "animate-spin" : ""}`} />
                 Probar
               </CrmButton>
+              <CrmButton
+                size="sm"
+                variant="secondary"
+                disabled={!canEdit}
+                onClick={() => void importConnectedClients("wispro")}
+              >
+                Importar clientes
+              </CrmButton>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <CrmButton size="sm" variant="ghost" disabled={!canEdit}>
@@ -276,6 +287,24 @@ const WisproCard = ({
       </CardContent>
     </Card>
   );
+};
+
+const importConnectedClients = async (provider: "wispro" | "sae") => {
+  const label = provider === "wispro" ? "Wispro" : "SAE";
+  const toastId = toast.loading(`Importando clientes de ${label}…`);
+  try {
+    const result = await runClientDirectorySync(provider);
+    const extra = result.errors[0] ? ` ${result.errors[0]}` : "";
+    toast.success(
+      `${label}: ${result.created} clientes nuevos y ${result.updated} actualizados.${extra}`,
+      { id: toastId },
+    );
+  } catch (error) {
+    toast.error(
+      error instanceof Error ? error.message : "No se importaron los clientes",
+      { id: toastId },
+    );
+  }
 };
 
 const notifySaeAccountSync = (
@@ -355,6 +384,7 @@ const SaeCard = ({
       setApiConnect("");
       setIsOpen(false);
       notifySaeAccountSync(payload, "conectado");
+      void importConnectedClients("sae");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo conectar");
     } finally {
@@ -374,6 +404,7 @@ const SaeCard = ({
       }
       onChanged(payload.integration);
       notifySaeAccountSync(payload, "verificado");
+      void importConnectedClients("sae");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "La conexión falló");
     } finally {
@@ -530,6 +561,14 @@ const SaeCard = ({
                   className={`size-4 ${isTesting ? "animate-spin" : ""}`}
                 />
                 Probar
+              </CrmButton>
+              <CrmButton
+                size="sm"
+                variant="secondary"
+                disabled={!canEdit}
+                onClick={() => void importConnectedClients("sae")}
+              >
+                Importar clientes
               </CrmButton>
               <AlertDialog>
                 <AlertDialogTrigger asChild>

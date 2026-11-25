@@ -33,6 +33,7 @@
     "cmdk": "1.0.4",
     "cn": "^0.2.6",
     "date-fns": "^4.4.0",
+    "exceljs": "^4.4.0",
     "geist": "latest",
     "lucide-react": "^0.454.0",
     "motion": "^12.23.12",

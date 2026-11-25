@@ -264,6 +264,7 @@ export const CrmShell = () => {
                 onCreateClient={crm.createClient}
                 onUpdateClient={crm.updateClient}
                 onDeleteClient={crm.deleteClient}
+                onClientsChanged={() => crm.loadData({ silent: true })}
               />
             ) : null}
             {activeView === "payments" && isViewAllowed("payments", auth.agent, auth.organizationRole) ? (

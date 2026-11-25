@@ -249,6 +249,29 @@ const wisproGet = async (
   return payload;
 };
 
+const PAGE_SIZE = 40;
+
+export const listWisproClientsPage = async (page: number) => {
+  const payload = await wisproGet("/clients", {
+    page: String(Math.max(page, 1)),
+    per_page: String(PAGE_SIZE),
+  });
+  const records = extractDataRecords(payload);
+  const root =
+    payload && typeof payload === "object"
+      ? (payload as { meta?: { pagination?: { next?: number | null } } })
+      : {};
+  const pagination = root.meta?.pagination;
+  const next = pagination?.next;
+  const shortPage = records.length === 0 || records.length < PAGE_SIZE;
+  const declaredEnd = Boolean(pagination) && (next == null || next === 0);
+  const done = shortPage || declaredEnd;
+  return {
+    records,
+    nextPage: done ? null : Number(next) || page + 1,
+  };
+};
+
 /**
  * Official Wispro source for pending client balance.
  * GET /clients/{uuid}/current_account
