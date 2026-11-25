@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Check,
   CheckCircle2,
@@ -38,12 +38,16 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import type {
   Organization,
   OrganizationIntegration,
   OrganizationRole,
 } from "../../_lib/types";
-import { runClientDirectorySync } from "../../_lib/run-client-directory-sync";
+import {
+  runClientDirectorySync,
+  type ClientDirectorySyncProgress,
+} from "../../_lib/run-client-directory-sync";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 
 type Provider = "wispro" | "smartolt" | "sae";
@@ -71,11 +75,15 @@ const statusLabel: Record<OrganizationIntegration["status"], string> = {
 const WisproCard = ({
   integration,
   canEdit,
+  isImporting,
   onChanged,
+  onImportClients,
 }: {
   integration: OrganizationIntegration;
   canEdit: boolean;
+  isImporting: boolean;
   onChanged: (integration: OrganizationIntegration) => void;
+  onImportClients: (provider: "wispro" | "sae") => void;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -114,7 +122,7 @@ const WisproCard = ({
       setApiToken("");
       setIsOpen(false);
       toast.success("Wispro conectado");
-      void importConnectedClients("wispro");
+      onImportClients("wispro");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo conectar");
     } finally {
@@ -134,7 +142,7 @@ const WisproCard = ({
       }
       onChanged(payload.integration);
       toast.success("Conexión con Wispro verificada");
-      void importConnectedClients("wispro");
+      onImportClients("wispro");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "La conexión falló");
     } finally {
@@ -254,10 +262,10 @@ const WisproCard = ({
               <CrmButton
                 size="sm"
                 variant="secondary"
-                disabled={!canEdit}
-                onClick={() => void importConnectedClients("wispro")}
+                disabled={!canEdit || isImporting}
+                onClick={() => onImportClients("wispro")}
               >
-                Importar clientes
+                {isImporting ? "Importando…" : "Importar clientes"}
               </CrmButton>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -289,24 +297,6 @@ const WisproCard = ({
   );
 };
 
-const importConnectedClients = async (provider: "wispro" | "sae") => {
-  const label = provider === "wispro" ? "Wispro" : "SAE";
-  const toastId = toast.loading(`Importando clientes de ${label}…`);
-  try {
-    const result = await runClientDirectorySync(provider);
-    const extra = result.errors[0] ? ` ${result.errors[0]}` : "";
-    toast.success(
-      `${label}: ${result.created} clientes nuevos y ${result.updated} actualizados.${extra}`,
-      { id: toastId },
-    );
-  } catch (error) {
-    toast.error(
-      error instanceof Error ? error.message : "No se importaron los clientes",
-      { id: toastId },
-    );
-  }
-};
-
 const notifySaeAccountSync = (
   payload: { sae_accounts?: { count?: number; error?: string | null } },
   verb: "conectado" | "verificado",
@@ -334,11 +324,15 @@ const notifySaeAccountSync = (
 const SaeCard = ({
   integration,
   canEdit,
+  isImporting,
   onChanged,
+  onImportClients,
 }: {
   integration: OrganizationIntegration;
   canEdit: boolean;
+  isImporting: boolean;
   onChanged: (integration: OrganizationIntegration) => void;
+  onImportClients: (provider: "wispro" | "sae") => void;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -384,7 +378,7 @@ const SaeCard = ({
       setApiConnect("");
       setIsOpen(false);
       notifySaeAccountSync(payload, "conectado");
-      void importConnectedClients("sae");
+      onImportClients("sae");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo conectar");
     } finally {
@@ -404,7 +398,7 @@ const SaeCard = ({
       }
       onChanged(payload.integration);
       notifySaeAccountSync(payload, "verificado");
-      void importConnectedClients("sae");
+      onImportClients("sae");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "La conexión falló");
     } finally {
@@ -565,10 +559,10 @@ const SaeCard = ({
               <CrmButton
                 size="sm"
                 variant="secondary"
-                disabled={!canEdit}
-                onClick={() => void importConnectedClients("sae")}
+                disabled={!canEdit || isImporting}
+                onClick={() => onImportClients("sae")}
               >
-                Importar clientes
+                {isImporting ? "Importando…" : "Importar clientes"}
               </CrmButton>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -862,6 +856,141 @@ const SmartOltCard = ({
   );
 };
 
+type ClientImportView = {
+  provider: "wispro" | "sae";
+  status: "running" | "done" | "error";
+  message: string;
+  page: number;
+  totalPages: number | null;
+  created: number;
+  updated: number;
+  skipped: number;
+  processed: number;
+  errors: string[];
+  activity: string[];
+};
+
+const emptyImportView = (provider: "wispro" | "sae"): ClientImportView => ({
+  provider,
+  status: "running",
+  message: "Preparando la importación…",
+  page: 0,
+  totalPages: null,
+  created: 0,
+  updated: 0,
+  skipped: 0,
+  processed: 0,
+  errors: [],
+  activity: [],
+});
+
+const ClientImportDialog = ({
+  view,
+  onClose,
+}: {
+  view: ClientImportView | null;
+  onClose: () => void;
+}) => {
+  const running = view?.status === "running";
+  const label = view?.provider === "sae" ? "SAE" : "Wispro";
+  const percent = !view
+    ? 0
+    : view.status !== "running"
+      ? 100
+      : view.totalPages
+        ? Math.min(99, Math.round((view.page / view.totalPages) * 100))
+        : Math.min(90, Math.max(8, view.page * 12));
+
+  return (
+    <Dialog
+      open={Boolean(view)}
+      onOpenChange={(open) => {
+        if (!open && !running) onClose();
+      }}
+    >
+      <DialogContent
+        className="sm:max-w-md"
+        showCloseButton={!running}
+        onInteractOutside={(event) => {
+          if (running) event.preventDefault();
+        }}
+        onEscapeKeyDown={(event) => {
+          if (running) event.preventDefault();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>
+            {running ? `Importando clientes de ${label}` : `Importación de ${label}`}
+          </DialogTitle>
+          <DialogDescription>{view?.message}</DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>
+                {view?.totalPages
+                  ? `Página ${Math.max(view.page, 1)} de ${view.totalPages}`
+                  : view?.page
+                    ? `Página ${view.page}`
+                    : "Esperando la primera página"}
+              </span>
+              <span>{view?.status === "running" && !view.totalPages ? "En curso" : `${percent}%`}</span>
+            </div>
+            <Progress
+              value={percent}
+              aria-label="Progreso de la importación de clientes"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-lg border border-border/70 px-2 py-2">
+              <p className="text-lg font-semibold tabular-nums">{view?.created ?? 0}</p>
+              <p className="text-[11px] text-muted-foreground">Nuevos</p>
+            </div>
+            <div className="rounded-lg border border-border/70 px-2 py-2">
+              <p className="text-lg font-semibold tabular-nums">{view?.updated ?? 0}</p>
+              <p className="text-[11px] text-muted-foreground">Actualizados</p>
+            </div>
+            <div className="rounded-lg border border-border/70 px-2 py-2">
+              <p className="text-lg font-semibold tabular-nums">{view?.skipped ?? 0}</p>
+              <p className="text-[11px] text-muted-foreground">Omitidos</p>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            {view?.processed
+              ? `${view.processed} clientes revisados en ${label}.`
+              : "Todavía no llega el primer lote."}
+          </p>
+
+          {view?.activity.length ? (
+            <ul className="grid max-h-28 gap-1 overflow-y-auto text-xs text-muted-foreground">
+              {view.activity.map((line, index) => (
+                <li key={`${index}-${line}`}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
+
+          {view?.errors.length ? (
+            <ul className="grid max-h-24 gap-1 overflow-y-auto text-xs text-rose-600 dark:text-rose-300">
+              {view.errors.map((error) => (
+                <li key={error}>{error}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+
+        <DialogFooter>
+          <CrmButton type="button" disabled={running} onClick={onClose}>
+            {running ? "Importando…" : "Cerrar"}
+          </CrmButton>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 export const IntegrationsSettingsSection = ({
   organization,
   organizationRole,
@@ -875,6 +1004,65 @@ export const IntegrationsSettingsSection = ({
     sae: emptyIntegration("sae"),
   });
   const canEdit = organizationRole === "owner" || organizationRole === "admin";
+  const [clientImport, setClientImport] = useState<ClientImportView | null>(null);
+  const importLock = useRef(false);
+
+  const handleImportClients = (provider: "wispro" | "sae") => {
+    if (importLock.current) return;
+    importLock.current = true;
+    const label = provider === "wispro" ? "Wispro" : "SAE";
+    setClientImport(emptyImportView(provider));
+
+    void runClientDirectorySync(provider, (progress: ClientDirectorySyncProgress) => {
+      setClientImport((current) => {
+        const base = current?.provider === provider ? current : emptyImportView(provider);
+        const activity = progress.done
+          ? base.activity
+          : [...base.activity, progress.message].slice(-6);
+        return {
+          provider,
+          status: progress.done ? "done" : "running",
+          message: progress.message,
+          page: progress.page,
+          totalPages: progress.totalPages ?? base.totalPages,
+          created: progress.created,
+          updated: progress.updated,
+          skipped: progress.skipped,
+          processed: progress.processed,
+          errors: progress.errors,
+          activity,
+        };
+      });
+    })
+      .then((result) => {
+        setClientImport((current) => ({
+          ...(current || emptyImportView(provider)),
+          status: "done",
+          message: `Listo. ${result.created} nuevos, ${result.updated} actualizados y ${result.skipped} omitidos.`,
+          created: result.created,
+          updated: result.updated,
+          skipped: result.skipped,
+          processed: result.processed,
+          errors: result.errors,
+        }));
+        toast.success(
+          `${label}: ${result.created} clientes nuevos y ${result.updated} actualizados.`,
+        );
+      })
+      .catch((error: unknown) => {
+        const message =
+          error instanceof Error ? error.message : "No se importaron los clientes";
+        setClientImport((current) => ({
+          ...(current || emptyImportView(provider)),
+          status: "error",
+          message,
+        }));
+        toast.error(message);
+      })
+      .finally(() => {
+        importLock.current = false;
+      });
+  };
 
   const loadIntegration = useCallback(async (provider: Provider) => {
     const response = await fetch(`/api/crm/integrations/${provider}`, {
@@ -919,12 +1107,20 @@ export const IntegrationsSettingsSection = ({
         <WisproCard
           integration={integrations.wispro}
           canEdit={canEdit}
+          isImporting={clientImport?.status === "running"}
           onChanged={handleChanged}
+          onImportClients={handleImportClients}
         />
         <SaeCard
           integration={integrations.sae}
           canEdit={canEdit}
+          isImporting={clientImport?.status === "running"}
           onChanged={handleChanged}
+          onImportClients={handleImportClients}
+        />
+        <ClientImportDialog
+          view={clientImport}
+          onClose={() => setClientImport(null)}
         />
         <SmartOltCard
           organization={organization}

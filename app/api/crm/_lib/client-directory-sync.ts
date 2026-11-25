@@ -25,6 +25,9 @@ export type DirectorySyncResult = {
   created: number;
   updated: number;
   skipped: number;
+  processed: number;
+  page: number;
+  totalPages: number | null;
   errors: string[];
   done: boolean;
   nextCursor: string | null;
@@ -34,6 +37,9 @@ const EMPTY: DirectorySyncResult = {
   created: 0,
   updated: 0,
   skipped: 0,
+  processed: 0,
+  page: 1,
+  totalPages: null,
   errors: [],
   done: true,
   nextCursor: null,
@@ -178,6 +184,9 @@ const syncWisproPage = async (
   );
   const counts: DirectorySyncResult = {
     ...EMPTY,
+    page,
+    totalPages: listed.totalPages,
+    processed: listed.records.length,
     done: listed.nextPage == null,
     nextCursor: listed.nextPage ? String(listed.nextPage) : null,
     errors: [],
@@ -212,6 +221,7 @@ const syncSaePage = async (
   const next = listed.pagination?.nextPageToken?.trim() || null;
   const counts: DirectorySyncResult = {
     ...EMPTY,
+    processed: (listed.data || []).length,
     done: !next,
     nextCursor: next,
     errors: [],

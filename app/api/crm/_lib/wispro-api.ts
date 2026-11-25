@@ -261,14 +261,25 @@ export const listWisproClientsPage = async (page: number) => {
     payload && typeof payload === "object"
       ? (payload as { meta?: { pagination?: { next?: number | null } } })
       : {};
-  const pagination = root.meta?.pagination;
+  const pagination = root.meta?.pagination as
+    | {
+        next?: number | null;
+        total_pages?: number | null;
+        pages?: number | null;
+        totalPages?: number | null;
+      }
+    | undefined;
   const next = pagination?.next;
   const shortPage = records.length === 0 || records.length < PAGE_SIZE;
   const declaredEnd = Boolean(pagination) && (next == null || next === 0);
   const done = shortPage || declaredEnd;
+  const totalRaw =
+    pagination?.total_pages ?? pagination?.pages ?? pagination?.totalPages;
+  const totalPages = Number(totalRaw);
   return {
     records,
     nextPage: done ? null : Number(next) || page + 1,
+    totalPages: Number.isFinite(totalPages) && totalPages > 0 ? totalPages : null,
   };
 };
 

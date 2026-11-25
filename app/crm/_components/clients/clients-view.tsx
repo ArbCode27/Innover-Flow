@@ -1,13 +1,23 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Download, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { CrmButton } from "../shared/crm-button";
 import type { Client, CreateClientInput, Ticket, UpdateClientInput } from "../../_lib/types";
+import {
+  DEFAULT_CLIENT_PAGE_SIZE,
+  EMPTY_CLIENT_LIST_QUERY,
+  filterClients,
+  hasActiveClientFilters,
+  listClientPlans,
+  sliceClientPage,
+  type ClientListQuery,
+} from "../../_lib/client-list";
 import { ClientDetailDialog } from "./client-detail-dialog";
 import { ClientEditDialog } from "./client-edit-dialog";
 import { ClientFormDialog } from "./client-form-dialog";
+import { ClientsControls, ClientsPagination } from "./clients-controls";
 import { ClientsStats } from "./clients-stats";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
 import { ClientsTable } from "./clients-table";
@@ -44,6 +54,35 @@ export const ClientsView = ({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [viewingClient, setViewingClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [query, setQuery] = useState<ClientListQuery>(EMPTY_CLIENT_LIST_QUERY);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_CLIENT_PAGE_SIZE);
+
+  const filteredClients = useMemo(
+    () => filterClients(clients, tickets, query),
+    [clients, tickets, query],
+  );
+  const plans = useMemo(() => listClientPlans(clients), [clients]);
+  const currentPage = useMemo(
+    () => sliceClientPage(filteredClients, page, pageSize),
+    [filteredClients, page, pageSize],
+  );
+  const filtersActive = hasActiveClientFilters(query);
+
+  const handleQueryChange = (next: ClientListQuery) => {
+    setQuery(next);
+    setPage(1);
+  };
+
+  const handleClearFilters = () => {
+    setQuery(EMPTY_CLIENT_LIST_QUERY);
+    setPage(1);
+  };
+
+  const handlePageSizeChange = (nextSize: number) => {
+    setPageSize(nextSize);
+    setPage(1);
+  };
 
   const handleOpenEdit = (client: Client) => {
     setEditingClient(client);
@@ -223,12 +262,34 @@ export const ClientsView = ({
           </div>
         ) : null}
         <ClientsStats clients={clients} tickets={tickets} />
+        {clients.length ? (
+          <ClientsControls
+            query={query}
+            plans={plans}
+            hasActiveFilters={filtersActive}
+            onQueryChange={handleQueryChange}
+            onClear={handleClearFilters}
+          />
+        ) : null}
         <ClientsTable
-          clients={clients}
+          clients={currentPage.items}
           tickets={tickets}
+          emptyMessage={
+            clients.length
+              ? "Ningún cliente coincide con la búsqueda o los filtros."
+              : "Sin clientes aún."
+          }
           onView={setViewingClient}
           onEdit={handleOpenEdit}
           onDelete={(client) => void handleDelete(client)}
+        />
+        <ClientsPagination
+          page={currentPage.page}
+          pageSize={pageSize}
+          total={currentPage.total}
+          filtered={filtersActive}
+          onPageChange={setPage}
+          onPageSizeChange={handlePageSizeChange}
         />
       </div>
       <ClientFormDialog

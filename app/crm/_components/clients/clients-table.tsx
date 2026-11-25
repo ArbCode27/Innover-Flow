@@ -20,6 +20,7 @@ import { StatusBadge } from "../shared/status-badge";
 interface ClientsTableProps {
   clients: Client[];
   tickets: Ticket[];
+  emptyMessage?: string;
   onView: (client: Client) => void;
   onEdit: (client: Client) => void;
   onDelete: (client: Client) => void;
@@ -28,6 +29,7 @@ interface ClientsTableProps {
 export const ClientsTable = ({
   clients,
   tickets,
+  emptyMessage = "Sin clientes aún.",
   onView,
   onEdit,
   onDelete,
@@ -163,7 +165,7 @@ export const ClientsTable = ({
             ) : (
               <TableRow className={CRM_SURFACES.border}>
                 <TableCell colSpan={9} className={`h-24 text-center ${CRM_SURFACES.textMuted}`}>
-                  Sin clientes aún.
+                  {emptyMessage}
                 </TableCell>
               </TableRow>
             )}
