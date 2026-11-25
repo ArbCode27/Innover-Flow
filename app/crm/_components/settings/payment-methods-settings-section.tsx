@@ -15,6 +15,13 @@ import { CrmButton } from "../shared/crm-button";
 import { PaymentMethodsTable } from "./payment-methods-table";
 import { PaymentMethodFormDialog } from "./payment-method-form-dialog";
 
+type SaeAccountSummary = {
+  id_cuba: string;
+  banco: string;
+  numero_cuenta: string;
+  receptor_bank: string;
+};
+
 const cloneMethod = (
   method: OrganizationPaymentMethod,
 ): OrganizationPaymentMethod => ({ ...method });
@@ -26,6 +33,8 @@ export const PaymentMethodsSettingsSection = ({
 }) => {
   const canEdit = organizationRole === "owner" || organizationRole === "admin";
   const [methods, setMethods] = useState<OrganizationPaymentMethod[]>([]);
+  const [saeConnected, setSaeConnected] = useState(false);
+  const [saeAccounts, setSaeAccounts] = useState<SaeAccountSummary[]>([]);
   const [organizationId, setOrganizationId] = useState("");
   const [busyKey, setBusyKey] = useState<PaymentMethodKey | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,6 +53,8 @@ export const PaymentMethodsSettingsSection = ({
       });
       const payload = (await response.json()) as {
         methods?: OrganizationPaymentMethod[];
+        sae_connected?: boolean;
+        sae_accounts?: SaeAccountSummary[];
         error?: string;
       };
       if (!response.ok) {
@@ -51,6 +62,8 @@ export const PaymentMethodsSettingsSection = ({
       }
       const next = payload.methods || [];
       setMethods(next);
+      setSaeConnected(Boolean(payload.sae_connected));
+      setSaeAccounts(payload.sae_accounts || []);
       setOrganizationId(next[0]?.organization_id || "");
     } catch (error) {
       setLoadError(
@@ -250,6 +263,34 @@ export const PaymentMethodsSettingsSection = ({
         ) : null}
       </CardHeader>
       <CardContent className="grid gap-4">
+        {saeConnected ? (
+          <div className="grid gap-2 rounded-xl border border-border/70 p-3">
+            <p className="text-sm font-medium">Cuentas registradas en SAE</p>
+            {saeAccounts.length ? (
+              <ul className="grid gap-1.5">
+                {saeAccounts.map((account) => (
+                  <li
+                    key={account.id_cuba}
+                    className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                  >
+                    <span>{account.receptor_bank || account.banco}</span>
+                    <span className="font-mono text-xs">
+                      {account.numero_cuenta || "Sin número"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={`text-sm ${CRM_SURFACES.textMuted}`}>
+                SAE no tiene cuentas registradas.
+              </p>
+            )}
+            <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
+              Se actualizan al conectar o verificar SAE. No se editan aquí.
+              Zelle, Binance, PayPal y pago móvil siguen siendo manuales.
+            </p>
+          </div>
+        ) : null}
         {isLoading ? (
           <p className={`text-sm ${CRM_SURFACES.textMuted}`}>
             Cargando métodos…

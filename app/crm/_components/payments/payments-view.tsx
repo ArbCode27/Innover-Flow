@@ -90,6 +90,7 @@ export const PaymentsView = ({
   const [payments, setPayments] = useState<CrmPayment[]>([]);
   const [banks, setBanks] = useState<string[]>([]);
   const [bankStats, setBankStats] = useState<CrmPaymentBankStat[]>([]);
+  const [bankSeeds, setBankSeeds] = useState<string[] | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<"create" | "edit">("create");
   const [editingPayment, setEditingPayment] = useState<CrmPayment | null>(null);
@@ -151,6 +152,7 @@ export const PaymentsView = ({
           counts?: CrmPaymentStatusCounts;
           banks?: string[];
           bankStats?: CrmPaymentBankStat[];
+          bankSeeds?: string[] | null;
         };
 
         if (requestId !== requestSeq.current) return;
@@ -170,6 +172,7 @@ export const PaymentsView = ({
         setCounts(payload.counts || EMPTY_COUNTS);
         setBanks(payload.banks || []);
         setBankStats(payload.bankStats || []);
+        setBankSeeds(payload.bankSeeds ?? null);
         setError(null);
         hasLoadedRef.current = true;
       } catch (loadError) {
@@ -667,6 +670,7 @@ export const PaymentsView = ({
 
         <PaymentsBankCards
           bankStats={bankStats}
+          seedBanks={bankSeeds}
           selectedBank={bank}
           onSelectBank={handleBankChange}
         />

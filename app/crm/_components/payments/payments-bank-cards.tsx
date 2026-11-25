@@ -21,6 +21,7 @@ import {
 
 interface PaymentsBankCardsProps {
   bankStats: CrmPaymentBankStat[];
+  seedBanks?: string[] | null;
   selectedBank: string;
   onSelectBank: (bank: string) => void;
 }
@@ -130,16 +131,20 @@ const getBankVisualConfig = (colorScheme: ReceptorColorScheme) => {
 
 export const PaymentsBankCards = ({
   bankStats,
+  seedBanks = null,
   selectedBank,
   onSelectBank,
 }: PaymentsBankCardsProps) => {
-  const knownBanks: readonly string[] = CRM_KNOWN_PAYMENT_BANKS;
+  const knownBanks: readonly string[] =
+    seedBanks && seedBanks.length > 0 ? seedBanks : CRM_KNOWN_PAYMENT_BANKS;
   const byBank = new Map(bankStats.map((stat) => [stat.bank, stat]));
   const orderedStats = [
     ...knownBanks.map((bank) => byBank.get(bank) ?? emptyStat(bank)),
-    ...bankStats.filter(
-      (stat) => !knownBanks.includes(stat.bank) && !isExcludedReceptorBank(stat.bank),
-    ),
+    ...bankStats.filter((stat) => {
+      if (knownBanks.includes(stat.bank)) return false;
+      if (seedBanks && seedBanks.length > 0) return true;
+      return !isExcludedReceptorBank(stat.bank);
+    }),
   ];
 
   const handleCardClick = (bankKey: string) => {
@@ -187,7 +192,7 @@ export const PaymentsBankCards = ({
         ) : null}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[repeat(auto-fit,minmax(10.5rem,1fr))]">
         {orderedStats.map((stat) => {
           const meta = getReceptorBankMeta(stat.bank);
           const visual = getBankVisualConfig(meta.colorScheme);

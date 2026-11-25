@@ -16,10 +16,15 @@ import { getSupabaseAdmin } from "../../_lib/supabase-admin";
 import { normalizeSmartOltBaseUrl } from "@/lib/smartolt";
 
 import {
+  getOrganizationSaeConfig,
   parseSaeSecret,
   serializeSaeSecret,
   verifySae,
 } from "../../_lib/sae-api";
+import {
+  deactivateOrganizationSaeAccounts,
+  syncOrganizationSaeAccounts,
+} from "../../_lib/sae-accounts";
 
 const wisproSchema = z.object({
   apiToken: z.string().trim().min(8).max(500),
@@ -125,6 +130,37 @@ const verifySmartOlt = async (apiKey: string, rawBaseUrl: string) => {
 
   return { base_url: baseUrl };
 };
+
+const syncSaeAccounts = async (organizationId: string) => {
+  try {
+    const config = await getOrganizationSaeConfig(organizationId);
+    return await syncOrganizationSaeAccounts(
+      getSupabaseAdmin(),
+      organizationId,
+      config,
+    );
+  } catch (error) {
+    return {
+      accounts: [],
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudieron cargar las cuentas de SAE",
+    };
+  }
+};
+
+const saeAccountsPayload = (
+  result: Awaited<ReturnType<typeof syncSaeAccounts>> | null,
+) =>
+  result
+    ? {
+        sae_accounts: {
+          count: result.accounts.length,
+          error: result.error,
+        },
+      }
+    : {};
 
 const handleError = (error: unknown) => {
   if (error instanceof CrmAuthError) {
@@ -246,7 +282,11 @@ export const PUT = async (
       .select("*")
       .single();
     if (error) throw error;
-    return NextResponse.json({ integration: sanitizeIntegration(data) });
+    const saeSync = provider === "sae" ? await syncSaeAccounts(context.organizationId) : null;
+    return NextResponse.json({
+      integration: sanitizeIntegration(data),
+      ...saeAccountsPayload(saeSync),
+    });
   } catch (error) {
     return handleError(error);
   }
@@ -307,7 +347,11 @@ export const POST = async (
       .select("*")
       .single();
     if (updateError) throw updateError;
-    return NextResponse.json({ integration: sanitizeIntegration(updated) });
+    const saeSync = provider === "sae" ? await syncSaeAccounts(context.organizationId) : null;
+    return NextResponse.json({
+      integration: sanitizeIntegration(updated),
+      ...saeAccountsPayload(saeSync),
+    });
   } catch (error) {
     return handleError(error);
   }
@@ -329,7 +373,11 @@ export const DELETE = async (
         { status: 403 },
       );
     }
-    const { error } = await getSupabaseAdmin()
+    const supabase = getSupabaseAdmin();
+    if (provider === "sae") {
+      await deactivateOrganizationSaeAccounts(supabase, context.organizationId);
+    }
+    const { error } = await supabase
       .from("organization_integrations")
       .delete()
       .eq("organization_id", context.organizationId)

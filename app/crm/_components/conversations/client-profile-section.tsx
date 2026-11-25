@@ -6,10 +6,12 @@ import { toast } from "sonner";
 import { CRM_BADGE_TONES, CRM_DIALOG, CRM_SURFACES } from "../../_lib/crm-theme";
 import {
   formatClientDebt,
+  formatClientDocument,
   getAccountTextClass,
   parseClientEnvoicing,
   resolveActivePlanLabel,
 } from "../../_lib/client-profile-utils";
+import type { SaeChatProfile } from "../../_lib/sae-chat-profile";
 import type { Client, ClientOnu, WisproCustomer } from "../../_lib/types";
 import type { SmartOltOnuDetail } from "@/lib/smartolt";
 import { AvatarInitials } from "../shared/avatar-initials";
@@ -75,20 +77,135 @@ export const ClientProfileSection = ({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [foundOnu, setFoundOnu] = useState<SmartOltOnuDetail | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saeProfile, setSaeProfile] = useState<SaeChatProfile | null>(null);
+  const [saeNote, setSaeNote] = useState<string | null>(null);
+  const [isLoadingSae, setIsLoadingSae] = useState(false);
 
   useEffect(() => {
     setCurrentOnu(client.onu ?? null);
   }, [client.id, client.onu]);
 
-  const locationLabel = wisproSnapshot
-    ? [wisproSnapshot.city, wisproSnapshot.state].filter(Boolean).join(", ")
-    : null;
+  const wisproLinked = Boolean(client.wispro_id);
   const envoicingData = parseClientEnvoicing(client.envoicing);
-  const activePlan = resolveActivePlanLabel({
-    pppProfile: envoicingData?.pppProfile,
-    planName: envoicingData?.planName,
-    clientPlan: client.plan,
-  });
+  const cedulaDigits = (
+    client.cedula ||
+    envoicingData?.cedula ||
+    ""
+  ).replace(/\D/g, "");
+
+  useEffect(() => {
+    if (wisproLinked || cedulaDigits.length < 4) {
+      setSaeProfile(null);
+      setSaeNote(null);
+      setIsLoadingSae(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingSae(true);
+    setSaeNote(null);
+
+    const loadSaeProfile = async () => {
+      try {
+        const response = await fetch(
+          `/api/crm/sae/profile?cedula=${encodeURIComponent(cedulaDigits)}`,
+          { cache: "no-store" },
+        );
+        const payload = (await response.json()) as {
+          ok?: boolean;
+          connected?: boolean;
+          profile?: SaeChatProfile | null;
+          message?: string;
+          error?: string;
+        };
+        if (cancelled) return;
+        if (!response.ok || payload.ok === false) {
+          setSaeProfile(null);
+          setSaeNote(payload.error || "No se pudo consultar SAE");
+          return;
+        }
+        if (!payload.connected) {
+          setSaeProfile(null);
+          setSaeNote(null);
+          return;
+        }
+        setSaeProfile(payload.profile || null);
+        setSaeNote(payload.profile ? null : payload.message || null);
+      } catch {
+        if (!cancelled) {
+          setSaeProfile(null);
+          setSaeNote("No se pudo consultar SAE");
+        }
+      } finally {
+        if (!cancelled) setIsLoadingSae(false);
+      }
+    };
+
+    void loadSaeProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, [wisproLinked, cedulaDigits, client.id]);
+
+  const wisproLocation = wisproSnapshot
+    ? [wisproSnapshot.city, wisproSnapshot.state].filter(Boolean).join(", ")
+    : "";
+  const cedulaLabel = formatClientDocument(
+    wisproSnapshot?.national_identification_number ||
+      envoicingData?.cedula ||
+      client.cedula ||
+      saeProfile?.cedula,
+  );
+  const phoneLabel =
+    client.phone ||
+    wisproSnapshot?.phone_mobile ||
+    saeProfile?.phone ||
+    "";
+  const locationLabel = wisproLinked
+    ? wisproLocation
+    : wisproLocation || saeProfile?.location || "";
+  const activePlan = wisproLinked
+    ? resolveActivePlanLabel({
+        pppProfile: envoicingData?.pppProfile,
+        planName: envoicingData?.planName,
+        clientPlan: client.plan,
+      })
+    : saeProfile?.plan ||
+      resolveActivePlanLabel({ clientPlan: client.plan });
+  const statusLabel = wisproLinked
+    ? client.account || "—"
+    : saeProfile?.status || client.account || (isLoadingSae ? "Consultando SAE…" : "—");
+  const statusClass = getAccountTextClass(
+    statusLabel === "Activo"
+      ? "Al día"
+      : statusLabel === "Inactivo" || statusLabel === "Suspendido"
+        ? "Suspendido"
+        : client.account,
+  );
+  const showSaeDebt = !wisproLinked && saeProfile;
+  const debtLabel = wisproLinked
+    ? envoicingData?.hasDebt
+      ? formatClientDebt(envoicingData.debt)
+      : "Sin deuda"
+    : showSaeDebt
+      ? saeProfile.hasDebt && saeProfile.debt != null
+        ? formatClientDebt(saeProfile.debt)
+        : saeProfile.debt == null
+          ? "—"
+          : "Sin deuda"
+      : isLoadingSae
+        ? "Consultando SAE…"
+        : envoicingData
+          ? envoicingData.hasDebt
+            ? formatClientDebt(envoicingData.debt)
+            : "Sin deuda"
+          : "—";
+  const debtHasBalance = wisproLinked
+    ? Boolean(envoicingData?.hasDebt)
+    : showSaeDebt
+      ? saeProfile.hasDebt
+      : Boolean(envoicingData?.hasDebt);
+  const billingSource = wisproLinked ? "Wispro" : saeProfile ? "SAE" : null;
 
   const handleRefreshLiveOnu = async () => {
     if (!currentOnu?.sn) return;
@@ -284,25 +401,29 @@ export const ClientProfileSection = ({
         </div>
       </div>
 
-      {wisproSnapshot ? (
-        <ProfileField label="Cédula">
-          <p className={`font-mono text-sm ${CRM_SURFACES.textSecondary}`}>
-            {wisproSnapshot.national_identification_number}
-          </p>
-        </ProfileField>
+      {billingSource ? (
+        <p className={`text-[11px] ${CRM_SURFACES.textMuted}`}>
+          Datos comerciales de {billingSource}
+        </p>
       ) : null}
 
-      <ProfileField label="Teléfono">
+      <ProfileField label="Cédula">
         <p className={`font-mono text-sm ${CRM_SURFACES.textSecondary}`}>
-          {client.phone || "—"}
+          {cedulaLabel || (isLoadingSae ? "Consultando SAE…" : "—")}
         </p>
       </ProfileField>
 
-      {locationLabel ? (
-        <ProfileField label="Ubicación">
-          <p className={`text-sm ${CRM_SURFACES.textSecondary}`}>{locationLabel}</p>
-        </ProfileField>
-      ) : null}
+      <ProfileField label="Teléfono">
+        <p className={`font-mono text-sm ${CRM_SURFACES.textSecondary}`}>
+          {phoneLabel || "—"}
+        </p>
+      </ProfileField>
+
+      <ProfileField label="Ubicación">
+        <p className={`text-sm ${CRM_SURFACES.textSecondary}`}>
+          {locationLabel || (isLoadingSae ? "Consultando SAE…" : "—")}
+        </p>
+      </ProfileField>
 
       <ProfileField label="Zona">
         <p className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>
@@ -312,23 +433,27 @@ export const ClientProfileSection = ({
 
       <ProfileField label="Estado">
         <p
-          className={`text-sm font-medium ${getAccountTextClass(client.account) || CRM_SURFACES.textPrimary}`}>
-          {client.account || "—"}
+          className={`text-sm font-medium ${statusClass || CRM_SURFACES.textPrimary}`}>
+          {statusLabel}
         </p>
       </ProfileField>
 
       <ProfileField label="Deuda">
         <p
           className={`text-sm font-medium ${
-            envoicingData?.hasDebt
+            debtHasBalance
               ? "text-red-700 dark:text-red-300"
               : CRM_SURFACES.textPrimary
           }`}>
-          {envoicingData?.hasDebt
-            ? formatClientDebt(envoicingData.debt)
-            : "Sin deuda"}
+          {debtLabel}
         </p>
       </ProfileField>
+
+      {saeNote ? (
+        <p className={`text-[11px] leading-snug ${CRM_SURFACES.textMuted}`}>
+          {saeNote}
+        </p>
+      ) : null}
 
       <ProfileField label="Plan">
         <p className={`text-sm font-medium ${CRM_SURFACES.textPrimary}`}>

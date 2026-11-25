@@ -7,6 +7,10 @@ import {
   normalizeReceptorBank,
   type CrmPaymentBankStat,
 } from "@/app/crm/_lib/payments";
+import {
+  listOrganizationSaeAccounts,
+  uniqueReceptorBanks,
+} from "@/app/api/crm/_lib/sae-accounts";
 import { syncSaeRegistrationIfConnected } from "./sae-payment-sync";
 
 export const CRM_PAYMENT_STATUSES = [
@@ -731,17 +735,23 @@ export const listCrmPayments = async (
     counts[status] = result?.error ? 0 : (result?.count ?? 0);
   });
 
-  const bankStats = buildPaymentBankStats(statRows);
+  const saeAccounts = organizationId
+    ? await listOrganizationSaeAccounts(supabase, organizationId, {
+        activeOnly: true,
+      })
+    : [];
+  const saeSeeds = uniqueReceptorBanks(saeAccounts);
+  const useSaeSeeds = saeSeeds.length > 0;
+  const bankStats = buildPaymentBankStats(statRows, {
+    seedBanks: useSaeSeeds ? saeSeeds : undefined,
+  });
+  const seedList = useSaeSeeds ? saeSeeds : [...CRM_KNOWN_PAYMENT_BANKS];
+  const seedSet = new Set(seedList);
   const extraBanks = bankStats
     .map((stat) => stat.bank)
-    .filter(
-      (bank) =>
-        !CRM_KNOWN_PAYMENT_BANKS.includes(
-          bank as (typeof CRM_KNOWN_PAYMENT_BANKS)[number],
-        ) && !isExcludedReceptorBank(bank),
-    )
+    .filter((bank) => !seedSet.has(bank) && (useSaeSeeds || !isExcludedReceptorBank(bank)))
     .sort((a, b) => a.localeCompare(b, "es"));
-  const banks = [...CRM_KNOWN_PAYMENT_BANKS, ...extraBanks];
+  const banks = [...seedList, ...extraBanks];
 
   return {
     payments: (listResult.data || []) as CrmPayment[],
@@ -749,6 +759,7 @@ export const listCrmPayments = async (
     counts,
     banks,
     bankStats,
+    bankSeeds: useSaeSeeds ? saeSeeds : null,
     limit,
     offset,
   };

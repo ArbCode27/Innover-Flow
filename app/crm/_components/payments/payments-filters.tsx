@@ -119,9 +119,9 @@ export const PaymentsFilters = ({
     return { from, to: to || from };
   }, [dateRange.from, dateRange.to]);
 
-  const bankOptions = Array.from(
-    new Set([...CRM_KNOWN_PAYMENT_BANKS, ...banks]),
-  ).filter((item) => !isExcludedReceptorBank(item));
+  const bankOptions = banks.length
+    ? banks
+    : [...CRM_KNOWN_PAYMENT_BANKS].filter((item) => !isExcludedReceptorBank(item));
 
   const today = toCaracasIsoDate(new Date());
   const searchActive = Boolean(searchTerm.trim());

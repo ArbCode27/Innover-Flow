@@ -6,6 +6,7 @@ import {
 } from "@/app/api/crm/_lib/organization-payment-methods";
 import { getSupabaseAdmin } from "@/app/api/crm/_lib/supabase-admin";
 import { isPaymentMethodKey } from "@/app/crm/_lib/payment-methods";
+import { listOrganizationSaeAccounts } from "@/app/api/crm/_lib/sae-accounts";
 import { getAppCustomerAuthContext } from "../_lib/app-auth";
 import {
   APP_ERROR_CODES,
@@ -63,9 +64,30 @@ export const GET = async (request: NextRequest) => {
       );
     }
 
+    const saeAccounts = await listOrganizationSaeAccounts(
+      supabase,
+      session.organizationId,
+      { activeOnly: true },
+    );
+    const saeMethods = saeAccounts
+      .filter((account) => account.numero_cuenta)
+      .map((account) => ({
+        id: `sae:${account.id_cuba}`,
+        title: account.receptor_bank || account.banco,
+        description: "Cuenta registrada en SAE",
+        bank_name: account.banco,
+        currency: "VES" as const,
+        source: "sae" as const,
+        fields: [
+          { label: "Banco", value: account.banco },
+          { label: "Número de cuenta", value: account.numero_cuenta },
+        ],
+        updated_at: account.synced_at || null,
+      }));
+
     return NextResponse.json(
       {
-        methods: methods.map(toAppPaymentMethodDto),
+        methods: [...methods.map(toAppPaymentMethodDto), ...saeMethods],
       },
       { headers: CACHE_HEADERS },
     );

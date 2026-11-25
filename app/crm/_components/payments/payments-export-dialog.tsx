@@ -105,16 +105,12 @@ export const PaymentsExportDialog = ({
 
   // Lista consolidada de bancos receptores
   const availableBanks = useMemo(() => {
+    if (knownBanks.length > 0) {
+      return knownBanks.filter((bank) => bank.trim());
+    }
     const set = new Set<string>(CRM_KNOWN_PAYMENT_BANKS);
     for (const stat of bankStats) {
-      if (stat.bank) set.add(stat.bank);
-    }
-    for (const b of knownBanks) {
-      const norm = normalizeReceptorBank(b);
-      if (norm && !isExcludedReceptorBank(norm)) set.add(norm);
-    }
-    for (const bank of Array.from(set)) {
-      if (isExcludedReceptorBank(bank)) set.delete(bank);
+      if (stat.bank && !isExcludedReceptorBank(stat.bank)) set.add(stat.bank);
     }
     // Ordenar: canónicos primero, luego alfabético
     const canonicalOrder: string[] = [...CRM_KNOWN_PAYMENT_BANKS];

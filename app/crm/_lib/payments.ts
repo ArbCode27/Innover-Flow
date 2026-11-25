@@ -86,6 +86,8 @@ export type CrmPaymentsListResponse = {
   counts: CrmPaymentStatusCounts;
   banks: string[];
   bankStats?: CrmPaymentBankStat[];
+  /** Cuentas receptoras de SAE. Nulo cuando la bandeja usa las seis cuentas fijas. */
+  bankSeeds?: string[] | null;
   limit: number;
   offset: number;
 };
@@ -465,8 +467,9 @@ const addAmountToStat = (
 };
 
 /**
- * Agrupa por cuenta receptora. Siembra las seis cuentas conocidas en cero
- * y deja fuera Banco de Venezuela y BDV.
+ * Agrupa por cuenta receptora.
+ * Sin `seedBanks` siembra las seis cuentas fijas y omite Venezuela/BDV.
+ * Con `seedBanks` (cuentas activas de SAE) respeta ese orden e incluye Venezuela.
  */
 export const buildPaymentBankStats = (
   rows: Array<{
@@ -474,30 +477,33 @@ export const buildPaymentBankStats = (
     amount: number | null;
     status: string;
   }>,
-  options?: { includeExcluded?: boolean },
+  options?: { includeExcluded?: boolean; seedBanks?: string[] },
 ): CrmPaymentBankStat[] => {
   const includeExcluded = options?.includeExcluded ?? false;
+  const seedBanks = (options?.seedBanks || [...CRM_KNOWN_PAYMENT_BANKS]).filter(
+    (bank, index, all) => bank.trim() && all.indexOf(bank) === index,
+  );
+  const seedSet = new Set(seedBanks);
   const map = new Map<string, CrmPaymentBankStat>();
 
-  for (const canonical of CRM_KNOWN_PAYMENT_BANKS) {
-    map.set(canonical, emptyBankStat(canonical));
+  for (const bank of seedBanks) {
+    map.set(bank, emptyBankStat(bank));
   }
 
   for (const row of rows) {
     const normalized = normalizeReceptorBank(row.bank);
     if (!normalized) continue;
-    if (!includeExcluded && isExcludedReceptorBank(normalized)) continue;
+    const kept =
+      includeExcluded || seedSet.has(normalized) || !isExcludedReceptorBank(normalized);
+    if (!kept) continue;
 
     const stat = map.get(normalized) ?? emptyBankStat(normalized);
     map.set(normalized, addAmountToStat(stat, row, 1));
   }
 
-  const canonicalSet = new Set<string>(CRM_KNOWN_PAYMENT_BANKS);
-  const known = CRM_KNOWN_PAYMENT_BANKS.map(
-    (bank) => map.get(bank) ?? emptyBankStat(bank),
-  );
+  const known = seedBanks.map((bank) => map.get(bank) ?? emptyBankStat(bank));
   const others = Array.from(map.values())
-    .filter((stat) => !canonicalSet.has(stat.bank))
+    .filter((stat) => !seedSet.has(stat.bank))
     .sort((a, b) => a.bank.localeCompare(b.bank, "es"));
 
   return [...known, ...others];
@@ -509,7 +515,13 @@ export const applyPaymentToBankStats = (
   direction: 1 | -1,
 ): CrmPaymentBankStat[] => {
   const normalized = normalizeReceptorBank(payment.bank);
-  if (!normalized || isExcludedReceptorBank(normalized)) return stats;
+  if (!normalized) return stats;
+  if (
+    isExcludedReceptorBank(normalized) &&
+    !stats.some((stat) => stat.bank === normalized)
+  ) {
+    return stats;
+  }
 
   const next = stats.some((stat) => stat.bank === normalized)
     ? stats

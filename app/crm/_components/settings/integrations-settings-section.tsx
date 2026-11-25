@@ -278,6 +278,27 @@ const WisproCard = ({
   );
 };
 
+const notifySaeAccountSync = (
+  payload: { sae_accounts?: { count?: number; error?: string | null } },
+  verb: "conectado" | "verificado",
+) => {
+  const accounts = payload.sae_accounts;
+  if (accounts?.error) {
+    toast.warning(
+      `SAE Plus ${verb}, pero no se pudieron cargar las cuentas: ${accounts.error}`,
+    );
+    return;
+  }
+  const count = accounts?.count ?? 0;
+  if (count === 0) {
+    toast.success(`SAE Plus ${verb}. SAE no tiene cuentas registradas.`);
+    return;
+  }
+  toast.success(
+    `SAE Plus ${verb}. ${count} ${count === 1 ? "cuenta cargada" : "cuentas cargadas"}.`,
+  );
+};
+
 /**
  * Tarjeta de integración de SAE Plus (Abonados, contratos y reportes de pago).
  */
@@ -333,7 +354,7 @@ const SaeCard = ({
       setApiToken("");
       setApiConnect("");
       setIsOpen(false);
-      toast.success("SAE Plus conectado");
+      notifySaeAccountSync(payload, "conectado");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo conectar");
     } finally {
@@ -352,7 +373,7 @@ const SaeCard = ({
         throw new Error(payload.error || "La conexión falló");
       }
       onChanged(payload.integration);
-      toast.success("Conexión con SAE Plus verificada");
+      notifySaeAccountSync(payload, "verificado");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "La conexión falló");
     } finally {
@@ -406,7 +427,7 @@ const SaeCard = ({
               </span>
             </p>
             <p>
-              Cuentas: se consultan en SAE al conciliar cada pago.
+              Cuentas: se cargan desde SAE al conectar o verificar.
             </p>
             {integration.config.test_contract_id ? (
               <p>

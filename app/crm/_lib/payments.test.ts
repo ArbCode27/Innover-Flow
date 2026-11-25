@@ -88,6 +88,23 @@ describe("getReceptorBankMeta", () => {
 });
 
 describe("buildPaymentBankStats", () => {
+  it("uses SAE account seeds and keeps Venezuela when it is one of them", () => {
+    const stats = buildPaymentBankStats(
+      [
+        { bank: "BDV", amount: 10, status: "APROBADO" },
+        { bank: "Mercantil", amount: 5, status: "EN_PROCESO" },
+      ],
+      { seedBanks: ["Venezuela", "Mercantil"] },
+    );
+
+    assert.deepEqual(
+      stats.map((stat) => stat.bank),
+      ["Venezuela", "Mercantil"],
+    );
+    assert.equal(stats[0]?.approvedAmount, 10);
+    assert.equal(stats[1]?.inProcessAmount, 5);
+  });
+
   it("seeds the six receptor accounts with 0 even when input is empty", () => {
     const stats = buildPaymentBankStats([]);
     assert.equal(stats.length, 6);

@@ -11,6 +11,7 @@ import {
   paymentMethodUpsertSchema,
   upsertOrganizationPaymentMethod,
 } from "../_lib/organization-payment-methods";
+import { listOrganizationSaeAccounts } from "../_lib/sae-accounts";
 import { getSupabaseAdmin } from "../_lib/supabase-admin";
 
 const putBodySchema = z.object({
@@ -56,25 +57,40 @@ const handleError = (error: unknown) => {
 export const GET = async (request: NextRequest) => {
   try {
     const context = await getCrmAuthContext(request);
+    const supabase = getSupabaseAdmin();
+    let methods;
+    let migrationPending = false;
     try {
-      const methods = await listOrganizationPaymentMethods(
-        getSupabaseAdmin(),
+      methods = await listOrganizationPaymentMethods(
+        supabase,
         context.organizationId,
       );
-      return NextResponse.json({
-        methods,
-        can_edit: canManageOrganization(context),
-      });
     } catch (error) {
-      if (isMissingPaymentMethodsTable(error)) {
-        return NextResponse.json({
-          methods: mergePaymentMethodCatalog(context.organizationId, []),
-          can_edit: canManageOrganization(context),
-          migration_pending: true,
-        });
-      }
-      throw error;
+      if (!isMissingPaymentMethodsTable(error)) throw error;
+      methods = mergePaymentMethodCatalog(context.organizationId, []);
+      migrationPending = true;
     }
+
+    const [saeAccounts, integrationResult] = await Promise.all([
+      listOrganizationSaeAccounts(supabase, context.organizationId, {
+        activeOnly: true,
+      }),
+      supabase
+        .from("organization_integrations")
+        .select("status")
+        .eq("organization_id", context.organizationId)
+        .eq("provider", "sae")
+        .maybeSingle(),
+    ]);
+    if (integrationResult.error) throw integrationResult.error;
+
+    return NextResponse.json({
+      methods,
+      can_edit: canManageOrganization(context),
+      migration_pending: migrationPending || undefined,
+      sae_connected: integrationResult.data?.status === "connected",
+      sae_accounts: saeAccounts,
+    });
   } catch (error) {
     return handleError(error);
   }
