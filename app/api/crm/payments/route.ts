@@ -4,11 +4,14 @@ import { z } from "zod";
 import {
   CRM_PAYMENT_STATUSES,
   approveCrmPayment,
+  approveCrmPaymentManual,
   getCrmPaymentById,
   isCrmPaymentReadyForApproval,
   listCrmPayments,
   markCrmPaymentApprovalError,
+  recordCrmPayment,
   rejectCrmPayment,
+  updateCrmPaymentFields,
 } from "@/app/api/crm/_lib/crm-payments";
 import {
   createWisproInvoicingPayment,
@@ -20,6 +23,7 @@ import {
   resolveLatestPendingInvoiceDate,
   resolveLatestPendingInvoiceDatesForClients,
   resolvePreferredContract,
+  searchWisproByCedula,
   withOrganizationWispro,
 } from "@/app/api/crm/_lib/wispro-api";
 import { getCrmAuthContext } from "@/app/api/crm/_lib/crm-auth-context";
@@ -222,6 +226,10 @@ const optionalText = z.preprocess(
 const listQuerySchema = z.object({
   from: isoDateSchema,
   to: isoDateSchema,
+  date_type: z.preprocess(
+    emptyToUndefined,
+    z.enum(["payment", "approval"]).optional(),
+  ),
   status: z.preprocess(
     emptyToUndefined,
     z.enum(CRM_PAYMENT_STATUSES).optional(),
@@ -234,12 +242,31 @@ const listQuerySchema = z.object({
 
 const patchSchema = z.object({
   id: z.string().uuid(),
-  action: z.enum(["approve", "reject"]),
+  action: z.enum(["approve", "approve_manual", "reject", "update"]),
   /** Required: advisor reviewing the payment (owns the client chat after review). */
   agent_id: z.coerce
     .number()
     .int()
     .positive("agent_id es requerido para aprobar o rechazar"),
+  client_name: z.string().trim().max(160).nullable().optional(),
+  cedula: z.string().trim().max(40).nullable().optional(),
+  amount: z.union([z.number(), z.string().trim().max(40)]).nullable().optional(),
+  bank: z.string().trim().max(80).nullable().optional(),
+  transaction_code: z.string().trim().max(80).nullable().optional(),
+  payment_date: isoDateSchema,
+  comment: z.string().trim().max(500).nullable().optional(),
+  status: z.enum(CRM_PAYMENT_STATUSES).optional(),
+});
+
+const createSchema = z.object({
+  agent_id: z.coerce.number().int().positive(),
+  client_name: z.string().trim().max(160).nullable().optional(),
+  cedula: z.string().trim().max(40).nullable().optional(),
+  amount: z.union([z.number(), z.string().trim().max(40)]).nullable().optional(),
+  bank: z.string().trim().max(80).nullable().optional(),
+  transaction_code: z.string().trim().max(80).nullable().optional(),
+  payment_date: isoDateSchema,
+  comment: z.string().trim().max(500).nullable().optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -253,7 +280,7 @@ export async function GET(req: NextRequest) {
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: parsed.error.issues[0]?.message || "Filtros inválidos" },
+        { ok: false, error: parsed.error.issues[0]?.message || "Filtros inválidos" },
         { status: 400 },
       );
     }
@@ -304,7 +331,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("Missing environment")) {
       return NextResponse.json(
-        { error: "Supabase no está configurado en el servidor" },
+        { ok: false, error: "Supabase no está configurado en el servidor" },
         { status: 503 },
       );
     }
@@ -320,6 +347,7 @@ export async function GET(req: NextRequest) {
     });
     return NextResponse.json(
       {
+        ok: false,
         error:
           error instanceof Error
             ? error.message
@@ -335,7 +363,7 @@ export async function PATCH(req: NextRequest) {
     const parsed = patchSchema.safeParse(await req.json());
     if (!parsed.success) {
       return NextResponse.json(
-        { error: parsed.error.issues[0]?.message || "Datos inválidos" },
+        { ok: false, error: parsed.error.issues[0]?.message || "Datos inválidos" },
         { status: 400 },
       );
     }
@@ -343,7 +371,7 @@ export async function PATCH(req: NextRequest) {
     const context = await getCrmAuthContext(req);
     if (context.agentId !== parsed.data.agent_id) {
       return NextResponse.json(
-        { error: "No puedes procesar pagos en nombre de otro asesor" },
+        { ok: false, error: "No puedes procesar pagos en nombre de otro asesor" },
         { status: 403 },
       );
     }
@@ -358,14 +386,14 @@ export async function PATCH(req: NextRequest) {
 
     if (agentError || !agent) {
       return NextResponse.json(
-        { error: "El agente especificado no existe o no tiene permisos" },
+        { ok: false, error: "El agente especificado no existe o no tiene permisos" },
         { status: 403 },
       );
     }
 
     if (agent.status === "inactive") {
       return NextResponse.json(
-        { error: "El agente está inactivo y no puede gestionar pagos" },
+        { ok: false, error: "El agente está inactivo y no puede gestionar pagos" },
         { status: 403 },
       );
     }
@@ -374,6 +402,7 @@ export async function PATCH(req: NextRequest) {
     if (agent.role !== "admin" && agent.department === "soporte") {
       return NextResponse.json(
         {
+          ok: false,
           error:
             "Los asesores de Soporte Técnico no están autorizados para procesar pagos. La aprobación o rechazo financiero corresponde al departamento de Cobranzas y Administradores.",
         },
@@ -389,7 +418,7 @@ export async function PATCH(req: NextRequest) {
 
     if (!currentPayment) {
       return NextResponse.json(
-        { error: "Pago no encontrado" },
+        { ok: false, error: "Pago no encontrado" },
         { status: 404 },
       );
     }
@@ -398,11 +427,57 @@ export async function PATCH(req: NextRequest) {
       currentPayment.status === "RECIBIDO" ||
       currentPayment.status === "EN_PROCESO" ||
       currentPayment.status === "ERROR";
+    if (parsed.data.action === "update") {
+      const payment = await updateCrmPaymentFields(supabase, {
+        id: currentPayment.id,
+        organizationId: context.organizationId,
+        clientName: parsed.data.client_name,
+        cedula: parsed.data.cedula,
+        amount: parsed.data.amount,
+        bank: parsed.data.bank,
+        transactionCode: parsed.data.transaction_code,
+        paymentDate: parsed.data.payment_date,
+        comment: parsed.data.comment,
+        status: parsed.data.status,
+      });
+
+      return NextResponse.json({ ok: true, payment });
+    }
+
     if (!canReview) {
       return NextResponse.json(
-        { error: "Este pago ya fue procesado" },
+        { ok: false, error: "Este pago ya fue procesado" },
         { status: 409 },
       );
+    }
+
+    if (parsed.data.action === "approve_manual") {
+      if (!(Number(currentPayment.amount) > 0)) {
+        return NextResponse.json(
+          { ok: false, error: "Se requiere un monto válido para aprobar" },
+          { status: 400 },
+        );
+      }
+
+      const payment = await approveCrmPaymentManual(supabase, currentPayment);
+      const ownership = await applyPaymentReviewOwnership(supabase, {
+        paymentId: currentPayment.id,
+        conversationId: payment?.conversation_id ?? currentPayment.conversation_id,
+        clientId: payment?.client_id ?? currentPayment.client_id,
+        agentId: parsed.data.agent_id,
+        action: "approve",
+      });
+
+      return NextResponse.json({
+        ok: true,
+        payment,
+        approve_kind: "manual",
+        conversation_id: ownership.conversationId,
+        assigned: ownership.assigned,
+        assigned_agent_id: ownership.agentId,
+        assigned_agent_name: ownership.agentName,
+        assign_skip_reason: ownership.skipReason,
+      });
     }
 
     if (parsed.data.action === "reject") {
@@ -428,7 +503,7 @@ export async function PATCH(req: NextRequest) {
 
     if (currentPayment.status === "RECIBIDO") {
       return NextResponse.json(
-        { error: "El comprobante aún no tiene todos los datos para aprobarlo" },
+        { ok: false, error: "El comprobante aún no tiene todos los datos para aprobarlo" },
         { status: 400 },
       );
     }
@@ -436,6 +511,7 @@ export async function PATCH(req: NextRequest) {
     if (!isCrmPaymentReadyForApproval(currentPayment)) {
       return NextResponse.json(
         {
+          ok: false,
           error:
             "Faltan cédula, monto, banco, referencia o cliente vinculado para aprobar",
         },
@@ -443,9 +519,34 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
+    if (!currentPayment.wispro_client_id && currentPayment.cedula) {
+      try {
+        const matches = await withOrganizationWispro(context.organizationId, () =>
+          searchWisproByCedula(currentPayment.cedula || ""),
+        );
+        const resolvedId = matches[0]?.customer?.id?.trim() || "";
+        if (resolvedId) {
+          currentPayment.wispro_client_id = resolvedId;
+          await supabase
+            .from("crm_payments")
+            .update({ wispro_client_id: resolvedId })
+            .eq("id", currentPayment.id)
+            .eq("organization_id", context.organizationId);
+        }
+      } catch (lookupError) {
+        console.warn("[CRM_PAYMENTS] wispro_client_lookup_failed", {
+          paymentId: currentPayment.id,
+          error:
+            lookupError instanceof Error
+              ? lookupError.message
+              : "No se pudo resolver el cliente",
+        });
+      }
+    }
+
     if (!currentPayment.wispro_client_id) {
       return NextResponse.json(
-        { error: "El pago no tiene un cliente vinculado" },
+        { ok: false, error: "El pago no tiene un cliente vinculado" },
         { status: 400 },
       );
     }
@@ -673,7 +774,7 @@ export async function PATCH(req: NextRequest) {
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("Missing environment")) {
       return NextResponse.json(
-        { error: "Supabase no está configurado en el servidor" },
+        { ok: false, error: "Supabase no está configurado en el servidor" },
         { status: 503 },
       );
     }
@@ -681,10 +782,108 @@ export async function PATCH(req: NextRequest) {
     console.error("[CRM_PAYMENTS_API] update_failed", error);
     return NextResponse.json(
       {
+        ok: false,
         error:
           error instanceof Error
             ? error.message
             : "No se pudo actualizar el pago",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const parsed = createSchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return NextResponse.json(
+        { ok: false, error: parsed.error.issues[0]?.message || "Datos inválidos" },
+        { status: 400 },
+      );
+    }
+
+    const context = await getCrmAuthContext(req);
+    if (context.agentId !== parsed.data.agent_id) {
+      return NextResponse.json(
+        { ok: false, error: "No puedes procesar pagos en nombre de otro asesor" },
+        { status: 403 },
+      );
+    }
+
+    const supabase = getServiceClient();
+    const { data: agent, error: agentError } = await supabase
+      .from("agents")
+      .select("id, status, role, department")
+      .eq("id", parsed.data.agent_id)
+      .eq("organization_id", context.organizationId)
+      .maybeSingle();
+
+    if (agentError || !agent) {
+      return NextResponse.json(
+        { ok: false, error: "El agente especificado no existe o no tiene permisos" },
+        { status: 403 },
+      );
+    }
+
+    if (agent.status === "inactive") {
+      return NextResponse.json(
+        { ok: false, error: "El agente está inactivo y no puede gestionar pagos" },
+        { status: 403 },
+      );
+    }
+
+    if (agent.role !== "admin" && agent.department === "soporte") {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Los asesores de Soporte Técnico no están autorizados para procesar pagos. La aprobación o rechazo financiero corresponde al departamento de Cobranzas y Administradores.",
+        },
+        { status: 403 },
+      );
+    }
+
+    const created = await recordCrmPayment(supabase, {
+      organizationId: context.organizationId,
+      submittedByAgentId: parsed.data.agent_id,
+      source: "manual",
+      clientName: parsed.data.client_name,
+      cedula: parsed.data.cedula,
+      amount: parsed.data.amount,
+      bank: parsed.data.bank,
+      transactionCode: parsed.data.transaction_code,
+      paymentDate: parsed.data.payment_date,
+      comment: parsed.data.comment,
+    });
+
+    if (!created.ok || !created.payment) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: created.duplicate
+            ? "Ya existe un comprobante con esa referencia"
+            : "No se pudo registrar el pago",
+        },
+        { status: created.duplicate ? 409 : 500 },
+      );
+    }
+
+    return NextResponse.json({ ok: true, payment: created.payment });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Missing environment")) {
+      return NextResponse.json(
+        { ok: false, error: "Supabase no está configurado en el servidor" },
+        { status: 503 },
+      );
+    }
+
+    console.error("[CRM_PAYMENTS_API] create_failed", error);
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          error instanceof Error ? error.message : "No se pudo registrar el pago",
       },
       { status: 500 },
     );

@@ -572,12 +572,16 @@ CREATE TABLE IF NOT EXISTS public.crm_payments (
   error_message text,
   receipt_media_url text,
   receipt_metadata jsonb DEFAULT '{}'::jsonb,
+  approved_at timestamptz,
+  receptor_bank text,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS crm_payments_org_status_idx ON public.crm_payments (organization_id, status);
 CREATE INDEX IF NOT EXISTS crm_payments_date_idx ON public.crm_payments (payment_date DESC);
 CREATE INDEX IF NOT EXISTS crm_payments_msg_idx ON public.crm_payments (message_id);
+CREATE INDEX IF NOT EXISTS crm_payments_org_receptor_bank_idx ON public.crm_payments (organization_id, receptor_bank);
+CREATE INDEX IF NOT EXISTS crm_payments_approved_at_idx ON public.crm_payments (approved_at DESC NULLS LAST);
 
 -- -----------------------------------------------------------------------------
 -- 14. TABLAS: TRAZABILIDAD Y AUDITORÍA DE IA

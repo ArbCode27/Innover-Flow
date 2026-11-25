@@ -23,10 +23,15 @@ export const CRM_PAYMENT_STATUS_LABELS: Record<CrmPaymentStatus, string> = {
 export const PAYMENT_PENDING_LABEL = "Pendiente";
 
 export const CRM_KNOWN_PAYMENT_BANKS = [
-  "Venezuela",
-  "Banplus",
   "Bancamiga",
+  "Banplus",
+  "Binance",
+  "Tarjeta de Débito",
+  "Zelle",
+  "PayPal",
 ] as const;
+
+export const CRM_EXCLUDED_RECEPTOR_BANKS = ["Venezuela", "BDV"] as const;
 
 export type CrmPayment = {
   id: string;
@@ -43,6 +48,7 @@ export type CrmPayment = {
   plan_amount?: number | null;
   amount_raw: string | null;
   bank: string | null;
+  receptor_bank?: string | null;
   transaction_code: string | null;
   payment_date: string;
   comment: string | null;
@@ -54,6 +60,7 @@ export type CrmPayment = {
   receipt_media_url: string | null;
   /** Most recent pending Wispro invoice date (YYYY-MM-DD), when available. */
   latest_invoice_date?: string | null;
+  approved_at?: string | null;
   /** Etapa SAE del mismo comprobante: registro y luego conciliación. */
   sae?: SaePaymentSnapshot | null;
   created_at: string;
@@ -104,6 +111,12 @@ export const formatPaymentAmount = (amount: number | null | undefined) => {
   }).format(Number(amount));
 };
 
+export const isValidPaymentReference = (value: string | null | undefined) => {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  return /\d/.test(text) || text.length >= 3;
+};
+
 export const isPaymentReadyForApproval = (payment: {
   status: CrmPaymentStatus;
   wispro_client_id: string | null;
@@ -116,13 +129,49 @@ export const isPaymentReadyForApproval = (payment: {
     return false;
   }
 
+  const hasBillingIdentity = Boolean(
+    payment.wispro_client_id?.trim() || String(payment.cedula || "").trim(),
+  );
+
   return Boolean(
-    payment.wispro_client_id?.trim() &&
-      digitsOnly(payment.cedula) &&
+    hasBillingIdentity &&
       String(payment.bank || "").trim() &&
-      digitsOnly(payment.transaction_code) &&
+      isValidPaymentReference(payment.transaction_code) &&
       Number(payment.amount) > 0,
   );
+};
+
+export const canApprovePaymentManually = (payment: { amount: number | null }) =>
+  Number(payment.amount) > 0;
+
+export const formatPlanPriceLabel = (amount: number | null | undefined) => {
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value <= 0) return "—";
+
+  const text = Number.isInteger(value)
+    ? new Intl.NumberFormat("es-VE", { maximumFractionDigits: 0 }).format(value)
+    : new Intl.NumberFormat("es-VE", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(value);
+
+  return `Plan ${text}$`;
+};
+
+export const getPaymentAmountDelta = (payment: {
+  amount: number | null;
+  expected_amount?: number | null;
+}) => {
+  const paid = Number(payment.amount);
+  const expected = Number(payment.expected_amount);
+  if (!Number.isFinite(paid) || !Number.isFinite(expected) || expected <= 0) {
+    return null;
+  }
+
+  const diff = Math.round((expected - paid) * 100) / 100;
+  if (diff > 0.009) return { kind: "remaining" as const, amount: diff };
+  if (diff < -0.009) return { kind: "credit" as const, amount: Math.abs(diff) };
+  return null;
 };
 
 export const canRejectPayment = (payment: { status: CrmPaymentStatus }) =>
@@ -192,7 +241,7 @@ export const normalizeReceptorBank = (
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 
-  // Banco de Venezuela / BDV
+  // Banco de Venezuela / BDV: se reconoce, pero no entra en tarjetas ni selector.
   if (
     /\b(venezuela|bdv)\b/.test(lower) ||
     lower.includes("banco de venezuela") ||
@@ -201,14 +250,33 @@ export const normalizeReceptorBank = (
     return "Venezuela";
   }
 
-  // Bancamiga
-  if (lower.includes("bancamiga")) {
+  if (lower.includes("bancamiga") || /\bamiga\b/.test(lower)) {
     return "Bancamiga";
   }
 
-  // Banplus
   if (lower.includes("banplus")) {
     return "Banplus";
+  }
+
+  if (lower.includes("binance") || /\busdt\b/.test(lower)) {
+    return "Binance";
+  }
+
+  if (
+    lower.includes("tarjeta") ||
+    lower.includes("debito") ||
+    lower.includes("punto de venta") ||
+    /\bpos\b/.test(lower)
+  ) {
+    return "Tarjeta de Débito";
+  }
+
+  if (lower.includes("zelle")) {
+    return "Zelle";
+  }
+
+  if (lower.includes("paypal")) {
+    return "PayPal";
   }
 
   // Otros bancos venezolanos habituales
@@ -224,10 +292,6 @@ export const normalizeReceptorBank = (
   if (/\bbfc\b/.test(lower) || lower.includes("fondo comun")) return "BFC";
   if (lower.includes("tesoro")) return "Tesoro";
   if (lower.includes("100%")) return "100% Banco";
-  if (lower.includes("zelle")) return "Zelle";
-  if (lower.includes("binance")) return "Binance";
-  if (lower.includes("paypal")) return "PayPal";
-
   // 3. Limpieza de prefijos/sufijos para bancos personalizados válidos
   let stripped = clean
     .replace(/^(?:banco\s+(?:de\s+|del\s+)?|bco\.?\s+)/i, "")
@@ -249,13 +313,52 @@ export const normalizeReceptorBank = (
   return clean || null;
 };
 
+export type ReceptorColorScheme =
+  | "emerald"
+  | "blue"
+  | "amber"
+  | "violet"
+  | "sky"
+  | "indigo"
+  | "red"
+  | "purple";
+
 export type ReceptorBankMeta = {
   bank: string;
   displayName: string;
   subtitle: string;
   shortCode: string;
-  colorScheme: "red" | "emerald" | "blue" | "purple";
+  colorScheme: ReceptorColorScheme;
 };
+
+export const isExcludedReceptorBank = (bank: string | null | undefined) => {
+  const normalized = normalizeReceptorBank(bank) || String(bank || "").trim();
+  if (!normalized) return false;
+  const lowered = normalized
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  return (
+    lowered === "venezuela" ||
+    lowered === "bdv" ||
+    lowered === "banco de venezuela"
+  );
+};
+
+export const receptorBankKey = (bank: string | null | undefined) => {
+  const normalized = normalizeReceptorBank(bank);
+  if (!normalized || isExcludedReceptorBank(normalized)) return null;
+  return normalized;
+};
+
+export const countablePaymentAmount = (amount: number | null | undefined) => {
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.round(value * 100) / 100;
+};
+
+export const roundPaymentAmount = (amount: number) =>
+  Math.max(0, Math.round(amount * 100) / 100);
 
 export const getReceptorBankMeta = (bank: string): ReceptorBankMeta => {
   const normalized = normalizeReceptorBank(bank) || bank;
@@ -284,6 +387,38 @@ export const getReceptorBankMeta = (bank: string): ReceptorBankMeta => {
         shortCode: "Banplus",
         colorScheme: "blue",
       };
+    case "Binance":
+      return {
+        bank: "Binance",
+        displayName: "Binance",
+        subtitle: "USDT · Cripto",
+        shortCode: "BNB",
+        colorScheme: "amber",
+      };
+    case "Tarjeta de Débito":
+      return {
+        bank: "Tarjeta de Débito",
+        displayName: "Tarjeta de Débito",
+        subtitle: "Punto de venta · POS",
+        shortCode: "POS",
+        colorScheme: "violet",
+      };
+    case "Zelle":
+      return {
+        bank: "Zelle",
+        displayName: "Zelle",
+        subtitle: "Zelle · Receptor",
+        shortCode: "Zelle",
+        colorScheme: "sky",
+      };
+    case "PayPal":
+      return {
+        bank: "PayPal",
+        displayName: "PayPal",
+        subtitle: "PayPal · Receptor",
+        shortCode: "PayPal",
+        colorScheme: "indigo",
+      };
     default:
       return {
         bank: normalized,
@@ -295,10 +430,43 @@ export const getReceptorBankMeta = (bank: string): ReceptorBankMeta => {
   }
 };
 
+const emptyBankStat = (bank: string): CrmPaymentBankStat => ({
+  bank,
+  totalPayments: 0,
+  totalAmount: 0,
+  approvedCount: 0,
+  approvedAmount: 0,
+  inProcessCount: 0,
+  inProcessAmount: 0,
+});
+
+const addAmountToStat = (
+  stat: CrmPaymentBankStat,
+  row: { amount: number | null; status: string },
+  direction: 1 | -1,
+) => {
+  const money = countablePaymentAmount(row.amount);
+  const next = { ...stat };
+  next.totalPayments = Math.max(0, next.totalPayments + direction);
+  next.totalAmount = roundPaymentAmount(next.totalAmount + direction * money);
+
+  const status = String(row.status || "").toUpperCase();
+  if (status === "APROBADO") {
+    next.approvedCount = Math.max(0, next.approvedCount + direction);
+    next.approvedAmount = roundPaymentAmount(next.approvedAmount + direction * money);
+  } else if (status === "EN_PROCESO" || status === "RECIBIDO") {
+    next.inProcessCount = Math.max(0, next.inProcessCount + direction);
+    next.inProcessAmount = roundPaymentAmount(
+      next.inProcessAmount + direction * money,
+    );
+  }
+
+  return next;
+};
+
 /**
- * Agrupa y calcula métricas por banco receptor para el rango analizado.
- * Garantiza que los bancos canónicos conocidos (Venezuela, Banplus, Bancamiga)
- * figuren siempre sembrados en la respuesta, incluso con 0 pagos.
+ * Agrupa por cuenta receptora. Siembra las seis cuentas conocidas en cero
+ * y deja fuera Banco de Venezuela y BDV.
  */
 export const buildPaymentBankStats = (
   rows: Array<{
@@ -306,70 +474,48 @@ export const buildPaymentBankStats = (
     amount: number | null;
     status: string;
   }>,
+  options?: { includeExcluded?: boolean },
 ): CrmPaymentBankStat[] => {
+  const includeExcluded = options?.includeExcluded ?? false;
   const map = new Map<string, CrmPaymentBankStat>();
 
-  // Sembrar siempre los bancos canónicos
   for (const canonical of CRM_KNOWN_PAYMENT_BANKS) {
-    map.set(canonical, {
-      bank: canonical,
-      totalPayments: 0,
-      totalAmount: 0,
-      approvedCount: 0,
-      approvedAmount: 0,
-      inProcessCount: 0,
-      inProcessAmount: 0,
-    });
+    map.set(canonical, emptyBankStat(canonical));
   }
 
   for (const row of rows) {
-    const rawBank = row.bank;
-    const normalized = normalizeReceptorBank(rawBank) || "Otro";
-    let stat = map.get(normalized);
-    if (!stat) {
-      stat = {
-        bank: normalized,
-        totalPayments: 0,
-        totalAmount: 0,
-        approvedCount: 0,
-        approvedAmount: 0,
-        inProcessCount: 0,
-        inProcessAmount: 0,
-      };
-      map.set(normalized, stat);
-    }
+    const normalized = normalizeReceptorBank(row.bank);
+    if (!normalized) continue;
+    if (!includeExcluded && isExcludedReceptorBank(normalized)) continue;
 
-    const amt =
-      typeof row.amount === "number" && Number.isFinite(row.amount)
-        ? row.amount
-        : 0;
-
-    stat.totalPayments += 1;
-    stat.totalAmount = Math.round((stat.totalAmount + amt) * 100) / 100;
-
-    const st = String(row.status || "").toUpperCase();
-    if (st === "APROBADO") {
-      stat.approvedCount += 1;
-      stat.approvedAmount =
-        Math.round((stat.approvedAmount + amt) * 100) / 100;
-    } else if (st === "EN_PROCESO" || st === "RECIBIDO") {
-      stat.inProcessCount += 1;
-      stat.inProcessAmount =
-        Math.round((stat.inProcessAmount + amt) * 100) / 100;
-    }
+    const stat = map.get(normalized) ?? emptyBankStat(normalized);
+    map.set(normalized, addAmountToStat(stat, row, 1));
   }
 
-  // Bancos canónicos primero, luego otros en orden alfabético
   const canonicalSet = new Set<string>(CRM_KNOWN_PAYMENT_BANKS);
-  const result: CrmPaymentBankStat[] = [];
-  for (const canonical of CRM_KNOWN_PAYMENT_BANKS) {
-    const s = map.get(canonical);
-    if (s) result.push(s);
-  }
-
+  const known = CRM_KNOWN_PAYMENT_BANKS.map(
+    (bank) => map.get(bank) ?? emptyBankStat(bank),
+  );
   const others = Array.from(map.values())
-    .filter((s) => !canonicalSet.has(s.bank))
-    .sort((a, b) => a.bank.localeCompare(b.bank));
+    .filter((stat) => !canonicalSet.has(stat.bank))
+    .sort((a, b) => a.bank.localeCompare(b.bank, "es"));
 
-  return [...result, ...others];
+  return [...known, ...others];
+};
+
+export const applyPaymentToBankStats = (
+  stats: CrmPaymentBankStat[],
+  payment: { bank: string | null; amount: number | null; status: string },
+  direction: 1 | -1,
+): CrmPaymentBankStat[] => {
+  const normalized = normalizeReceptorBank(payment.bank);
+  if (!normalized || isExcludedReceptorBank(normalized)) return stats;
+
+  const next = stats.some((stat) => stat.bank === normalized)
+    ? stats
+    : [...stats, emptyBankStat(normalized)];
+
+  return next.map((stat) =>
+    stat.bank === normalized ? addAmountToStat(stat, payment, direction) : stat,
+  );
 };

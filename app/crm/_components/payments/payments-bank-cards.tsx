@@ -11,8 +11,13 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { CrmPaymentBankStat } from "../../_lib/payments";
-import { formatPaymentAmount, getReceptorBankMeta } from "../../_lib/payments";
+import type { CrmPaymentBankStat, ReceptorColorScheme } from "../../_lib/payments";
+import {
+  CRM_KNOWN_PAYMENT_BANKS,
+  formatPaymentAmount,
+  getReceptorBankMeta,
+  isExcludedReceptorBank,
+} from "../../_lib/payments";
 
 interface PaymentsBankCardsProps {
   bankStats: CrmPaymentBankStat[];
@@ -20,7 +25,17 @@ interface PaymentsBankCardsProps {
   onSelectBank: (bank: string) => void;
 }
 
-const getBankVisualConfig = (colorScheme: "red" | "emerald" | "blue" | "purple") => {
+const emptyStat = (bank: string): CrmPaymentBankStat => ({
+  bank,
+  totalPayments: 0,
+  totalAmount: 0,
+  approvedCount: 0,
+  approvedAmount: 0,
+  inProcessCount: 0,
+  inProcessAmount: 0,
+});
+
+const getBankVisualConfig = (colorScheme: ReceptorColorScheme) => {
   switch (colorScheme) {
     case "red":
       return {
@@ -55,6 +70,50 @@ const getBankVisualConfig = (colorScheme: "red" | "emerald" | "blue" | "purple")
         activeBadge: "bg-blue-600 text-white hover:bg-blue-600",
         inactiveBadge: "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20",
       };
+    case "amber":
+      return {
+        icon: Building2,
+        cardBg: "bg-amber-500/5 hover:bg-amber-500/10 dark:bg-amber-950/20 dark:hover:bg-amber-950/30",
+        cardBorder: "border-amber-500/25 dark:border-amber-500/30",
+        activeRing: "ring-2 ring-amber-500 shadow-md shadow-amber-500/10",
+        iconContainer: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30",
+        amountColor: "text-amber-700 dark:text-amber-300",
+        activeBadge: "bg-amber-600 text-white hover:bg-amber-600",
+        inactiveBadge: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20",
+      };
+    case "violet":
+      return {
+        icon: CreditCard,
+        cardBg: "bg-violet-500/5 hover:bg-violet-500/10 dark:bg-violet-950/20 dark:hover:bg-violet-950/30",
+        cardBorder: "border-violet-500/25 dark:border-violet-500/30",
+        activeRing: "ring-2 ring-violet-500 shadow-md shadow-violet-500/10",
+        iconContainer: "bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/30",
+        amountColor: "text-violet-700 dark:text-violet-300",
+        activeBadge: "bg-violet-600 text-white hover:bg-violet-600",
+        inactiveBadge: "bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/20",
+      };
+    case "sky":
+      return {
+        icon: Building2,
+        cardBg: "bg-sky-500/5 hover:bg-sky-500/10 dark:bg-sky-950/20 dark:hover:bg-sky-950/30",
+        cardBorder: "border-sky-500/25 dark:border-sky-500/30",
+        activeRing: "ring-2 ring-sky-500 shadow-md shadow-sky-500/10",
+        iconContainer: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30",
+        amountColor: "text-sky-700 dark:text-sky-300",
+        activeBadge: "bg-sky-600 text-white hover:bg-sky-600",
+        inactiveBadge: "bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/20",
+      };
+    case "indigo":
+      return {
+        icon: Building2,
+        cardBg: "bg-indigo-500/5 hover:bg-indigo-500/10 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/30",
+        cardBorder: "border-indigo-500/25 dark:border-indigo-500/30",
+        activeRing: "ring-2 ring-indigo-500 shadow-md shadow-indigo-500/10",
+        iconContainer: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30",
+        amountColor: "text-indigo-700 dark:text-indigo-300",
+        activeBadge: "bg-indigo-600 text-white hover:bg-indigo-600",
+        inactiveBadge: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/20",
+      };
     default:
       return {
         icon: Building2,
@@ -74,9 +133,14 @@ export const PaymentsBankCards = ({
   selectedBank,
   onSelectBank,
 }: PaymentsBankCardsProps) => {
-  if (!bankStats || bankStats.length === 0) {
-    return null;
-  }
+  const knownBanks: readonly string[] = CRM_KNOWN_PAYMENT_BANKS;
+  const byBank = new Map(bankStats.map((stat) => [stat.bank, stat]));
+  const orderedStats = [
+    ...knownBanks.map((bank) => byBank.get(bank) ?? emptyStat(bank)),
+    ...bankStats.filter(
+      (stat) => !knownBanks.includes(stat.bank) && !isExcludedReceptorBank(stat.bank),
+    ),
+  ];
 
   const handleCardClick = (bankKey: string) => {
     if (selectedBank === bankKey) {
@@ -104,7 +168,7 @@ export const PaymentsBankCards = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Cuentas Receptoras de la Empresa
+            Cuentas receptoras
           </span>
           <span className="text-[11px] text-muted-foreground/80">
             (Filtros rápidos)
@@ -123,8 +187,8 @@ export const PaymentsBankCards = ({
         ) : null}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {bankStats.map((stat) => {
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        {orderedStats.map((stat) => {
           const meta = getReceptorBankMeta(stat.bank);
           const visual = getBankVisualConfig(meta.colorScheme);
           const Icon = visual.icon;
@@ -184,22 +248,22 @@ export const PaymentsBankCards = ({
 
               {/* Métricas y desglose */}
               <div className="mt-3.5 space-y-1">
-                <div className="flex items-baseline justify-between gap-1">
-                  <span className="text-xs text-muted-foreground">Recaudado:</span>
-                  <span className={cn("font-bold text-base tracking-tight", visual.amountColor)}>
-                    {formatPaymentAmount(stat.totalAmount)}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40">
-                  <span>
-                    <strong className="text-foreground/90 font-medium">{stat.approvedCount}</strong> aprobados ({formatPaymentAmount(stat.approvedAmount)})
-                  </span>
-                  <span>·</span>
-                  <span>
-                    <strong className="text-foreground/90 font-medium">{stat.inProcessCount}</strong> en proceso
-                  </span>
-                </div>
+                <p className={cn("text-lg font-bold tracking-tight", visual.amountColor)}>
+                  {formatPaymentAmount(stat.approvedAmount)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  <strong className="font-medium text-foreground/90">{stat.approvedCount}</strong>{" "}
+                  {stat.approvedCount === 1 ? "aprobado" : "aprobados"}
+                  {" · "}
+                  <strong className="font-medium text-foreground/90">{stat.totalPayments}</strong>{" "}
+                  {stat.totalPayments === 1 ? "registrado" : "registrados"}
+                </p>
+                {stat.inProcessCount > 0 ? (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                    <strong className="font-medium">{stat.inProcessCount}</strong> en proceso ·{" "}
+                    {formatPaymentAmount(stat.inProcessAmount)}
+                  </p>
+                ) : null}
               </div>
             </div>
           );

@@ -103,6 +103,7 @@ export const generatePaymentsXmlSpreadsheet = (
       amount: p.amount,
       status: p.status,
     })),
+    { includeExcluded: true },
   );
 
   // Considerar solo bancos que tengan movimientos o que hayan sido seleccionados

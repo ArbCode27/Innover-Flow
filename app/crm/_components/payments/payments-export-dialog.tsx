@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   Calendar,
   CheckSquare,
@@ -44,8 +44,10 @@ import {
   CRM_PAYMENT_STATUS_LABELS,
   formatPaymentAmount,
   getReceptorBankMeta,
+  isExcludedReceptorBank,
   normalizeReceptorBank,
 } from "../../_lib/payments";
+import type { PaymentDateType } from "./payments-filters";
 import {
   buildExportFilename,
   generatePaymentsCsv,
@@ -57,6 +59,8 @@ interface PaymentsExportDialogProps {
   onOpenChange: (open: boolean) => void;
   initialFrom?: string | null;
   initialTo?: string | null;
+  initialDateType?: PaymentDateType;
+  initialStatus?: CrmPaymentStatus | "all";
   initialBank?: string;
   bankStats?: CrmPaymentBankStat[];
   knownBanks?: string[];
@@ -89,6 +93,8 @@ export const PaymentsExportDialog = ({
   onOpenChange,
   initialFrom,
   initialTo,
+  initialDateType = "payment",
+  initialStatus = "all",
   initialBank,
   bankStats = [],
   knownBanks = [],
@@ -105,10 +111,13 @@ export const PaymentsExportDialog = ({
     }
     for (const b of knownBanks) {
       const norm = normalizeReceptorBank(b);
-      if (norm) set.add(norm);
+      if (norm && !isExcludedReceptorBank(norm)) set.add(norm);
+    }
+    for (const bank of Array.from(set)) {
+      if (isExcludedReceptorBank(bank)) set.delete(bank);
     }
     // Ordenar: canónicos primero, luego alfabético
-    const canonicalOrder = ["Venezuela", "Banplus", "Bancamiga"];
+    const canonicalOrder: string[] = [...CRM_KNOWN_PAYMENT_BANKS];
     return Array.from(set).sort((a, b) => {
       const idxA = canonicalOrder.indexOf(a);
       const idxB = canonicalOrder.indexOf(b);
@@ -133,13 +142,33 @@ export const PaymentsExportDialog = ({
   );
   const [toDate, setToDate] = useState<string>(initialTo || getTodayIso());
   const [statusFilter, setStatusFilter] = useState<CrmPaymentStatus | "all">(
-    "all",
+    initialStatus,
   );
+  const [dateType, setDateType] = useState<PaymentDateType>(initialDateType);
   const [exportingType, setExportingType] = useState<"xls" | "csv" | null>(
     null,
   );
+  const wasOpenRef = useRef(false);
 
-  // Atajos rápidos de fecha
+  useEffect(() => {
+    if (!open) {
+      wasOpenRef.current = false;
+      return;
+    }
+    if (wasOpenRef.current) return;
+    wasOpenRef.current = true;
+    setFromDate(initialFrom || getTodayIso());
+    setToDate(initialTo || getTodayIso());
+    setStatusFilter(initialStatus);
+    setDateType(initialDateType);
+    if (initialBank && initialBank !== "all") {
+      const norm = normalizeReceptorBank(initialBank);
+      setSelectedBanks(norm && !isExcludedReceptorBank(norm) ? [norm] : [...availableBanks]);
+      return;
+    }
+    setSelectedBanks([...availableBanks]);
+  }, [availableBanks, initialBank, initialDateType, initialFrom, initialStatus, initialTo, open]);
+
   const handleShortcutToday = () => {
     const today = getTodayIso();
     setFromDate(today);
@@ -221,9 +250,11 @@ export const PaymentsExportDialog = ({
       const params = new URLSearchParams();
       if (fromDate) params.set("from", fromDate);
       if (toDate) params.set("to", toDate);
+      params.set("date_type", dateType);
       if (statusFilter !== "all") params.set("status", statusFilter);
-      // Solicitar lote completo hasta 2000 registros para el reporte
+      if (selectedBanks.length === 1) params.set("bank", selectedBanks[0]);
       params.set("limit", "2000");
+      params.set("offset", "0");
 
       const response = await fetch(`/api/crm/payments?${params.toString()}`);
       const payload = (await response.json()) as {
@@ -237,12 +268,18 @@ export const PaymentsExportDialog = ({
       }
 
       const rawPayments = payload.payments || [];
+      const filteredPayments =
+        selectedBanks.length === 1
+          ? rawPayments
+          : rawPayments.filter((payment) => {
+              const norm = normalizeReceptorBank(payment.bank);
+              return Boolean(norm && selectedBanks.includes(norm));
+            });
 
-      // Filtrar por los bancos seleccionados
-      const filteredPayments = rawPayments.filter((p) => {
-        const norm = normalizeReceptorBank(p.bank) || "Otro";
-        return selectedBanks.includes(norm) || selectedBanks.includes(p.bank || "");
-      });
+      if (!filteredPayments.length) {
+        toast.error("No hay pagos para exportar con esos filtros");
+        return;
+      }
 
       const filename = buildExportFilename(
         selectedBanks,
@@ -408,10 +445,32 @@ export const PaymentsExportDialog = ({
           {/* SECCIÓN 2: Rango de Fechas y Estado */}
           <div className="space-y-3 rounded-xl border border-border/60 bg-muted/20 p-3.5">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <Calendar className="size-3.5 text-primary" aria-hidden="true" />
-                2. Período y Estado
-              </Label>
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar className="size-3.5 text-primary" aria-hidden="true" />
+                  2. Período y Estado
+                </Label>
+                <div className="flex gap-2 text-[11px]" role="radiogroup" aria-label="Criterio de fecha">
+                  <label className="flex cursor-pointer items-center gap-1">
+                    <input
+                      type="radio"
+                      name="export-date-type"
+                      checked={dateType === "payment"}
+                      onChange={() => setDateType("payment")}
+                    />
+                    F. de Registro
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-1">
+                    <input
+                      type="radio"
+                      name="export-date-type"
+                      checked={dateType === "approval"}
+                      onChange={() => setDateType("approval")}
+                    />
+                    F. de Aprobación
+                  </label>
+                </div>
+              </div>
 
               {/* Atajos rápidos de fecha */}
               <div className="flex items-center gap-1.5">

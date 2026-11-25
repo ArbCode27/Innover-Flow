@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
-import { FileSpreadsheet, Info, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { FileSpreadsheet, Info, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { CRM_SURFACES } from "../../_lib/crm-theme";
@@ -11,7 +11,11 @@ import type {
   CrmPaymentStatus,
   CrmPaymentStatusCounts,
 } from "../../_lib/payments";
-import { formatPaymentAmount, formatPaymentField } from "../../_lib/payments";
+import {
+  applyPaymentToBankStats,
+  formatPaymentField,
+  normalizeReceptorBank,
+} from "../../_lib/payments";
 import type { Agent } from "../../_lib/types";
 import { CrmButton } from "../shared/crm-button";
 import { LoadingState } from "../shared/loading-state";
@@ -20,10 +24,12 @@ import { PaymentsExportDialog } from "./payments-export-dialog";
 import {
   PaymentsFilters,
   PaymentsPagination,
+  type PaymentDateType,
   type PaymentsDateRange,
 } from "./payments-filters";
+import { PaymentsEditorDialog, type PaymentEditorValues } from "./payments-editor-dialog";
+import { PaymentsManualDialog } from "./payments-manual-dialog";
 import { PaymentsStats } from "./payments-stats";
-import { PaymentsSaeConcileDialog } from "./payments-sae-concile-dialog";
 import { PaymentsTable } from "./payments-table";
 
 const PAGE_SIZE = 25;
@@ -77,14 +83,18 @@ export const PaymentsView = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [dateRange, setDateRange] = useState<PaymentsDateRange>(DEFAULT_DATE_RANGE);
+  const [dateType, setDateType] = useState<PaymentDateType>("payment");
   const [status, setStatus] = useState<CrmPaymentStatus | "all">("EN_PROCESO");
   const [bank, setBank] = useState("all");
   const [page, setPage] = useState(1);
   const [payments, setPayments] = useState<CrmPayment[]>([]);
   const [banks, setBanks] = useState<string[]>([]);
   const [bankStats, setBankStats] = useState<CrmPaymentBankStat[]>([]);
-  const [saeConnected, setSaeConnected] = useState(false);
-  const [concilePayment, setConcilePayment] = useState<CrmPayment | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<"create" | "edit">("create");
+  const [editingPayment, setEditingPayment] = useState<CrmPayment | null>(null);
+  const [manualPayment, setManualPayment] = useState<CrmPayment | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [counts, setCounts] = useState<CrmPaymentStatusCounts>(EMPTY_COUNTS);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -92,27 +102,41 @@ export const PaymentsView = ({
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
+  const requestSeq = useRef(0);
   const [, startTransition] = useTransition();
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      setDebouncedSearch(searchTerm.trim());
-      setPage(1);
+      const next = searchTerm.trim();
+      let shouldResetPage = false;
+      setDebouncedSearch((current) => {
+        shouldResetPage = current !== next;
+        return next;
+      });
+      if (shouldResetPage) setPage(1);
     }, SEARCH_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeoutId);
   }, [searchTerm]);
 
   const loadPayments = useCallback(
-    async (mode: "initial" | "refresh" = "initial") => {
-      if (mode === "refresh") setIsRefreshing(true);
+    async (mode?: "initial" | "refresh") => {
+      const effectiveMode =
+        mode ?? (hasLoadedRef.current ? "refresh" : "initial");
+      const requestId = ++requestSeq.current;
+      if (effectiveMode === "refresh") setIsRefreshing(true);
       else setIsLoading(true);
 
       try {
         const params = new URLSearchParams();
-        if (debouncedSearch) params.set("q", debouncedSearch);
-        if (dateRange.from) params.set("from", dateRange.from);
-        if (dateRange.to) params.set("to", dateRange.to);
+        if (debouncedSearch) {
+          params.set("q", debouncedSearch);
+        } else {
+          if (dateRange.from) params.set("from", dateRange.from);
+          if (dateRange.to) params.set("to", dateRange.to);
+          params.set("date_type", dateType);
+        }
         if (status !== "all") params.set("status", status);
         if (bank !== "all") params.set("bank", bank);
         params.set("limit", String(PAGE_SIZE));
@@ -127,8 +151,9 @@ export const PaymentsView = ({
           counts?: CrmPaymentStatusCounts;
           banks?: string[];
           bankStats?: CrmPaymentBankStat[];
-          sae_connected?: boolean;
         };
+
+        if (requestId !== requestSeq.current) return;
 
         if (!response.ok || !payload.ok) {
           throw new Error(payload.error || "No se pudieron cargar los pagos");
@@ -145,20 +170,23 @@ export const PaymentsView = ({
         setCounts(payload.counts || EMPTY_COUNTS);
         setBanks(payload.banks || []);
         setBankStats(payload.bankStats || []);
-        setSaeConnected(Boolean(payload.sae_connected));
         setError(null);
+        hasLoadedRef.current = true;
       } catch (loadError) {
+        if (requestId !== requestSeq.current) return;
         setError(
           loadError instanceof Error
             ? loadError.message
             : "No se pudieron cargar los pagos",
         );
       } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
+        if (requestId === requestSeq.current) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
       }
     },
-    [bank, dateRange.from, dateRange.to, debouncedSearch, page, status],
+    [bank, dateRange.from, dateRange.to, dateType, debouncedSearch, page, status],
   );
 
   useEffect(() => {
@@ -169,8 +197,17 @@ export const PaymentsView = ({
     setSearchTerm("");
     setDebouncedSearch("");
     setDateRange(DEFAULT_DATE_RANGE());
+    setDateType("payment");
     setStatus("EN_PROCESO");
     setBank("all");
+    setPage(1);
+  };
+
+  const handleDateTypeChange = (value: PaymentDateType) => {
+    setDateType(value);
+    if (value === "approval" && status !== "APROBADO") {
+      setStatus("APROBADO");
+    }
     setPage(1);
   };
 
@@ -238,7 +275,7 @@ export const PaymentsView = ({
 
   const handlePaymentAction = async (
     paymentId: string,
-    action: "approve" | "reject",
+    action: "approve" | "approve_manual" | "reject",
   ) => {
     if (!currentAgent?.id) {
       setError("Debes iniciar sesión como asesor para gestionar pagos");
@@ -260,22 +297,32 @@ export const PaymentsView = ({
     const snapshot = {
       payments,
       counts,
+      bankStats,
       total,
     };
 
     const optimisticStatus: CrmPaymentStatus =
-      action === "approve" ? "APROBADO" : "RECHAZADO";
+      action === "reject" ? "RECHAZADO" : "APROBADO";
     const optimisticPayment: CrmPayment = {
       ...paymentBeforeAction,
       status: optimisticStatus,
+      approved_at: action === "reject" ? null : new Date().toISOString(),
       error_message: null,
       updated_at: new Date().toISOString(),
     };
 
     setUpdatingId(paymentId);
     setError(null);
+    setManualPayment(null);
     startTransition(() => {
       applyLocalPaymentUpdate(paymentBeforeAction, optimisticPayment);
+      setBankStats((current) =>
+        applyPaymentToBankStats(
+          applyPaymentToBankStats(current, paymentBeforeAction, -1),
+          optimisticPayment,
+          1,
+        ),
+      );
     });
 
     try {
@@ -335,6 +382,13 @@ export const PaymentsView = ({
           reconcilePaymentRow(nextPayment);
         } else {
           applyLocalPaymentUpdate(optimisticPayment, nextPayment);
+          setBankStats((current) =>
+            applyPaymentToBankStats(
+              applyPaymentToBankStats(current, optimisticPayment, -1),
+              nextPayment,
+              1,
+            ),
+          );
         }
       });
 
@@ -343,7 +397,7 @@ export const PaymentsView = ({
           onPaymentReviewed?.({
             conversationId,
             agentId: currentAgent.id,
-            action,
+            action: action === "reject" ? "reject" : "approve",
             assigned: Boolean(payload.assigned),
           }),
         ).catch((reviewError) => {
@@ -357,27 +411,20 @@ export const PaymentsView = ({
         }
       }
 
-      if (action === "approve") {
-        const remaining =
-          typeof payload.remaining_amount === "number"
-            ? payload.remaining_amount
-            : 0;
+      if (action === "approve_manual") {
         toast.success(
-          remaining > 0
-            ? `Pago aprobado. Restante ${formatPaymentAmount(remaining)}`
-            : `Pago de ${formatPaymentField(nextPayment.client_name)} aprobado`,
+          `Pago de ${formatPaymentField(nextPayment.client_name)} aprobado manualmente, sin el sistema de facturación`,
         );
+      } else if (action === "approve") {
+        toast.success(`Pago de ${formatPaymentField(nextPayment.client_name)} aprobado`);
       } else {
-        toast.success(
-          payload.assigned
-            ? "Pago rechazado y chat asignado a ti"
-            : "Pago rechazado",
-        );
+        toast.success("Pago rechazado");
       }
     } catch (updateError) {
       startTransition(() => {
         setPayments(snapshot.payments);
         setCounts(snapshot.counts);
+        setBankStats(snapshot.bankStats);
         setTotal(snapshot.total);
       });
       const message =
@@ -399,45 +446,150 @@ export const PaymentsView = ({
     void handlePaymentAction(paymentId, "reject");
   };
 
-  const handleConcileSae = (paymentId: string) => {
-    const payment = payments.find((item) => item.id === paymentId) ?? null;
-    setConcilePayment(payment);
+  const handleConfirmManual = () => {
+    if (!manualPayment) return;
+    void handlePaymentAction(manualPayment.id, "approve_manual");
   };
 
-  const handleRetrySae = async (paymentId: string) => {
-    setUpdatingId(paymentId);
+  const paymentMatchesList = (
+    payment: CrmPayment,
+    options?: { ignoreStatus?: boolean; ignoreBank?: boolean },
+  ) => {
+    if (!options?.ignoreStatus && status !== "all" && payment.status !== status) {
+      return false;
+    }
+    const bankKey = normalizeReceptorBank(payment.bank);
+    if (!options?.ignoreBank && bank !== "all" && bankKey !== bank) return false;
+    if (debouncedSearch) {
+      const query = debouncedSearch.toLowerCase();
+      const digits = query.replace(/\D/g, "");
+      const fields = [payment.client_name, payment.cedula, payment.transaction_code].map(
+        (value) => String(value || "").toLowerCase(),
+      );
+      return (
+        fields.some((value) => value.includes(query)) ||
+        (digits.length >= 4 && fields.some((value) => value.includes(digits)))
+      );
+    }
+
+    const day =
+      dateType === "approval"
+        ? payment.approved_at?.slice(0, 10)
+        : payment.payment_date?.slice(0, 10);
+    if (!day) return dateType !== "approval";
+    if (dateRange.from && day < dateRange.from) return false;
+    if (dateRange.to && day > dateRange.to) return false;
+    return true;
+  };
+
+  const applyCreatedPayment = (payment: CrmPayment) => {
+    if (paymentMatchesList(payment, { ignoreStatus: true, ignoreBank: true })) {
+      setBankStats((current) => applyPaymentToBankStats(current, payment, 1));
+    }
+    if (paymentMatchesList(payment, { ignoreStatus: true })) {
+      setCounts((current) => ({
+        ...current,
+        [payment.status]: (current[payment.status] || 0) + 1,
+      }));
+    }
+    if (!paymentMatchesList(payment)) return;
+    setTotal((current) => current + 1);
+    if (page === 1) {
+      setPayments((current) => [payment, ...current].slice(0, PAGE_SIZE));
+    }
+  };
+
+  const applyEditedPayment = (previous: CrmPayment, payment: CrmPayment) => {
+    if (previous.status !== payment.status) {
+      setCounts((current) => ({
+        ...current,
+        [previous.status]: Math.max(0, (current[previous.status] || 0) - 1),
+        [payment.status]: (current[payment.status] || 0) + 1,
+      }));
+    }
+
+    setBankStats((current) =>
+      applyPaymentToBankStats(
+        applyPaymentToBankStats(current, previous, -1),
+        payment,
+        1,
+      ),
+    );
+
+    const matchesStatus = status === "all" || status === payment.status;
+    if (!matchesStatus) {
+      setPayments((current) => current.filter((item) => item.id !== payment.id));
+      setTotal((current) => Math.max(0, current - 1));
+      return;
+    }
+
+    setPayments((current) =>
+      current.map((item) => (item.id === payment.id ? payment : item)),
+    );
+  };
+
+  const handleEditorSubmit = async (values: PaymentEditorValues) => {
+    if (!currentAgent?.id) {
+      setError("Debes iniciar sesión como asesor para gestionar pagos");
+      toast.error("Sesión de asesor requerida");
+      return;
+    }
+
+    if (!canReviewPayments) {
+      toast.error("Los asesores de Soporte Técnico no tienen autorización para procesar pagos");
+      return;
+    }
+
+    setIsSaving(true);
     setError(null);
     try {
-      const response = await fetch(`/api/crm/payments/${paymentId}/sae`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "registrar" }),
-      });
+      const response =
+        editorMode === "create"
+          ? await fetch("/api/crm/payments", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                agent_id: currentAgent.id,
+                ...values,
+              }),
+            })
+          : await fetch("/api/crm/payments", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                id: editingPayment?.id,
+                action: "update",
+                agent_id: currentAgent.id,
+                ...values,
+              }),
+            });
       const payload = (await response.json()) as {
         ok?: boolean;
         error?: string;
         payment?: CrmPayment;
       };
       if (!response.ok || !payload.ok || !payload.payment) {
-        throw new Error(payload.error || "No se pudo registrar el pago");
+        throw new Error(payload.error || "No se pudo guardar el pago");
       }
-      reconcilePaymentRow(payload.payment);
-      if (payload.payment.sae?.stage === "registrada") {
+
+      if (editorMode === "create") {
+        applyCreatedPayment(payload.payment);
         toast.success("Pago registrado");
-        return;
+      } else if (editingPayment) {
+        applyEditedPayment(editingPayment, payload.payment);
+        toast.success("Pago actualizado con éxito");
       }
-      toast.warning(
-        payload.payment.sae?.error || "El pago sigue pendiente de registro",
-      );
-    } catch (retryError) {
+
+      setEditorOpen(false);
+      setEditingPayment(null);
+      void loadPayments("refresh");
+    } catch (saveError) {
       const message =
-        retryError instanceof Error
-          ? retryError.message
-          : "No se pudo registrar el pago";
+        saveError instanceof Error ? saveError.message : "No se pudo guardar el pago";
       setError(message);
       toast.error(message);
     } finally {
-      setUpdatingId(null);
+      setIsSaving(false);
     }
   };
 
@@ -455,6 +607,20 @@ export const PaymentsView = ({
           </p>
         </div>
         <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto">
+          {currentAgent && canReviewPayments ? (
+            <Button
+              type="button"
+              onClick={() => {
+                setEditorMode("create");
+                setEditingPayment(null);
+                setEditorOpen(true);
+              }}
+              className="w-full cursor-pointer bg-emerald-600 text-white hover:bg-emerald-700 sm:w-auto"
+              aria-label="Registrar pago manual">
+              <Plus className="mr-2 size-4" aria-hidden="true" />
+              Registrar pago manual
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"
@@ -508,11 +674,13 @@ export const PaymentsView = ({
         <PaymentsFilters
           searchTerm={searchTerm}
           dateRange={dateRange}
+          dateType={dateType}
           status={status}
           bank={bank}
           banks={banks}
           onSearchChange={setSearchTerm}
           onDateRangeChange={handleDateRangeChange}
+          onDateTypeChange={handleDateTypeChange}
           onStatusChange={handleStatusChange}
           onBankChange={handleBankChange}
           onClearFilters={handleClearFilters}
@@ -532,11 +700,17 @@ export const PaymentsView = ({
               payments={payments}
               updatingId={updatingId}
               canReviewPayments={canReviewPayments}
-              saeConnected={saeConnected}
               onApprove={handleApprove}
+              onApproveManual={(paymentId) => {
+                const payment = payments.find((item) => item.id === paymentId) ?? null;
+                setManualPayment(payment);
+              }}
               onReject={handleReject}
-              onConcileSae={handleConcileSae}
-              onRetrySae={(paymentId) => void handleRetrySae(paymentId)}
+              onEdit={(payment) => {
+                setEditorMode("edit");
+                setEditingPayment(payment);
+                setEditorOpen(true);
+              }}
               onOpenChat={onOpenClientChat}
             />
             <PaymentsPagination
@@ -550,12 +724,26 @@ export const PaymentsView = ({
         )}
       </div>
 
-      <PaymentsSaeConcileDialog
-        payment={concilePayment}
+      <PaymentsManualDialog
+        payment={manualPayment}
+        submitting={updatingId === manualPayment?.id}
         onOpenChange={(open) => {
-          if (!open) setConcilePayment(null);
+          if (!open) setManualPayment(null);
         }}
-        onUpdated={reconcilePaymentRow}
+        onConfirm={handleConfirmManual}
+      />
+
+      <PaymentsEditorDialog
+        open={editorOpen}
+        mode={editorMode}
+        payment={editingPayment}
+        banks={banks}
+        submitting={isSaving}
+        onOpenChange={(open) => {
+          setEditorOpen(open);
+          if (!open) setEditingPayment(null);
+        }}
+        onSubmit={handleEditorSubmit}
       />
 
       <PaymentsExportDialog
@@ -563,6 +751,8 @@ export const PaymentsView = ({
         onOpenChange={setExportDialogOpen}
         initialFrom={dateRange.from}
         initialTo={dateRange.to}
+        initialDateType={dateType}
+        initialStatus={status}
         initialBank={bank}
         bankStats={bankStats}
         knownBanks={banks}

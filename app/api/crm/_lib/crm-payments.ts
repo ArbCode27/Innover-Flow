@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  CRM_KNOWN_PAYMENT_BANKS,
   buildPaymentBankStats,
+  isExcludedReceptorBank,
+  isValidPaymentReference,
   normalizeReceptorBank,
   type CrmPaymentBankStat,
 } from "@/app/crm/_lib/payments";
@@ -43,6 +46,7 @@ export type CrmPayment = {
   plan_amount?: number | null;
   amount_raw: string | null;
   bank: string | null;
+  receptor_bank?: string | null;
   transaction_code: string | null;
   payment_date: string;
   comment: string | null;
@@ -54,6 +58,7 @@ export type CrmPayment = {
   error_message: string | null;
   receipt_media_url: string | null;
   receipt_metadata: Record<string, unknown>;
+  approved_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -129,9 +134,12 @@ const extractExternalId = (body: unknown): string | null => {
   return value || null;
 };
 
+export type PaymentDateType = "payment" | "approval";
+
 export type ListCrmPaymentsFilters = {
   from?: string | null;
   to?: string | null;
+  date_type?: PaymentDateType | null;
   status?: CrmPaymentStatus | "all" | null;
   bank?: string | null;
   q?: string | null;
@@ -146,7 +154,7 @@ const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 const sanitizeSearch = (value: string) =>
   value
     .trim()
-    .replace(/[%_,()]/g, " ")
+    .replace(/[%_,().:*\\]/g, " ")
     .replace(/\s+/g, " ")
     .slice(0, 80);
 
@@ -186,11 +194,14 @@ export const isCrmPaymentReadyForApproval = (payment: {
     return false;
   }
 
+  const hasBillingIdentity = Boolean(
+    payment.wispro_client_id?.trim() || trimOrNull(payment.cedula),
+  );
+
   return Boolean(
-    payment.wispro_client_id?.trim() &&
-      digitsOnly(payment.cedula) &&
+    hasBillingIdentity &&
       trimOrNull(payment.bank) &&
-      digitsOnly(payment.transaction_code) &&
+      isValidPaymentReference(payment.transaction_code) &&
       Number(payment.amount) > 0,
   );
 };
@@ -477,7 +488,11 @@ const insertCrmPayment = async (
   const amount = parseAmount(input.amount);
   const cedula = digitsOnly(input.cedula);
   const bank = normalizeReceptorBank(input.bank);
-  const transactionCode = digitsOnly(input.transactionCode);
+  const rawReference = trimOrNull(input.transactionCode);
+  const transactionCode =
+    input.source === "manual" && isValidPaymentReference(rawReference)
+      ? rawReference
+      : digitsOnly(input.transactionCode);
   const clientName = trimOrNull(input.clientName);
   const complete = Boolean(amount && cedula && bank && transactionCode && clientName);
 
@@ -494,6 +509,7 @@ const insertCrmPayment = async (
     amount,
     amount_raw: input.amount == null ? null : String(input.amount),
     bank,
+    receptor_bank: bank,
     transaction_code: transactionCode,
     payment_date: input.paymentDate?.slice(0, 10) || todayInCaracas(),
     comment: input.comment?.trim() || null,
@@ -546,7 +562,7 @@ const insertCrmPayment = async (
 const applyListFilters = <T>(
   query: T,
   filters: ListCrmPaymentsFilters,
-  options: { includeStatus: boolean },
+  options: { includeStatus: boolean; applyBank: boolean },
 ): T => {
   let next = query as {
     gte: (column: string, value: string) => typeof next;
@@ -555,22 +571,53 @@ const applyListFilters = <T>(
     or: (filters: string) => typeof next;
   };
 
-  if (filters.from && isIsoDate(filters.from)) {
-    next = next.gte("payment_date", filters.from);
-  }
-  if (filters.to && isIsoDate(filters.to)) {
-    next = next.lte("payment_date", filters.to);
-  }
-  if (options.includeStatus && filters.status && isCrmPaymentStatus(filters.status)) {
-    next = next.eq("status", filters.status);
-  }
-  if (filters.bank?.trim()) {
-    next = next.eq("bank", filters.bank.trim());
+  const search = filters.q ? sanitizeSearch(filters.q) : "";
+  const dateType = filters.date_type === "approval" ? "approval" : "payment";
+
+  if (!search) {
+    if (dateType === "approval") {
+      if (filters.from && isIsoDate(filters.from)) {
+        next = next.gte("approved_at", `${filters.from}T00:00:00.000-04:00`);
+      }
+      if (filters.to && isIsoDate(filters.to)) {
+        next = next.lte("approved_at", `${filters.to}T23:59:59.999-04:00`);
+      }
+    } else {
+      if (filters.from && isIsoDate(filters.from)) {
+        next = next.gte("payment_date", filters.from);
+      }
+      if (filters.to && isIsoDate(filters.to)) {
+        next = next.lte("payment_date", filters.to);
+      }
+    }
   }
 
-  const search = filters.q ? sanitizeSearch(filters.q) : "";
+  if (options.includeStatus && filters.status && isCrmPaymentStatus(filters.status)) {
+    next = next.eq("status", filters.status);
+  } else if (
+    !search &&
+    dateType === "approval" &&
+    options.includeStatus &&
+    (!filters.status || filters.status === "all")
+  ) {
+    next = next.eq("status", "APROBADO");
+  }
+
+  if (options.applyBank && filters.bank?.trim() && filters.bank.trim() !== "all") {
+    next = next.eq("receptor_bank", filters.bank.trim());
+  }
+
   if (search) {
-    next = next.or(`cedula.ilike.%${search}%,client_name.ilike.%${search}%`);
+    const clauses = [
+      `cedula.ilike.%${search}%`,
+      `client_name.ilike.%${search}%`,
+      `transaction_code.ilike.%${search}%`,
+    ];
+    const digits = search.replace(/\D/g, "");
+    if (digits.length >= 4 && digits !== search) {
+      clauses.push(`cedula.ilike.%${digits}%`, `transaction_code.ilike.%${digits}%`);
+    }
+    next = next.or(clauses.join(","));
   }
 
   return next as T;
@@ -585,6 +632,49 @@ const emptyStatusCounts = (): CrmPaymentStatusCounts => ({
   ERROR: 0,
 });
 
+const fetchStatRows = async (
+  supabase: SupabaseClient,
+  filters: ListCrmPaymentsFilters,
+  organizationId?: string,
+) => {
+  const pageSize = 1000;
+  const rows: Array<{ bank: string | null; amount: number | null; status: string }> = [];
+  let from = 0;
+
+  for (;;) {
+    let query = supabase.from("crm_payments").select("bank, receptor_bank, amount, status");
+    if (organizationId) {
+      query = query.eq("organization_id", organizationId);
+    }
+    const filtered = applyListFilters(query, filters, {
+      includeStatus: false,
+      applyBank: false,
+    });
+    const { data, error } = await filtered.range(from, from + pageSize - 1);
+    if (error) {
+      throw new Error(error.message);
+    }
+    const batch = (data || []) as Array<{
+      bank: string | null;
+      receptor_bank?: string | null;
+      amount: number | string | null;
+      status: string;
+    }>;
+    for (const row of batch) {
+      const amount = row.amount === null ? null : Number(row.amount);
+      rows.push({
+        bank: row.receptor_bank || row.bank,
+        amount: Number.isFinite(amount) ? amount : null,
+        status: row.status,
+      });
+    }
+    if (batch.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return rows;
+};
+
 export const listCrmPayments = async (
   supabase: SupabaseClient,
   filters: ListCrmPaymentsFilters,
@@ -592,6 +682,9 @@ export const listCrmPayments = async (
 ) => {
   const limit = Math.min(Math.max(filters.limit ?? 50, 1), 2000);
   const offset = Math.max(filters.offset ?? 0, 0);
+  const search = filters.q ? sanitizeSearch(filters.q) : "";
+  const dateType =
+    !search && filters.date_type === "approval" ? "approval" : "payment";
 
   const listBaseQuery = supabase.from("crm_payments").select("*", { count: "exact" });
   const listQuery = applyListFilters(
@@ -599,33 +692,8 @@ export const listCrmPayments = async (
       ? listBaseQuery.eq("organization_id", organizationId)
       : listBaseQuery,
     filters,
-    { includeStatus: true },
+    { includeStatus: true, applyBank: true },
   );
-
-  let banksQuery = supabase
-    .from("crm_payments")
-    .select("bank");
-  if (organizationId) {
-    banksQuery = banksQuery.eq("organization_id", organizationId);
-  }
-  banksQuery = banksQuery
-    .order("bank", { ascending: true })
-    .limit(200);
-
-  // Consulta de estadísticas agregadas por banco para el rango de fechas actual
-  let statsQuery = supabase
-    .from("crm_payments")
-    .select("bank, amount, status");
-  if (organizationId) {
-    statsQuery = statsQuery.eq("organization_id", organizationId);
-  }
-  if (filters.from && isIsoDate(filters.from)) {
-    statsQuery = statsQuery.gte("payment_date", filters.from);
-  }
-  if (filters.to && isIsoDate(filters.to)) {
-    statsQuery = statsQuery.lte("payment_date", filters.to);
-  }
-  statsQuery = statsQuery.limit(5000);
 
   const countQueries = CRM_PAYMENT_STATUSES.map((status) =>
     applyListFilters(
@@ -638,16 +706,18 @@ export const listCrmPayments = async (
             .from("crm_payments")
             .select("id", { count: "exact", head: true }),
       { ...filters, status },
-      { includeStatus: true },
+      { includeStatus: true, applyBank: true },
     ),
   );
 
-  const [listResult, banksResult, statsResult, ...countResults] = await Promise.all([
-    listQuery
-      .order("created_at", { ascending: false })
-      .range(offset, offset + limit - 1),
-    banksQuery,
-    statsQuery,
+  const orderedList =
+    dateType === "approval"
+      ? listQuery.order("approved_at", { ascending: false, nullsFirst: false })
+      : listQuery.order("created_at", { ascending: false, nullsFirst: false });
+
+  const [listResult, statRows, ...countResults] = await Promise.all([
+    orderedList.range(offset, offset + limit - 1),
+    fetchStatRows(supabase, filters, organizationId),
     ...countQueries,
   ]);
 
@@ -661,25 +731,17 @@ export const listCrmPayments = async (
     counts[status] = result?.error ? 0 : (result?.count ?? 0);
   });
 
-  const rawBanks = (banksResult.data || [])
-    .map((row) => String((row as { bank?: string }).bank || "").trim())
-    .filter(Boolean);
-
-  const bankStats = buildPaymentBankStats(
-    (statsResult.data || []) as Array<{
-      bank: string | null;
-      amount: number | null;
-      status: string;
-    }>,
-  );
-
-  // Unir bancos encontrados con los nombres normalizados en bankStats
-  const banks = Array.from(
-    new Set([
-      ...bankStats.map((s) => s.bank),
-      ...rawBanks.map((b) => normalizeReceptorBank(b) || b),
-    ]),
-  );
+  const bankStats = buildPaymentBankStats(statRows);
+  const extraBanks = bankStats
+    .map((stat) => stat.bank)
+    .filter(
+      (bank) =>
+        !CRM_KNOWN_PAYMENT_BANKS.includes(
+          bank as (typeof CRM_KNOWN_PAYMENT_BANKS)[number],
+        ) && !isExcludedReceptorBank(bank),
+    )
+    .sort((a, b) => a.localeCompare(b, "es"));
+  const banks = [...CRM_KNOWN_PAYMENT_BANKS, ...extraBanks];
 
   return {
     payments: (listResult.data || []) as CrmPayment[],
@@ -766,6 +828,7 @@ export const approveCrmPayment = async (
     .from("crm_payments")
     .update({
       status: "APROBADO",
+      approved_at: new Date().toISOString(),
       error_message: null,
       expected_amount: input.expectedAmount ?? input.payment.expected_amount ?? null,
       plan_amount: input.planAmount ?? input.payment.plan_amount ?? null,
@@ -801,9 +864,120 @@ export const rejectCrmPayment = async (
     .from("crm_payments")
     .update({
       status: "RECHAZADO",
+      approved_at: null,
       error_message: null,
     })
     .eq("id", paymentId)
+    .select("*")
+    .maybeSingle<CrmPayment>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+};
+
+export const approveCrmPaymentManual = async (
+  supabase: SupabaseClient,
+  payment: CrmPayment,
+) => {
+  const currentMeta =
+    payment.receipt_metadata && typeof payment.receipt_metadata === "object"
+      ? payment.receipt_metadata
+      : {};
+  const approvedAt = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("crm_payments")
+    .update({
+      status: "APROBADO",
+      approved_at: approvedAt,
+      error_message: null,
+      receipt_metadata: {
+        ...currentMeta,
+        manual_approval: {
+          at: approvedAt,
+          wispro: false,
+        },
+      },
+    })
+    .eq("id", payment.id)
+    .select("*")
+    .maybeSingle<CrmPayment>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+};
+
+export type UpdateCrmPaymentInput = {
+  id: string;
+  organizationId: string;
+  clientName?: string | null;
+  cedula?: string | null;
+  amount?: string | number | null;
+  bank?: string | null;
+  transactionCode?: string | null;
+  paymentDate?: string | null;
+  comment?: string | null;
+  status?: CrmPaymentStatus | null;
+};
+
+export const updateCrmPaymentFields = async (
+  supabase: SupabaseClient,
+  input: UpdateCrmPaymentInput,
+) => {
+  const current = await getCrmPaymentById(supabase, input.id, input.organizationId);
+  if (!current) return null;
+
+  const nextStatus = input.status && isCrmPaymentStatus(input.status)
+    ? input.status
+    : current.status;
+  const bank = input.bank !== undefined ? normalizeReceptorBank(input.bank) : current.bank;
+  const amount = input.amount !== undefined ? parseAmount(input.amount) : current.amount;
+  const reference =
+    input.transactionCode !== undefined
+      ? isValidPaymentReference(input.transactionCode)
+        ? trimOrNull(input.transactionCode)
+        : digitsOnly(input.transactionCode)
+      : current.transaction_code;
+
+  let approvedAt = current.approved_at ?? null;
+  if (nextStatus === "APROBADO" && current.status !== "APROBADO") {
+    approvedAt = new Date().toISOString();
+  } else if (nextStatus !== "APROBADO") {
+    approvedAt = null;
+  }
+
+  const { data, error } = await supabase
+    .from("crm_payments")
+    .update({
+      client_name:
+        input.clientName !== undefined ? trimOrNull(input.clientName) : current.client_name,
+      cedula: input.cedula !== undefined ? digitsOnly(input.cedula) : current.cedula,
+      amount,
+      amount_raw:
+        input.amount !== undefined
+          ? input.amount == null
+            ? null
+            : String(input.amount)
+          : current.amount_raw,
+      bank,
+      receptor_bank: bank,
+      transaction_code: reference,
+      payment_date:
+        input.paymentDate !== undefined
+          ? input.paymentDate?.slice(0, 10) || current.payment_date
+          : current.payment_date,
+      comment: input.comment !== undefined ? trimOrNull(input.comment) : current.comment,
+      status: nextStatus,
+      approved_at: approvedAt,
+    })
+    .eq("id", input.id)
+    .eq("organization_id", input.organizationId)
     .select("*")
     .maybeSingle<CrmPayment>();
 

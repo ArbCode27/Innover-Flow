@@ -24,8 +24,11 @@ import {
   CRM_KNOWN_PAYMENT_BANKS,
   CRM_PAYMENT_STATUSES,
   CRM_PAYMENT_STATUS_LABELS,
+  isExcludedReceptorBank,
   type CrmPaymentStatus,
 } from "../../_lib/payments";
+
+export type PaymentDateType = "payment" | "approval";
 import { CrmButton } from "../shared/crm-button";
 
 export type PaymentsDateRange = {
@@ -36,15 +39,32 @@ export type PaymentsDateRange = {
 interface PaymentsFiltersProps {
   searchTerm: string;
   dateRange: PaymentsDateRange;
+  dateType: PaymentDateType;
   status: CrmPaymentStatus | "all";
   bank: string;
   banks: string[];
   onSearchChange: (value: string) => void;
   onDateRangeChange: (value: PaymentsDateRange) => void;
+  onDateTypeChange: (value: PaymentDateType) => void;
   onStatusChange: (value: CrmPaymentStatus | "all") => void;
   onBankChange: (value: string) => void;
   onClearFilters: () => void;
 }
+
+const toCaracasIsoDate = (date: Date) =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Caracas",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+
+const shiftIsoDate = (iso: string, days: number) => {
+  const [year, month, day] = iso.split("-").map(Number);
+  const next = new Date(Date.UTC(year, month - 1, day));
+  next.setUTCDate(next.getUTCDate() + days);
+  return next.toISOString().slice(0, 10);
+};
 
 const selectClass = `w-full ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary}`;
 
@@ -79,11 +99,13 @@ const formatRangeLabel = (range: PaymentsDateRange) => {
 export const PaymentsFilters = ({
   searchTerm,
   dateRange,
+  dateType,
   status,
   bank,
   banks,
   onSearchChange,
   onDateRangeChange,
+  onDateTypeChange,
   onStatusChange,
   onBankChange,
   onClearFilters,
@@ -99,15 +121,22 @@ export const PaymentsFilters = ({
 
   const bankOptions = Array.from(
     new Set([...CRM_KNOWN_PAYMENT_BANKS, ...banks]),
-  );
+  ).filter((item) => !isExcludedReceptorBank(item));
 
-  const hasActiveFilters = Boolean(
-    searchTerm ||
-      dateRange.from ||
-      dateRange.to ||
-      status !== "EN_PROCESO" ||
-      bank !== "all",
-  );
+  const today = toCaracasIsoDate(new Date());
+  const searchActive = Boolean(searchTerm.trim());
+  const isDefaultState =
+    !searchActive &&
+    dateType === "payment" &&
+    status === "EN_PROCESO" &&
+    bank === "all" &&
+    dateRange.from === today &&
+    dateRange.to === today;
+  const hasActiveFilters = !isDefaultState;
+
+  const dateButtonLabel = searchActive
+    ? "Todas las fechas (búsqueda)"
+    : `${dateType === "approval" ? "F. Aprobación" : "F. Registro"}: ${formatRangeLabel(dateRange)}`;
 
   const handleStatusChange = (value: string) => {
     if (value === "all") {
@@ -126,12 +155,21 @@ export const PaymentsFilters = ({
     }
 
     const from = toIsoDateLocal(range.from);
-    const to = range.to ? toIsoDateLocal(range.to) : from;
+    const to = range.to ? toIsoDateLocal(range.to) : null;
     onDateRangeChange({ from, to });
 
     if (range.to) {
       setCalendarOpen(false);
     }
+  };
+
+  const handleShortcut = (from: string, to: string) => {
+    onDateRangeChange({ from, to });
+    setCalendarOpen(false);
+  };
+
+  const handleDateTypeChange = (value: PaymentDateType) => {
+    onDateTypeChange(value);
   };
 
   return (
@@ -151,8 +189,17 @@ export const PaymentsFilters = ({
               value={searchTerm}
               onChange={(event) => onSearchChange(event.target.value)}
               placeholder="Buscar cédula o nombre..."
-              className={`pl-9 ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder}`}
+              className={`pl-9 pr-9 ${CRM_SURFACES.border} ${CRM_SURFACES.input} ${CRM_SURFACES.textPrimary} ${CRM_SURFACES.placeholder}`}
             />
+            {searchTerm ? (
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-slate-200"
+                aria-label="Borrar búsqueda"
+                onClick={() => onSearchChange("")}>
+                <X className="size-4" aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -167,13 +214,57 @@ export const PaymentsFilters = ({
                 className="size-4 shrink-0 text-crm-accent-muted-foreground"
                 aria-hidden="true"
               />
-              <span className="truncate">{formatRangeLabel(dateRange)}</span>
+              <span className="truncate">{dateButtonLabel}</span>
             </CrmButton>
           </PopoverTrigger>
           <PopoverContent
             align="start"
             className={`w-auto overflow-hidden rounded-2xl border p-0 shadow-lg ${CRM_SURFACES.border} ${CRM_MENU}`}
             sideOffset={8}>
+            <div className={`space-y-3 border-b px-3 py-3 ${CRM_SURFACES.border}`}>
+              <div className="flex items-center justify-between gap-3">
+                <p className={`text-xs font-medium ${CRM_SURFACES.textPrimary}`}>
+                  Criterio de fecha
+                </p>
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                  {dateType === "approval" ? "Aprobados en el rango" : "Ingresados en el rango"}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-3" role="radiogroup" aria-label="Criterio de fecha">
+                {(
+                  [
+                    ["payment", "F. de Registro"],
+                    ["approval", "F. de Aprobación"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label key={value} className="flex cursor-pointer items-center gap-2 text-xs">
+                    <input
+                      type="radio"
+                      name="crm-payment-date-type"
+                      value={value}
+                      checked={dateType === value}
+                      onChange={() => handleDateTypeChange(value)}
+                      className="accent-primary"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <CrmButton type="button" size="sm" variant="secondary" className="h-7 cursor-pointer px-2 text-xs" onClick={() => handleShortcut(today, today)}>
+                  Hoy
+                </CrmButton>
+                <CrmButton type="button" size="sm" variant="secondary" className="h-7 cursor-pointer px-2 text-xs" onClick={() => handleShortcut(shiftIsoDate(today, -1), shiftIsoDate(today, -1))}>
+                  Ayer
+                </CrmButton>
+                <CrmButton type="button" size="sm" variant="secondary" className="h-7 cursor-pointer px-2 text-xs" onClick={() => handleShortcut(shiftIsoDate(today, -6), today)}>
+                  7 días
+                </CrmButton>
+                <CrmButton type="button" size="sm" variant="secondary" className="h-7 cursor-pointer px-2 text-xs" onClick={() => handleShortcut(`${today.slice(0, 8)}01`, today)}>
+                  Este mes
+                </CrmButton>
+              </div>
+            </div>
             <Calendar
               mode="range"
               numberOfMonths={1}
@@ -184,21 +275,23 @@ export const PaymentsFilters = ({
               disabled={{ after: new Date() }}
             />
             <div
-              className={`flex items-center justify-between gap-2 border-t px-3 py-2 ${CRM_SURFACES.border}`}>
-              <p className={`text-xs ${CRM_SURFACES.textMuted}`}>
-                Elige un día o un rango
-              </p>
+              className={`flex items-center justify-end gap-2 border-t px-3 py-2 ${CRM_SURFACES.border}`}>
               <CrmButton
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="cursor-pointer text-crm-accent-muted-foreground hover:bg-crm-accent-muted hover:text-crm-accent-muted-foreground"
+                className="cursor-pointer"
                 disabled={!dateRange.from && !dateRange.to}
-                onClick={() => {
-                  onDateRangeChange({ from: null, to: null });
-                  setCalendarOpen(false);
-                }}>
-                Limpiar fechas
+                onClick={() => onDateRangeChange({ from: null, to: null })}>
+                Limpiar
+              </CrmButton>
+              <CrmButton
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="cursor-pointer"
+                onClick={() => setCalendarOpen(false)}>
+                Listo
               </CrmButton>
             </div>
           </PopoverContent>

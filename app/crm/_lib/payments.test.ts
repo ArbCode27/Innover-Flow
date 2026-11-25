@@ -45,6 +45,12 @@ describe("normalizeReceptorBank", () => {
     assert.equal(normalizeReceptorBank("Banplus"), "Banplus");
     assert.equal(normalizeReceptorBank("Banco Banplus"), "Banplus");
     assert.equal(normalizeReceptorBank("Banplus Banco Universal"), "Banplus");
+    assert.equal(normalizeReceptorBank("hacia Binance"), "Binance");
+    assert.equal(normalizeReceptorBank("destino: Zelle"), "Zelle");
+    assert.equal(normalizeReceptorBank("USDT"), "Binance");
+    assert.equal(normalizeReceptorBank("punto de venta"), "Tarjeta de Débito");
+    assert.equal(normalizeReceptorBank("amiga"), "Bancamiga");
+    assert.equal(normalizeReceptorBank("PayPal"), "PayPal");
   });
 
   it("preserves other valid banks with title case formatting", () => {
@@ -82,12 +88,19 @@ describe("getReceptorBankMeta", () => {
 });
 
 describe("buildPaymentBankStats", () => {
-  it("seeds canonical banks with 0 even when input is empty", () => {
+  it("seeds the six receptor accounts with 0 even when input is empty", () => {
     const stats = buildPaymentBankStats([]);
-    assert.equal(stats.length, 3);
+    assert.equal(stats.length, 6);
     assert.deepEqual(
       stats.map((s) => s.bank),
-      ["Venezuela", "Banplus", "Bancamiga"],
+      [
+        "Bancamiga",
+        "Banplus",
+        "Binance",
+        "Tarjeta de Débito",
+        "Zelle",
+        "PayPal",
+      ],
     );
     assert.equal(stats[0].totalPayments, 0);
     assert.equal(stats[0].totalAmount, 0);
@@ -102,18 +115,15 @@ describe("buildPaymentBankStats", () => {
       { bank: "Banco de Venezuela", amount: 100.5, status: "APROBADO" },
       { bank: "BDV", amount: 30.0, status: "RECIBIDO" },
       { bank: "Banplus", amount: 80.0, status: "RECHAZADO" },
+      { bank: "Binance", amount: 0, status: "APROBADO" },
     ];
 
     const stats = buildPaymentBankStats(rows);
 
-    const bdv = stats.find((s) => s.bank === "Venezuela");
-    assert.ok(bdv);
-    assert.equal(bdv.totalPayments, 2);
-    assert.equal(bdv.totalAmount, 130.5);
-    assert.equal(bdv.approvedCount, 1);
-    assert.equal(bdv.approvedAmount, 100.5);
-    assert.equal(bdv.inProcessCount, 1);
-    assert.equal(bdv.inProcessAmount, 30.0);
+    assert.equal(
+      stats.find((s) => s.bank === "Venezuela"),
+      undefined,
+    );
 
     const bam = stats.find((s) => s.bank === "Bancamiga");
     assert.ok(bam);
@@ -130,6 +140,13 @@ describe("buildPaymentBankStats", () => {
     assert.equal(bpl.totalAmount, 80.0);
     assert.equal(bpl.approvedCount, 0);
     assert.equal(bpl.inProcessCount, 0);
+
+    const binance = stats.find((s) => s.bank === "Binance");
+    assert.ok(binance);
+    assert.equal(binance.totalPayments, 1);
+    assert.equal(binance.totalAmount, 0);
+    assert.equal(binance.approvedCount, 1);
+    assert.equal(binance.approvedAmount, 0);
   });
 });
 
